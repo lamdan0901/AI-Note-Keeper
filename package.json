@@ -1,0 +1,42 @@
+{
+  "name": "ai-note-keeper",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "lint": "eslint . --ext .ts,.tsx,.js,.jsx",
+    "format": "prettier --write .",
+    "test": "jest",
+    "dev": "concurrently -k -n convex,web,mobile -c magenta,green,cyan \"npm run dev:backend\" \"npm run dev:web\" \"npm run dev:mobile\"",
+    "dev:backend": "convex dev",
+    "dev:web": "npm --workspace apps/web run dev",
+    "build:web": "npm --workspace apps/web run build",
+    "dev:mobile": "npm --workspace apps/mobile run start",
+    "dev:clients": "concurrently -k -n web,mobile -c green,cyan \"npm run dev:web\" \"npm run dev:mobile\""
+  },
+  "dependencies": {
+    "convex": "^1.31.6",
+    "expo": "~50.0.0",
+    "js-sha256": "^0.10.1",
+    "react-native-get-random-values": "^1.11.0"
+  },
+  "overrides": {
+    "react-native": "0.73.6"
+  },
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "concurrently": "^9.2.1",
+    "convex-test": "^0.0.41",
+    "eslint": "^8.57.0",
+    "eslint-plugin-react": "^7.34.0",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "eslint-plugin-react-native": "^4.1.0",
+    "jest": "^30.2.0",
+    "prettier": "^3.2.5",
+    "ts-jest": "^29.4.6"
+  }
+}

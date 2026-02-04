@@ -1,0 +1,41 @@
+{
+  "cli": {
+    "version": ">= 5.9.1",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "env": {
+        "GOOGLE_SERVICES_JSON": "@GOOGLE_SERVICES_JSON",
+        "EXPO_PUBLIC_CONVEX_URL": "@EXPO_PUBLIC_CONVEX_URL",
+        "EXPO_PUBLIC_USER_ID": "@EXPO_PUBLIC_USER_ID",
+        "EXPO_PUBLIC_DEVICE_ID": "@EXPO_PUBLIC_DEVICE_ID"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "GOOGLE_SERVICES_JSON": "@GOOGLE_SERVICES_JSON",
+        "EXPO_PUBLIC_CONVEX_URL": "@EXPO_PUBLIC_CONVEX_URL",
+        "EXPO_PUBLIC_USER_ID": "@EXPO_PUBLIC_USER_ID",
+        "EXPO_PUBLIC_DEVICE_ID": "@EXPO_PUBLIC_DEVICE_ID"
+      }
+    },
+    "production": {
+      "env": {
+        "GOOGLE_SERVICES_JSON": "@GOOGLE_SERVICES_JSON",
+        "EXPO_PUBLIC_CONVEX_URL": "@EXPO_PUBLIC_CONVEX_URL",
+        "EXPO_PUBLIC_USER_ID": "@EXPO_PUBLIC_USER_ID",
+        "EXPO_PUBLIC_DEVICE_ID": "@EXPO_PUBLIC_DEVICE_ID"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}

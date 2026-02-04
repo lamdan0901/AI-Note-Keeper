@@ -1,0 +1,33 @@
+{
+  "expo": {
+    "name": "AI Note Keeper",
+    "slug": "ai-note-keeper",
+    "scheme": "ainotekeeper",
+    "platforms": [
+      "ios",
+      "android"
+    ],
+    "jsEngine": "hermes",
+    "orientation": "portrait",
+    "android": {
+      "package": "com.andersonho.ainotekeeper",
+      "googleServicesFile": "./google-services.json",
+      "permissions": [
+        "SCHEDULE_EXACT_ALARM"
+      ]
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "d0a52eb8-e31a-41c2-b747-bd7b606a69db"
+      }
+    }
+  }
+}

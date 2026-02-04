@@ -1,0 +1,14 @@
+# .easignore
+# EAS Build will use this file instead of .gitignore if it exists.
+# We include google-services.json here by NOT listing it.
+
+node_modules/
+.expo/
+dist/
+build/
+*.log
+.env*
+.DS_Store
+*.tmp
+.vscode/
+.idea/

@@ -1,0 +1,19 @@
+
+1/31/2026, 10:40:42 AM [CONVEX A(functions/reminderTriggers:checkAndTriggerReminders)] [LOG] '[Cron] Found 1 due reminders at 2026-01-31T03:40:42.805Z'
+1/31/2026, 10:40:42 AM [CONVEX A(functions/reminderTriggers:checkAndTriggerReminders)] [LOG] '[Cron] Triggering reminder for note 7dd96d4c-76ae-409f-bc14-a4b4720414bd'
+1/31/2026, 10:40:43 AM [CONVEX A(functions/push:sendPush)] [LOG] '[Push] Starting push for reminder 7dd96d4c-76ae-409f-bc14-a4b4720414bd, user local-user'
+1/31/2026, 10:40:44 AM [CONVEX A(functions/push:sendPush)] [LOG] '[Push] Found 1 tokens for user local-user'
+1/31/2026, 10:40:44 AM [CONVEX A(functions/push:sendPush)] [LOG] '🍅 projectId' 'note-taker-c35bf'
+1/31/2026, 10:40:44 AM [CONVEX A(functions/push:sendPush)] [LOG] '[Push] Notification: "Zzzzz" - "Zzzzz"'
+1/31/2026, 10:40:44 AM [CONVEX A(functions/push:sendPush)] [LOG] '[Push] Successfully obtained OAuth access token'
+1/31/2026, 10:40:44 AM [CONVEX A(functions/push:sendPush)] [LOG] '[Push] Sending to fYb4hZ_uTgK3sdmY2zccnd:APA91bEZFXYg_jVYjfovdhh0rZQ0uBtEtaKeZErIPKB4Hi1XRb3NGZw2KcyhAmdx__sTOIfiL5TSA_604XSWpuA3BUIjRqjVZB1XZzgh4mQk7OgW9r4LQaQ'
+1/31/2026, 10:40:44 AM [CONVEX A(functions/push:sendPush)] [LOG] '[Push] FCM success for fYb4hZ_uTgK3sdmY2zccnd:APA91bEZFXYg_jVYjfovdhh0rZQ0uBtEtaKeZErIPKB4Hi1XRb3NGZw2KcyhAmdx__sTOIfiL5TSA_604XSWpuA3BUIjRqjVZB1XZzgh4mQk7OgW9r4LQaQ:' '{\n' +
+  '  "name": "projects/note-taker-c35bf/messages/0:1769830844700789%c1680398f9fd7ecd"\n' +
+  '}\n'
+1/31/2026, 10:40:44 AM [CONVEX A(functions/push:sendPush)] [LOG] '[Push] Complete. Results:' [
+  {
+    deviceId: 'fYb4hZ_uTgK3sdmY2zccnd:APA91bEZFXYg_jVYjfovdhh0rZQ0uBtEtaKeZErIPKB4Hi1XRb3NGZw2KcyhAmdx__sTOIfiL5TSA_604XSWpuA3BUIjRqjVZB1XZzgh4mQk7OgW9r4LQaQ',
+    success: true
+  }
+]
+1/31/2026, 10:40:44 AM [CONVEX A(functions/reminderTriggers:checkAndTriggerReminders)] [LOG] '[Cron] Successfully triggered reminder for note 7dd96d4c-76ae-409f-bc14-a4b4720414bd'

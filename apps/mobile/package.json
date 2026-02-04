@@ -1,0 +1,35 @@
+{
+  "name": "@ai-note-keeper/mobile",
+  "private": true,
+  "version": "0.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "web": "expo start --web",
+    "prebuild:android": "expo prebuild --platform android"
+  },
+  "dependencies": {
+    "@react-native-async-storage/async-storage": "1.21.0",
+    "@react-native-community/datetimepicker": "7.7.0",
+    "@react-native-community/netinfo": "^11.5.1",
+    "@react-native-firebase/app": "^21.6.1",
+    "@react-native-firebase/messaging": "^21.6.1",
+    "convex": "^1.31.6",
+    "expo": "~50.0.0",
+    "expo-notifications": "~0.27.8",
+    "expo-splash-screen": "~0.26.5",
+    "expo-sqlite": "~13.4.0",
+    "js-sha256": "^0.10.1",
+    "react": "18.2.0",
+    "react-native": "0.73.6",
+    "react-native-get-random-values": "^1.11.0",
+    "react-native-uuid": "^2.0.3"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.0",
+    "babel-preset-expo": "~10.0.0",
+    "typescript": "^5.4.0"
+  }
+}
