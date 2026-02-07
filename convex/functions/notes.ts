@@ -23,6 +23,7 @@ export const syncNotes = mutation({
         color: v.optional(v.string()),
         active: v.boolean(),
         done: v.optional(v.boolean()),
+        isPinned: v.optional(v.boolean()),
         // Reminder fields
         triggerAt: v.optional(v.number()),
         repeatRule: v.optional(v.string()),
@@ -83,6 +84,7 @@ export const syncNotes = mutation({
               color: noteData.color,
               active: noteData.active,
               done: noteData.done,
+              isPinned: noteData.isPinned,
               triggerAt: noteData.triggerAt,
               repeatRule: noteData.repeatRule,
               repeatConfig: noteData.repeatConfig,
@@ -102,6 +104,7 @@ export const syncNotes = mutation({
             color: noteData.color,
             active: noteData.active,
             done: noteData.done,
+            isPinned: noteData.isPinned,
             triggerAt: noteData.triggerAt,
             repeatRule: noteData.repeatRule,
             repeatConfig: noteData.repeatConfig,

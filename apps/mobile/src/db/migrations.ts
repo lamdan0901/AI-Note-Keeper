@@ -196,4 +196,11 @@ CREATE INDEX IF NOT EXISTS idx_notes_syncStatus ON notes (syncStatus);
 CREATE INDEX IF NOT EXISTS idx_note_outbox_nextRetryAt ON note_outbox (nextRetryAt);
     `.trim(),
   },
+  {
+    id: '011_add_is_pinned_to_notes',
+    sql: `
+ALTER TABLE notes ADD COLUMN isPinned INTEGER DEFAULT 0;
+CREATE INDEX IF NOT EXISTS idx_notes_isPinned ON notes (isPinned);
+    `.trim(),
+  },
 ];

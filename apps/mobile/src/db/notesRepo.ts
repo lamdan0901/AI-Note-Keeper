@@ -9,6 +9,7 @@ export type NoteRow = {
   color: string | null;
   active: number;
   done: number;
+  isPinned: number;
 
   triggerAt: number | null;
   repeatRule: string | null;
@@ -39,6 +40,7 @@ export const mapNoteRow = (row: NoteRow): Note => ({
   color: row.color,
   active: row.active === 1,
   done: row.done === 1,
+  isPinned: row.isPinned === 1,
 
   triggerAt: row.triggerAt || undefined,
   repeatRule: (row.repeatRule as Note['repeatRule']) || undefined,
@@ -73,6 +75,7 @@ export const upsertNote = async (db: SQLiteDatabase, note: Note): Promise<void> 
         color,
         active,
         done,
+        isPinned,
         triggerAt,
         repeatRule,
         repeatConfig,
@@ -88,13 +91,14 @@ export const upsertNote = async (db: SQLiteDatabase, note: Note): Promise<void> 
         version,
         updatedAt,
         createdAt
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         title = excluded.title,
         content = excluded.content,
         color = excluded.color,
         active = excluded.active,
         done = excluded.done,
+        isPinned = excluded.isPinned,
         triggerAt = excluded.triggerAt,
         repeatRule = excluded.repeatRule,
         repeatConfig = excluded.repeatConfig,
@@ -117,6 +121,7 @@ export const upsertNote = async (db: SQLiteDatabase, note: Note): Promise<void> 
       note.color,
       note.active ? 1 : 0,
       note.done ? 1 : 0,
+      note.isPinned ? 1 : 0,
       note.triggerAt || null,
       note.repeatRule || null,
       note.repeatConfig ? JSON.stringify(note.repeatConfig) : null,
@@ -143,7 +148,7 @@ export const getNoteById = async (db: SQLiteDatabase, noteId: string): Promise<N
 
 export const listNotes = async (db: SQLiteDatabase, limit: number = 50): Promise<Note[]> => {
   const rows = await db.getAllAsync<NoteRow>(
-    `SELECT * FROM notes WHERE active = 1 ORDER BY done ASC, updatedAt DESC LIMIT ?`,
+    `SELECT * FROM notes WHERE active = 1 ORDER BY isPinned DESC, done ASC, updatedAt DESC LIMIT ?`,
     [limit],
   );
   return rows.map(mapNoteRow);

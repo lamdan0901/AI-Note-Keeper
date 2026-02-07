@@ -127,6 +127,7 @@ const mapToApiPayload = (item: OutboxItem) => {
     color: payload.color ?? undefined,
     active: payload.active,
     done: payload.done ?? undefined,
+    isPinned: payload.isPinned ?? undefined,
     triggerAt: payload.triggerAt ?? undefined,
     repeatRule: payload.repeatRule ?? undefined,
     repeatConfig: payload.repeatConfig ?? undefined,

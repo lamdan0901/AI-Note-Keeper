@@ -53,6 +53,7 @@ const NotesScreenContent = ({
   const [content, setContent] = useState('');
   const [reminder, setReminder] = useState<Date | null>(null);
   const [repeat, setRepeat] = useState<RepeatRule | null>(null);
+  const [isPinned, setIsPinned] = useState(false);
   const [showReminderModal, setShowReminderModal] = useState(false);
   const [rescheduleTargetId, setRescheduleTargetId] = useState<string | null>(null);
   const [showRescheduleModal, setShowRescheduleModal] = useState(false);
@@ -281,12 +282,14 @@ const NotesScreenContent = ({
         setReminder(null);
         setRepeat(null);
       }
+      setIsPinned(note.isPinned ?? false);
     } else {
       setEditingNote(null);
       setTitle('');
       setContent('');
       setReminder(null);
       setRepeat(null);
+      setIsPinned(false);
     }
     setModalVisible(true);
   };
@@ -298,6 +301,7 @@ const NotesScreenContent = ({
     setContent('');
     setReminder(null);
     setRepeat(null);
+    setIsPinned(false);
   }, []);
 
   useEffect(() => {
@@ -395,6 +399,7 @@ const NotesScreenContent = ({
         color: editingNote?.color || theme.colors.surface,
         active: true,
         done: reminder ? false : (editingNote?.done ?? false),
+        isPinned,
 
         // Unified Reminder Logic
         triggerAt: reminder ? reminder.getTime() : undefined,
@@ -726,6 +731,13 @@ const NotesScreenContent = ({
                     name={reminder ? 'alarm' : 'alarm-outline'}
                     size={24}
                     color={theme.colors.text}
+                  />
+                </Pressable>
+                <Pressable style={styles.iconButton} onPress={() => setIsPinned(!isPinned)}>
+                  <Ionicons
+                    name={isPinned ? 'push' : 'push-outline'}
+                    size={24}
+                    color={isPinned ? theme.colors.primary : theme.colors.text}
                   />
                 </Pressable>
                 <Pressable onPress={closeEditor} style={styles.iconButton}>

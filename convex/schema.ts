@@ -18,6 +18,7 @@ export default defineSchema({
     color: v.optional(v.string()),
     active: v.boolean(),
     done: v.optional(v.boolean()),
+    isPinned: v.optional(v.boolean()),
     // Reminder fields merged
     triggerAt: v.optional(v.number()),
     repeatRule: v.optional(v.string()), // LEGACY: 'none'|'daily'|'weekly'|'custom'

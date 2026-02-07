@@ -29,6 +29,7 @@ export const fetchNotes = async (userId: string): Promise<FetchNotesResult> => {
       active: n.active,
       done: n.done ?? false,
 
+      isPinned: n.isPinned ?? false,
       triggerAt: n.triggerAt,
       repeatRule: n.repeatRule,
       repeatConfig: n.repeatConfig,

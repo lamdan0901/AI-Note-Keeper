@@ -12,6 +12,8 @@ export type Note = {
   // Reminder fields
   triggerAt?: number;
 
+  isPinned?: boolean;
+
   // Legacy fields (kept for compatibility)
   repeatRule?: 'none' | 'daily' | 'weekly' | 'custom';
   repeatConfig?: Record<string, unknown>;
