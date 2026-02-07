@@ -4,6 +4,9 @@ import { ConvexProvider, ConvexReactClient } from 'convex/react';
 import { RescheduleModal } from './SnoozeModal';
 import { getDb, runMigrations } from '../../db/bootstrap';
 import { theme } from '../../theme';
+import { saveNoteOffline } from '../../notes/editor';
+import { getNoteById, Note } from '../../db/notesRepo';
+import { syncNotes } from '../../sync/noteSync';
 
 const convexUrl = process.env.EXPO_PUBLIC_CONVEX_URL;
 const convexClient = convexUrl ? new ConvexReactClient(convexUrl) : undefined;
@@ -62,10 +65,44 @@ export const RescheduleOverlay = (props: { noteId?: string }) => {
     setModalVisible(false);
   };
 
-  const handleSuccess = () => {
+  const handleSuccess = (noteId: string, snoozedUntil: number) => {
+    // 1. Immediately show success toast (Optimistic UI)
     startToast('Rescheduled successfully', false);
-    workDone.current = true;
-    checkExit();
+
+    // 2. Perform persistence in background
+    workDone.current = true; // Mark as done for exit logic (but we wait a bit for sync if possible?)
+    // Actually, for headless tasks, we might want to wait for sync or just enqueue.
+    // enqueue is fast.
+
+    void (async () => {
+      try {
+        const db = await getDb();
+        const note = await getNoteById(db, noteId);
+
+        if (note) {
+          const updatedNote: Note = {
+            ...note,
+            done: false,
+            snoozedUntil,
+            triggerAt: snoozedUntil,
+            nextTriggerAt: snoozedUntil,
+            scheduleStatus: 'scheduled',
+            active: true,
+            updatedAt: Date.now(),
+          };
+
+          await saveNoteOffline(db, updatedNote, 'update');
+          // Try to sync, but don't block exit too long if it fails?
+          // Since it's in outbox, it's safe.
+          syncNotes(db).catch((err) => console.error('Background sync failed', err));
+        }
+      } catch (e) {
+        console.error('Failed to save reschedule', e);
+        startToast('Failed to save', true);
+      } finally {
+        checkExit();
+      }
+    })();
   };
 
   const handleError = (e: unknown) => {

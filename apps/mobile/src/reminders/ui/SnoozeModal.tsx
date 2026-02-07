@@ -12,14 +12,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { useMutation } from 'convex/react';
-import { api } from '../../../../../convex/_generated/api';
-import { Id } from '../../../../../convex/_generated/dataModel';
 import { theme } from '../../theme';
-import { logSyncEvent } from '../logging';
-import { rescheduleNoteWithLedger } from '../scheduler';
-import { getDb } from '../../db/bootstrap';
-import { getNoteById, upsertNote } from '../../db/notesRepo';
 import { buildReminderPresetOptions } from './ReminderPresetDropdown';
 
 interface RescheduleModalProps {
@@ -41,7 +34,6 @@ export const RescheduleModal = ({
   onSaveStart,
   onError,
 }: RescheduleModalProps) => {
-  const snoozeReminder = useMutation(api.functions.reminders.snoozeReminder);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [datePickerMode, setDatePickerMode] = useState<'date' | 'time'>('date');
   const [customDate, setCustomDate] = useState(new Date());
@@ -104,32 +96,11 @@ export const RescheduleModal = ({
       onSaveStart?.();
       const timestamp = rescheduleTime.getTime();
 
-      // 1. Optimistic Local Update
-      const db = await getDb();
-      const note = await getNoteById(db, noteId);
-      if (note) {
-        const updatedNote = {
-          ...note,
-          snoozedUntil: timestamp,
-          triggerAt: timestamp, // Should trigger at snooze time
-          nextTriggerAt: timestamp,
-          scheduleStatus: 'scheduled' as const,
-          active: true,
-          updatedAt: Date.now(),
-        };
-        await upsertNote(db, updatedNote);
-        // @ts-expect-error: Type mismatch
-        await rescheduleNoteWithLedger(db, updatedNote);
+      // Delegate persistence to callback
+      if (onRescheduled) {
+        onRescheduled(noteId, timestamp);
       }
-      onRescheduled?.(noteId, timestamp);
 
-      // 2. Server Sync
-      await snoozeReminder({
-        id: noteId as Id<'notes'>,
-        snoozedUntil: timestamp,
-      });
-
-      logSyncEvent('info', 'snooze_success', { noteId, time: timestamp });
       onClose();
     } catch (e) {
       console.error('Reschedule failed:', e);
@@ -175,65 +146,65 @@ export const RescheduleModal = ({
             <View style={styles.sheetHandleHitArea} {...panResponder.panHandlers}>
               <View style={styles.sheetHandle} />
             </View>
-          <View style={styles.header}>
-            <Text style={styles.title}>Reschedule to...</Text>
-            <Pressable onPress={onClose}>
-              <Ionicons name="close" size={24} color={theme.colors.text} />
-            </Pressable>
-          </View>
+            <View style={styles.header}>
+              <Text style={styles.title}>Reschedule to...</Text>
+              <Pressable onPress={onClose}>
+                <Ionicons name="close" size={24} color={theme.colors.text} />
+              </Pressable>
+            </View>
 
-          {presetGroups.today.length > 0 && (
-            <>
-              <Text style={styles.groupLabel}>Today</Text>
-              {presetGroups.today.map((opt) => (
-                <Pressable
-                  key={opt.id}
-                  style={styles.option}
-                  onPress={() => handleReschedule(opt.date)}
-                >
-                  <Ionicons name="time-outline" size={20} color={theme.colors.text} />
-                  <Text style={styles.optionText}>
-                    {opt.title} ({opt.timeLabel})
-                  </Text>
-                </Pressable>
-              ))}
-            </>
-          )}
+            {presetGroups.today.length > 0 && (
+              <>
+                <Text style={styles.groupLabel}>Today</Text>
+                {presetGroups.today.map((opt) => (
+                  <Pressable
+                    key={opt.id}
+                    style={styles.option}
+                    onPress={() => handleReschedule(opt.date)}
+                  >
+                    <Ionicons name="time-outline" size={20} color={theme.colors.text} />
+                    <Text style={styles.optionText}>
+                      {opt.title} ({opt.timeLabel})
+                    </Text>
+                  </Pressable>
+                ))}
+              </>
+            )}
 
-          <Text style={styles.groupLabel}>Tomorrow</Text>
-          {presetGroups.tomorrow.map((opt) => (
+            <Text style={styles.groupLabel}>Tomorrow</Text>
+            {presetGroups.tomorrow.map((opt) => (
+              <Pressable
+                key={opt.id}
+                style={styles.option}
+                onPress={() => handleReschedule(opt.date)}
+              >
+                <Ionicons name="time-outline" size={20} color={theme.colors.text} />
+                <Text style={styles.optionText}>
+                  {opt.title} ({opt.timeLabel})
+                </Text>
+              </Pressable>
+            ))}
+
             <Pressable
-              key={opt.id}
               style={styles.option}
-              onPress={() => handleReschedule(opt.date)}
+              onPress={() => {
+                setCustomDate(new Date());
+                setDatePickerMode('date');
+                setShowDatePicker(true);
+              }}
             >
-              <Ionicons name="time-outline" size={20} color={theme.colors.text} />
-              <Text style={styles.optionText}>
-                {opt.title} ({opt.timeLabel})
-              </Text>
+              <Ionicons name="calendar-outline" size={20} color={theme.colors.text} />
+              <Text style={styles.optionText}>Pick a date & time</Text>
             </Pressable>
-          ))}
 
-          <Pressable
-            style={styles.option}
-            onPress={() => {
-              setCustomDate(new Date());
-              setDatePickerMode('date');
-              setShowDatePicker(true);
-            }}
-          >
-            <Ionicons name="calendar-outline" size={20} color={theme.colors.text} />
-            <Text style={styles.optionText}>Pick a date & time</Text>
-          </Pressable>
-
-          {showDatePicker && (
-            <DateTimePicker
-              value={customDate}
-              mode={datePickerMode}
-              is24Hour={false}
-              onChange={onDateChange}
-            />
-          )}
+            {showDatePicker && (
+              <DateTimePicker
+                value={customDate}
+                mode={datePickerMode}
+                is24Hour={false}
+                onChange={onDateChange}
+              />
+            )}
           </Animated.View>
         </Pressable>
       </Pressable>

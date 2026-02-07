@@ -1,12 +1,33 @@
 import React from 'react';
-import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSyncState } from '../sync/syncManager';
 import { theme } from '../theme';
 
 export const SyncStatusIndicator: React.FC = () => {
-  const { isOnline, isSyncing, hasConflicts } = useSyncState();
+  const { isOnline, isSyncing, hasConflicts, actionResult, clearActionResult } = useSyncState();
 
+  // 1. Error State (Highest Priority)
+  if (actionResult?.status === 'error') {
+    return (
+      <Pressable onPress={clearActionResult} style={[styles.container, styles.errorContainer]}>
+        <Ionicons name="close-circle" size={18} color={theme.colors.error} />
+        <Text style={[styles.text, styles.errorText]}>{actionResult.message || 'Sync Failed'}</Text>
+      </Pressable>
+    );
+  }
+
+  // 2. Success State
+  if (actionResult?.status === 'success') {
+    return (
+      <View style={[styles.container, styles.successContainer]}>
+        <Ionicons name="checkmark-circle" size={18} color={theme.colors.success} />
+        <Text style={[styles.text, styles.successText]}>Saved</Text>
+      </View>
+    );
+  }
+
+  // 3. Conflict State
   if (hasConflicts) {
     return (
       <View style={styles.container}>
@@ -16,7 +37,8 @@ export const SyncStatusIndicator: React.FC = () => {
     );
   }
 
-  if (isSyncing) {
+  // 4. Syncing/Pending State
+  if (isSyncing || actionResult?.status === 'pending') {
     return (
       <View style={styles.container}>
         <ActivityIndicator size="small" color={theme.colors.primary} />
@@ -25,6 +47,7 @@ export const SyncStatusIndicator: React.FC = () => {
     );
   }
 
+  // 5. Offline State
   if (!isOnline) {
     return (
       <View style={styles.container}>
@@ -34,6 +57,7 @@ export const SyncStatusIndicator: React.FC = () => {
     );
   }
 
+  // 6. Idle/Online State
   return (
     <View style={styles.container}>
       <Ionicons name="checkmark-circle" size={18} color={theme.colors.success} />
@@ -61,5 +85,19 @@ const styles = StyleSheet.create({
   },
   conflictText: {
     color: theme.colors.error,
+  },
+  errorContainer: {
+    backgroundColor: theme.colors.surface,
+    borderWidth: 1,
+    borderColor: theme.colors.error,
+  },
+  errorText: {
+    color: theme.colors.error,
+  },
+  successContainer: {
+    backgroundColor: theme.colors.surface,
+  },
+  successText: {
+    color: theme.colors.success,
   },
 });

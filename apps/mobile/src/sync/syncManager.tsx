@@ -5,12 +5,19 @@ import { getDb } from '../db/bootstrap';
 import { syncNotes, SyncResult } from './noteSync';
 import { getPendingCount } from './noteOutbox';
 
+export type ActionResult = {
+  status: 'pending' | 'success' | 'error';
+  message?: string;
+  timestamp: number;
+};
+
 export type SyncState = {
   isOnline: boolean;
   isSyncing: boolean;
   lastSyncAt: number | null;
   pendingCount: number;
   hasConflicts: boolean;
+  actionResult: ActionResult | null;
 };
 
 const defaultSyncState: SyncState = {
@@ -19,9 +26,23 @@ const defaultSyncState: SyncState = {
   lastSyncAt: null,
   pendingCount: 0,
   hasConflicts: false,
+  actionResult: null,
 };
 
-const SyncContext = createContext<SyncState>(defaultSyncState);
+type SyncContextType = SyncState & {
+  notifyActionPending: () => void;
+  notifyActionSuccess: () => void;
+  notifyActionError: (message: string) => void;
+  clearActionResult: () => void;
+};
+
+const SyncContext = createContext<SyncContextType>({
+  ...defaultSyncState,
+  notifyActionPending: () => {},
+  notifyActionSuccess: () => {},
+  notifyActionError: () => {},
+  clearActionResult: () => {},
+});
 
 export const useSyncState = () => useContext(SyncContext);
 
@@ -35,6 +56,48 @@ export const SyncProvider: React.FC<SyncProviderProps> = ({ children, userId = '
   const syncInProgressRef = useRef(false);
   const pendingSyncRef = useRef(false);
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const actionResultTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Action Result Helpers
+  const clearActionResult = useCallback(() => {
+    if (actionResultTimerRef.current) {
+      clearTimeout(actionResultTimerRef.current);
+      actionResultTimerRef.current = null;
+    }
+    setSyncState((prev) => ({ ...prev, actionResult: null }));
+  }, []);
+
+  const notifyActionPending = useCallback(() => {
+    clearActionResult();
+    setSyncState((prev) => ({
+      ...prev,
+      actionResult: { status: 'pending', timestamp: Date.now() },
+    }));
+  }, [clearActionResult]);
+
+  const notifyActionSuccess = useCallback(() => {
+    clearActionResult();
+    setSyncState((prev) => ({
+      ...prev,
+      actionResult: { status: 'success', timestamp: Date.now() },
+    }));
+
+    // Auto-dismiss success after 2 seconds
+    actionResultTimerRef.current = setTimeout(() => {
+      clearActionResult();
+    }, 2000);
+  }, [clearActionResult]);
+
+  const notifyActionError = useCallback(
+    (message: string) => {
+      clearActionResult();
+      setSyncState((prev) => ({
+        ...prev,
+        actionResult: { status: 'error', message, timestamp: Date.now() },
+      }));
+    },
+    [clearActionResult],
+  );
 
   // Perform sync operation
   const performSync = useCallback(async () => {
@@ -156,8 +219,19 @@ export const SyncProvider: React.FC<SyncProviderProps> = ({ children, userId = '
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
       }
+      if (actionResultTimerRef.current) {
+        clearTimeout(actionResultTimerRef.current);
+      }
     };
   }, [handleNetworkChange, handleAppStateChange, performSync]);
 
-  return <SyncContext.Provider value={syncState}>{children}</SyncContext.Provider>;
+  const contextValue = {
+    ...syncState,
+    notifyActionPending,
+    notifyActionSuccess,
+    notifyActionError,
+    clearActionResult,
+  };
+
+  return <SyncContext.Provider value={contextValue}>{children}</SyncContext.Provider>;
 };

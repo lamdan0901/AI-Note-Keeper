@@ -81,8 +81,9 @@ const NotesScreenContent = ({
 
   const selectionMode = selectedNoteIds.size > 0;
 
-  // Get sync state to listen for completion
-  const syncState = useSyncState();
+  // Get sync state and action helpers
+  const { notifyActionPending, notifyActionSuccess, notifyActionError, lastSyncAt } =
+    useSyncState();
 
   const loadNotes = useCallback(async () => {
     try {
@@ -105,11 +106,11 @@ const NotesScreenContent = ({
 
   // Reload notes whenever sync completes
   useEffect(() => {
-    if (syncState.lastSyncAt !== null) {
+    if (lastSyncAt !== null) {
       console.log('[NotesScreen] Sync completed, reloading notes');
       loadNotes();
     }
-  }, [syncState.lastSyncAt, loadNotes]);
+  }, [lastSyncAt, loadNotes]);
 
   useEffect(() => {
     return () => {
@@ -382,46 +383,60 @@ const NotesScreenContent = ({
   }, []);
 
   const saveNote = async () => {
-    try {
-      if (!title.trim() && !content.trim()) {
-        closeEditor();
-        return;
-      }
-
-      const db = await getDb();
-      const now = Date.now();
-      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-
-      const noteToSave: Note = {
-        id: editingNote ? editingNote.id : uuid.v4().toString(),
-        title: title.trim(),
-        content: content.trim(),
-        color: editingNote?.color || theme.colors.surface,
-        active: true,
-        done: reminder ? false : (editingNote?.done ?? false),
-        isPinned,
-
-        // Unified Reminder Logic
-        triggerAt: reminder ? reminder.getTime() : undefined,
-        repeatRule: reminder && repeat ? 'custom' : undefined, // Legacy fallback
-        repeatConfig: reminder && repeat ? { ...repeat } : undefined, // Legacy fallback
-        repeat: reminder ? repeat : undefined, // New source of truth
-        snoozedUntil: reminder ? undefined : undefined,
-        scheduleStatus: reminder ? 'unscheduled' : undefined, // Reset to unscheduled on save needed?
-        timezone: reminder ? timezone : undefined,
-
-        createdAt: editingNote ? editingNote.createdAt : now,
-        updatedAt: now,
-      };
-
-      await saveNoteOffline(db, noteToSave, editingNote ? 'update' : 'create');
-
-      await syncNotes(db);
-      await loadNotes();
+    if (!title.trim() && !content.trim()) {
       closeEditor();
+      return;
+    }
+
+    const now = Date.now();
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+
+    const noteToSave: Note = {
+      id: editingNote ? editingNote.id : uuid.v4().toString(),
+      title: title.trim(),
+      content: content.trim(),
+      color: editingNote?.color || theme.colors.surface,
+      active: true,
+      done: reminder ? false : (editingNote?.done ?? false),
+      isPinned,
+
+      // Unified Reminder Logic
+      triggerAt: reminder ? reminder.getTime() : undefined,
+      repeatRule: reminder && repeat ? 'custom' : undefined, // Legacy fallback
+      repeatConfig: reminder && repeat ? { ...repeat } : undefined, // Legacy fallback
+      repeat: reminder ? repeat : undefined, // New source of truth
+      snoozedUntil: reminder ? undefined : undefined,
+      scheduleStatus: reminder ? 'unscheduled' : undefined, // Reset to unscheduled on save needed?
+      timezone: reminder ? timezone : undefined,
+
+      createdAt: editingNote ? editingNote.createdAt : now,
+      updatedAt: now,
+    };
+
+    // Optimistic Update: Update local state immediately
+    setNotes((prev) => {
+      if (editingNote) {
+        return prev.map((n) => (n.id === noteToSave.id ? noteToSave : n));
+      } else {
+        return [noteToSave, ...prev];
+      }
+    });
+
+    // Close editor immediately
+    closeEditor();
+
+    // Background: Persist and Sync
+    notifyActionPending();
+    try {
+      const db = await getDb();
+      await saveNoteOffline(db, noteToSave, editingNote ? 'update' : 'create');
+      await syncNotes(db);
+      notifyActionSuccess();
     } catch (e) {
       console.error(e);
-      Alert.alert('Error', 'Failed to save note');
+      notifyActionError('Failed to save note');
+      // Revert or reload on error
+      loadNotes();
     }
   };
 
@@ -433,23 +448,50 @@ const NotesScreenContent = ({
   const confirmDelete = useCallback(() => {
     const ids = deleteConfirm.noteIds;
     if (ids.length === 0) return;
-    closeDeleteConfirm();
 
+    // Close immediately
+    closeDeleteConfirm();
+    if (editingNote?.id && ids.includes(editingNote.id)) closeEditor();
+    if (selectionMode && ids.some((id) => selectedNoteIds.has(id))) clearSelection();
+
+    // Optimistic Update: Remove from list
+    setNotes((prev) => prev.filter((n) => !ids.includes(n.id)));
+    showToast('Deleted', false);
+
+    // Background: Persist and Sync
+    notifyActionPending();
     void (async () => {
       try {
         const db = await getDb();
-        const toDelete = notes.filter((n) => ids.includes(n.id));
-        for (const note of toDelete) {
-          await deleteNoteOffline(db, note);
+        // Get the notes to delete (we need their data for soft delete)
+        // Since we already removed them from state, we ideally should have kept a ref
+        // But for soft delete we just need ID mostly, except `deleteNoteOffline` takes full note.
+        // We can fetch from DB or just construct a minimal object if needed,
+        // but let's rely on DB fetch inside delete if possible, or just pass what we have.
+        // Actually `deleteNoteOffline` takes a Note.
+        // We can't easily get them from `notes` state since we just filtered them out.
+        // Let's rely on the fact that `deleteNoteOffline` uses `upsertNote`.
+        // Better strategy: fetch from DB first, then optimistic update.
+
+        // Wait, we can't fetch if we want to be optimistic.
+        // `deleteNoteOffline` modifies the note and saves it.
+        // A better approach for the background task is to re-fetch the specific notes from DB
+        // (which are still there, just removed from UI state).
+
+        for (const id of ids) {
+          const noteToDelete = await getNoteById(db, id);
+          if (noteToDelete) {
+            await deleteNoteOffline(db, noteToDelete);
+          }
         }
+
         await syncNotes(db);
-        await loadNotes();
-        if (editingNote?.id && ids.includes(editingNote.id)) closeEditor();
-        if (selectionMode && ids.some((id) => selectedNoteIds.has(id))) clearSelection();
-        showToast('Deleted', false);
+        notifyActionSuccess();
       } catch (e) {
         console.error(e);
-        showToast('Failed to delete', true);
+        notifyActionError('Failed to delete');
+        // Revert/Reload
+        loadNotes();
       }
     })();
   }, [
@@ -459,50 +501,63 @@ const NotesScreenContent = ({
     deleteConfirm.noteIds,
     editingNote?.id,
     loadNotes,
-    notes,
+    // notes, // Removed dependency on notes to avoid stale closures if possible, though needed for logic?
+    // Actually we don't need `notes` dependency if we fetch from DB in background.
+    notifyActionError,
+    notifyActionPending,
+    notifyActionSuccess,
     selectedNoteIds,
     selectionMode,
     showToast,
   ]);
 
   const handleNoteDone = useCallback(
-    async (noteId: string) => {
+    (noteId: string) => {
       const note = notes.find((n) => n.id === noteId);
       if (!note) return;
 
-      try {
-        const db = await getDb();
-        const updated: Note = note.done
-          ? { ...note, done: false, updatedAt: Date.now() }
-          : {
-              ...note,
-              active: true,
-              done: true,
-              triggerAt: undefined,
-              repeatRule: undefined,
-              repeatConfig: undefined,
-              repeat: undefined,
-              snoozedUntil: undefined,
-              scheduleStatus: undefined,
-              timezone: undefined,
-              baseAtLocal: undefined,
-              startAt: undefined,
-              nextTriggerAt: undefined,
-              lastFiredAt: undefined,
-              lastAcknowledgedAt: undefined,
-              updatedAt: Date.now(),
-            };
+      const now = Date.now();
+      const updated: Note = note.done
+        ? { ...note, done: false, updatedAt: now }
+        : {
+            ...note,
+            active: true,
+            done: true,
+            triggerAt: undefined,
+            repeatRule: undefined,
+            repeatConfig: undefined,
+            repeat: undefined,
+            snoozedUntil: undefined,
+            scheduleStatus: undefined,
+            timezone: undefined,
+            baseAtLocal: undefined,
+            startAt: undefined,
+            nextTriggerAt: undefined,
+            lastFiredAt: undefined,
+            lastAcknowledgedAt: undefined,
+            updatedAt: now,
+          };
 
-        await saveNoteOffline(db, updated, 'update');
-        await syncNotes(db);
-        await loadNotes();
-        showToast(note.done ? 'Marked undone' : 'Marked done', false);
-      } catch (e) {
-        console.error(e);
-        showToast('Failed to update done', true);
-      }
+      // Optimistic Update
+      setNotes((prev) => prev.map((n) => (n.id === noteId ? updated : n)));
+      showToast(note.done ? 'Marked undone' : 'Marked done', false);
+
+      // Background Sync
+      notifyActionPending();
+      void (async () => {
+        try {
+          const db = await getDb();
+          await saveNoteOffline(db, updated, 'update');
+          await syncNotes(db);
+          notifyActionSuccess();
+        } catch (e) {
+          console.error(e);
+          notifyActionError('Failed to update done');
+          loadNotes();
+        }
+      })();
     },
-    [loadNotes, notes, showToast],
+    [loadNotes, notes, notifyActionError, notifyActionPending, notifyActionSuccess, showToast],
   );
 
   const handleNoteReschedule = useCallback((noteId: string) => {
@@ -526,11 +581,13 @@ const NotesScreenContent = ({
     const toUpdate = notes.filter((n) => ids.includes(n.id));
     if (toUpdate.length === 0) return;
 
-    void (async () => {
-      try {
-        const db = await getDb();
-        const now = Date.now();
-        for (const note of toUpdate) {
+    // Optimistic Update
+    const now = Date.now();
+    const updatedNotes: Note[] = [];
+
+    setNotes((prev) =>
+      prev.map((note) => {
+        if (ids.includes(note.id)) {
           // Toggle done state
           const updated: Note = note.done
             ? { ...note, done: false, updatedAt: now }
@@ -552,19 +609,43 @@ const NotesScreenContent = ({
                 lastAcknowledgedAt: undefined,
                 updatedAt: now,
               };
-          await saveNoteOffline(db, updated, 'update');
+          updatedNotes.push(updated);
+          return updated;
+        }
+        return note;
+      }),
+    );
+
+    clearSelection();
+    const allDone = toUpdate.every((n) => n.done);
+    showToast(allDone ? 'Marked undone' : 'Marked done', false);
+
+    // Background Sync
+    notifyActionPending();
+    void (async () => {
+      try {
+        const db = await getDb();
+        for (const note of updatedNotes) {
+          await saveNoteOffline(db, note, 'update');
         }
         await syncNotes(db);
-        await loadNotes();
-        clearSelection();
-        const allDone = toUpdate.every((n) => n.done);
-        showToast(allDone ? 'Marked undone' : 'Marked done', false);
+        notifyActionSuccess();
       } catch (e) {
         console.error(e);
-        showToast('Failed to update done', true);
+        notifyActionError('Failed to update done');
+        loadNotes();
       }
     })();
-  }, [clearSelection, loadNotes, notes, selectedNoteIds, showToast]);
+  }, [
+    clearSelection,
+    loadNotes,
+    notes,
+    notifyActionError,
+    notifyActionPending,
+    notifyActionSuccess,
+    selectedNoteIds,
+    showToast,
+  ]);
 
   const closeReschedule = useCallback(() => {
     setShowRescheduleModal(false);
@@ -799,6 +880,8 @@ const NotesScreenContent = ({
           onSaveStart={closeReschedule}
           onRescheduled={(noteId, snoozedUntil) => {
             const now = Date.now();
+
+            // 1. Optimistic Update (Immediate UI Refresh)
             setNotes((prev) =>
               prev.map((note) =>
                 note.id === noteId
@@ -815,6 +898,7 @@ const NotesScreenContent = ({
                   : note,
               ),
             );
+
             if (editingNote?.id === noteId) {
               setEditingNote({
                 ...editingNote,
@@ -828,8 +912,41 @@ const NotesScreenContent = ({
               });
               setReminder(new Date(snoozedUntil));
             }
-            void loadNotes();
+
             showToast('Rescheduled successfully', false);
+
+            // 2. Background Persistence & Sync
+            notifyActionPending();
+            void (async () => {
+              try {
+                const db = await getDb();
+                const note = await getNoteById(db, noteId);
+
+                if (note) {
+                  const updatedNote: Note = {
+                    ...note,
+                    done: false,
+                    snoozedUntil,
+                    triggerAt: snoozedUntil,
+                    nextTriggerAt: snoozedUntil,
+                    scheduleStatus: 'scheduled',
+                    active: true,
+                    updatedAt: now,
+                  };
+
+                  await saveNoteOffline(db, updatedNote, 'update');
+                  await syncNotes(db);
+                  notifyActionSuccess();
+
+                  // Reload to ensure all derived state is correct
+                  await loadNotes();
+                }
+              } catch (e) {
+                console.error(e);
+                notifyActionError('Failed to reschedule');
+                loadNotes();
+              }
+            })();
           }}
           onError={() => {
             showToast('Failed to reschedule', true);
