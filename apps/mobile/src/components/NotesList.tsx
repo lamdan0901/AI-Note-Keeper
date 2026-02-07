@@ -47,6 +47,39 @@ export const NotesList: React.FC<NotesListProps> = ({
     return { pinnedNotes: pinned, otherNotes: others };
   }, [notes]);
 
+  // Distribute notes into two columns for masonry layout (Google Keep style)
+  const { leftColumn, rightColumn } = useMemo(() => {
+    const left: Note[] = [];
+    const right: Note[] = [];
+
+    // Simple distribution: alternate notes between columns
+    // For better distribution, we'd need to measure heights, but this works well enough
+    otherNotes.forEach((note, index) => {
+      if (index % 2 === 0) {
+        left.push(note);
+      } else {
+        right.push(note);
+      }
+    });
+
+    return { leftColumn: left, rightColumn: right };
+  }, [otherNotes]);
+
+  const { pinnedLeft, pinnedRight } = useMemo(() => {
+    const left: Note[] = [];
+    const right: Note[] = [];
+
+    pinnedNotes.forEach((note, index) => {
+      if (index % 2 === 0) {
+        left.push(note);
+      } else {
+        right.push(note);
+      }
+    });
+
+    return { pinnedLeft: left, pinnedRight: right };
+  }, [pinnedNotes]);
+
   const renderNote = (item: Note) => (
     <NoteCard
       key={item.id}
@@ -66,12 +99,23 @@ export const NotesList: React.FC<NotesListProps> = ({
   const renderPinnedSection = () => {
     if (pinnedNotes.length === 0) return null;
 
+    if (isGrid) {
+      return (
+        <View style={styles.sectionContainer}>
+          <Text style={styles.sectionHeader}>Pinned</Text>
+          <View style={styles.masonryContainer}>
+            <View style={styles.masonryColumn}>{pinnedLeft.map(renderNote)}</View>
+            <View style={styles.masonryColumn}>{pinnedRight.map(renderNote)}</View>
+          </View>
+          <Text style={styles.sectionHeader}>Others</Text>
+        </View>
+      );
+    }
+
     return (
       <View style={styles.sectionContainer}>
         <Text style={styles.sectionHeader}>Pinned</Text>
-        <View style={isGrid ? styles.gridContainer : styles.listContainer}>
-          {pinnedNotes.map(renderNote)}
-        </View>
+        <View style={styles.listContainer}>{pinnedNotes.map(renderNote)}</View>
         <Text style={styles.sectionHeader}>Others</Text>
       </View>
     );
@@ -85,18 +129,37 @@ export const NotesList: React.FC<NotesListProps> = ({
     );
   }
 
+  // Masonry layout for grid view
+  if (isGrid) {
+    return (
+      <FlatList
+        key={viewMode}
+        data={[{ key: 'masonry' }]}
+        renderItem={() => (
+          <View style={styles.masonryContainer}>
+            <View style={styles.masonryColumn}>{leftColumn.map(renderNote)}</View>
+            <View style={styles.masonryColumn}>{rightColumn.map(renderNote)}</View>
+          </View>
+        )}
+        ListHeaderComponent={renderPinnedSection}
+        contentContainerStyle={styles.listContent}
+        onRefresh={onRefresh}
+        refreshing={refreshing}
+      />
+    );
+  }
+
+  // List view remains unchanged
   return (
     <FlatList
-      key={viewMode} // Force full re-render when switching modes
+      key={viewMode}
       data={otherNotes}
       ListHeaderComponent={renderPinnedSection}
       renderItem={({ item }) => renderNote(item)}
       keyExtractor={(item) => item.id}
-      numColumns={isGrid ? 2 : 1}
       contentContainerStyle={styles.listContent}
       onRefresh={onRefresh}
       refreshing={refreshing}
-      columnWrapperStyle={isGrid ? styles.columnWrapper : undefined}
     />
   );
 };
@@ -106,9 +169,6 @@ const styles = StyleSheet.create({
     padding: theme.spacing.sm,
     gap: theme.spacing.sm,
     paddingBottom: 100,
-  },
-  columnWrapper: {
-    justifyContent: 'space-between',
   },
   sectionContainer: {
     marginBottom: theme.spacing.sm,
@@ -121,11 +181,13 @@ const styles = StyleSheet.create({
     marginLeft: 4,
     textTransform: 'uppercase',
   },
-  gridContainer: {
+  masonryContainer: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     gap: theme.spacing.sm,
-    justifyContent: 'space-between',
+  },
+  masonryColumn: {
+    flex: 1,
+    gap: theme.spacing.sm,
   },
   listContainer: {
     gap: theme.spacing.sm,

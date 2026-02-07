@@ -139,22 +139,12 @@ export const NoteCard: React.FC<NoteCardProps> = ({
             {!!title && (
               <View style={styles.header}>
                 <View style={styles.headerLeft}>
-                  <Text
-                    style={[styles.title, isDone && styles.titleDone]}
-                    numberOfLines={isGrid ? 2 : 1}
-                  >
-                    {title}
-                  </Text>
+                  <Text style={[styles.title, isDone && styles.titleDone]}>{title}</Text>
                 </View>
               </View>
             )}
             {!!content && (
-              <Text
-                style={[styles.content, isDone && styles.textDone]}
-                numberOfLines={isGrid ? 5 : 2}
-              >
-                {content}
-              </Text>
+              <Text style={[styles.content, isDone && styles.textDone]}>{content}</Text>
             )}
 
             {/* Sync Status & Reminder Row */}
@@ -204,14 +194,13 @@ const styles = StyleSheet.create({
   },
   cardGrid: {
     flex: 1,
-    minHeight: 150, // Taller cards for grid
+    // No fixed height - let content determine the height naturally
   },
   wrapperList: {
     marginBottom: theme.spacing.sm,
   },
   wrapperGrid: {
-    flex: 1,
-    margin: theme.spacing.xs,
+    // Margin handled by masonry column gap
   },
   cardDone: {
     opacity: 0.7,
