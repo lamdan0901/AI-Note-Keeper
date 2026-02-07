@@ -6,11 +6,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { RepeatRule } from '../../../../packages/shared/types/reminder';
 import { createHoldInteraction, getTapDecision, HOLD_DELAY_MS } from './noteCardInteractions';
 
-const CORNER_BUTTON_SIZE = 24;
-const CORNER_BUTTON_OFFSET = CORNER_BUTTON_SIZE / 2;
+// const CORNER_BUTTON_SIZE = 24;
+// const CORNER_BUTTON_OFFSET = CORNER_BUTTON_SIZE / 2;
 const SELECTION_ANIMATION_DURATION_MS = 240;
-
-const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 interface NoteCardProps {
   note: Note;
@@ -32,10 +30,10 @@ export const NoteCard: React.FC<NoteCardProps> = ({
   onLongPress,
   selectionMode = false,
   isSelected = false,
-  showActionButtons = true,
-  onDonePress,
-  onReschedulePress,
-  onDeletePress,
+  // showActionButtons = true, // Not used anymore
+  // onDonePress, // Not used anymore
+  // onReschedulePress, // Not used anymore
+  // onDeletePress, // Not used anymore
 }) => {
   const isGrid = variant === 'grid';
   const isDone = !!note.done;
@@ -109,7 +107,10 @@ export const NoteCard: React.FC<NoteCardProps> = ({
   const title = note.title?.trim();
   const content = note.content?.trim();
 
-  const cornerButtonOpacity = isSelected ? selectionAnim : 0;
+  // const title = note.title?.trim();
+  // const content = note.content?.trim();
+
+  // const cornerButtonOpacity = isSelected ? selectionAnim : 0;
 
   return (
     <View style={[styles.wrapper, isGrid ? styles.wrapperGrid : styles.wrapperList]}>
@@ -156,62 +157,33 @@ export const NoteCard: React.FC<NoteCardProps> = ({
               </Text>
             )}
 
-            {effectiveTriggerAt && (
-              <View style={styles.reminderContainer}>
-                <Ionicons name="alarm-outline" size={14} color={theme.colors.textMuted} />
-                <Text style={[styles.reminderText, isDone && styles.textDone]}>
-                  {formatReminder(effectiveTriggerAt, note.repeat)}
-                </Text>
-              </View>
-            )}
+            {/* Sync Status & Reminder Row */}
+            <View style={styles.metaRow}>
+              {/* Sync Status Icon */}
+              {note.syncStatus === 'pending' && (
+                <View style={styles.syncStatusBadge}>
+                  <Ionicons name="cloud-upload-outline" size={14} color={theme.colors.textMuted} />
+                </View>
+              )}
+              {note.syncStatus === 'conflict' && (
+                <View style={[styles.syncStatusBadge, styles.conflictBadge]}>
+                  <Ionicons name="warning-outline" size={14} color={theme.colors.error} />
+                </View>
+              )}
+
+              {/* Reminder Badge */}
+              {effectiveTriggerAt && (
+                <View style={styles.reminderContainer}>
+                  <Ionicons name="alarm-outline" size={14} color={theme.colors.textMuted} />
+                  <Text style={[styles.reminderText, isDone && styles.textDone]}>
+                    {formatReminder(effectiveTriggerAt, note.repeat)}
+                  </Text>
+                </View>
+              )}
+            </View>
           </Animated.View>
         )}
       </Pressable>
-
-      {showActionButtons && isSelected && onDonePress && (
-        <AnimatedPressable
-          style={[
-            styles.cornerButton,
-            styles.cornerTopLeft,
-            isDone ? styles.cornerDone : styles.cornerNotDone,
-            { opacity: cornerButtonOpacity },
-          ]}
-          hitSlop={10}
-          pointerEvents={isSelected ? 'auto' : 'none'}
-          disabled={!isSelected}
-          onPress={() => onDonePress(note.id)}
-        >
-          <Ionicons
-            name={isDone ? 'checkmark' : 'checkmark'}
-            size={16}
-            color={isDone ? theme.colors.surface : theme.colors.primary}
-          />
-        </AnimatedPressable>
-      )}
-
-      {showActionButtons && isSelected && onReschedulePress && (
-        <AnimatedPressable
-          style={[styles.cornerButton, styles.cornerTopRight, { opacity: cornerButtonOpacity }]}
-          hitSlop={10}
-          pointerEvents={isSelected ? 'auto' : 'none'}
-          disabled={!isSelected}
-          onPress={() => onReschedulePress(note.id)}
-        >
-          <Ionicons name="time-outline" size={16} color={theme.colors.textMuted} />
-        </AnimatedPressable>
-      )}
-
-      {showActionButtons && isSelected && onDeletePress && (
-        <AnimatedPressable
-          style={[styles.cornerButton, styles.cornerBottomLeft, { opacity: cornerButtonOpacity }]}
-          hitSlop={10}
-          pointerEvents={isSelected ? 'auto' : 'none'}
-          disabled={!isSelected}
-          onPress={() => onDeletePress(note.id)}
-        >
-          <Ionicons name="trash-outline" size={16} color={theme.colors.error} />
-        </AnimatedPressable>
-      )}
     </View>
   );
 };
@@ -281,52 +253,33 @@ const styles = StyleSheet.create({
   textDone: {
     color: theme.colors.textMuted,
   },
-  reminderContainer: {
+  metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
     marginTop: theme.spacing.sm,
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  syncStatusBadge: {
+    padding: 4,
+    borderRadius: theme.borderRadius.sm,
+    backgroundColor: 'rgba(0,0,0,0.05)',
+  },
+  conflictBadge: {
+    backgroundColor: 'rgba(239,68,68,0.1)',
+  },
+  reminderContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: 'rgba(0,0,0,0.05)',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: theme.borderRadius.sm,
-    alignSelf: 'flex-start',
     gap: 4,
   },
   reminderText: {
     fontSize: 11,
     color: theme.colors.textMuted,
     fontWeight: '500',
-  },
-  cornerButton: {
-    position: 'absolute',
-    width: CORNER_BUTTON_SIZE,
-    height: CORNER_BUTTON_SIZE,
-    borderRadius: CORNER_BUTTON_SIZE / 2,
-    backgroundColor: theme.colors.surface,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...theme.shadows.sm,
-  },
-  cornerTopLeft: {
-    top: -CORNER_BUTTON_OFFSET,
-    left: -CORNER_BUTTON_OFFSET,
-  },
-  cornerDone: {
-    backgroundColor: theme.colors.primary,
-    borderColor: theme.colors.primary,
-  },
-  cornerNotDone: {
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.primary,
-  },
-  cornerTopRight: {
-    top: -CORNER_BUTTON_OFFSET,
-    right: -CORNER_BUTTON_OFFSET,
-  },
-  cornerBottomLeft: {
-    bottom: -CORNER_BUTTON_OFFSET,
-    left: -CORNER_BUTTON_OFFSET,
   },
 });

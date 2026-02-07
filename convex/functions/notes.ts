@@ -35,6 +35,8 @@ export const syncNotes = mutation({
         createdAt: v.number(),
         operation: v.string(), // "create", "update", "delete"
         deviceId: v.string(),
+        version: v.optional(v.number()),
+        baseVersion: v.optional(v.number()),
       }),
     ),
     lastSyncAt: v.number(),
@@ -66,7 +68,11 @@ export const syncNotes = mutation({
       if (operation === 'delete') {
         if (existing) {
           // Soft delete
-          await ctx.db.patch(existing._id, { active: false, updatedAt: noteData.updatedAt });
+          await ctx.db.patch(existing._id, {
+            active: false,
+            updatedAt: noteData.updatedAt,
+            version: (existing.version || 0) + 1,
+          });
         }
       } else {
         if (existing) {
@@ -84,6 +90,7 @@ export const syncNotes = mutation({
               scheduleStatus: noteData.scheduleStatus,
               timezone: noteData.timezone,
               updatedAt: noteData.updatedAt,
+              version: (existing.version || 0) + 1,
             });
           }
         } else {
@@ -103,14 +110,13 @@ export const syncNotes = mutation({
             timezone: noteData.timezone,
             createdAt: noteData.createdAt,
             updatedAt: noteData.updatedAt,
+            version: 1,
           });
         }
       }
     }
 
     // Return latest server state for delta sync logic (simplified here to return all)
-    // In a real app, we would query noteChangeEvents > lastSyncAt
-    // For MVP, just return all notes for the user to replace local state (inefficient but safe)
     const allNotes = await ctx.db
       .query('notes')
       .filter((q) => q.eq(q.field('userId'), userId))

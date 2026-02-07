@@ -92,8 +92,9 @@ export const sendPush = internalAction({
     excludeDeviceId: v.optional(v.string()),
     reminderId: v.string(),
     changeEventId: v.string(),
+    isTrigger: v.optional(v.boolean()),
   },
-  handler: async (ctx, { userId, excludeDeviceId, reminderId, changeEventId }) => {
+  handler: async (ctx, { userId, excludeDeviceId, reminderId, changeEventId, isTrigger }) => {
     console.log(`[Push] Starting push for reminder ${reminderId}, user ${userId}`);
 
     // 1. Get tokens
@@ -147,8 +148,7 @@ export const sendPush = internalAction({
       return;
     }
 
-    const isTriggerEvent = changeEventId.startsWith('trigger-');
-    const messageType = isTriggerEvent ? 'trigger_reminder' : 'sync_reminder';
+    const messageType = isTrigger ? 'trigger_reminder' : 'sync_reminder';
 
     // 6. Send FCM v1 API requests
     const results = await Promise.all(

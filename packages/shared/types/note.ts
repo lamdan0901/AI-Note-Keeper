@@ -31,6 +31,10 @@ export type Note = {
   lastAcknowledgedAt?: number | null;
   version?: number;
 
+  // Sync tracking fields
+  syncStatus?: 'synced' | 'pending' | 'conflict';
+  serverVersion?: number;
+
   updatedAt: number;
   createdAt: number;
 };

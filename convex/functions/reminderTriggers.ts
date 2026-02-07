@@ -176,11 +176,17 @@ export const checkAndTriggerReminders = internalAction({
       console.log(`[Cron] Triggering reminder for note ${note.id}`);
 
       try {
+        // Use the same eventId format as local alarms for deduplication
+        // Local alarm uses: `${reminderId}-${triggerTime}`
+        const triggerTime = note.snoozedUntil ?? note.nextTriggerAt ?? note.triggerAt ?? now;
+        const eventId = `${note.id}-${triggerTime}`;
+
         await ctx.runAction(internal.functions.push.sendPush, {
           userId: note.userId,
           reminderId: note.id,
-          changeEventId: `trigger-${now}`,
+          changeEventId: eventId,
           excludeDeviceId: undefined, // Send to ALL devices
+          isTrigger: true,
         });
 
         // Mark as triggered

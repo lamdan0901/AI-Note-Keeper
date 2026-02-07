@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "d0a52eb8-e31a-41c2-b747-bd7b606a69db"
+      }
+    },
+    "android": {
+      "package": "com.lamdan0901.ainotekeeper"
+    }
+  }
+}

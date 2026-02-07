@@ -80,6 +80,14 @@ export const scheduleReminderNotification = async (
   notification?: NotificationTextOverride,
   db?: DbLike,
 ): Promise<string[]> => {
+  console.log('[Scheduler] scheduleReminderNotification called:', {
+    id: reminder.id,
+    triggerAt: reminder.triggerAt,
+    snoozedUntil: reminder.snoozedUntil,
+    active: reminder.active,
+    platform: Platform.OS,
+  });
+
   if (Platform.OS === 'android') {
     const { ReminderModule } = NativeModules;
     if (ReminderModule) {

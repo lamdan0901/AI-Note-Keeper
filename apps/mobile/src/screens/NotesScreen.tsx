@@ -10,21 +10,22 @@ import {
   View,
   ActivityIndicator,
   Alert,
-  AppState,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { getDb } from '../db/bootstrap';
 import { getNoteById, listNotes, Note } from '../db/notesRepo';
 import { saveNoteOffline, deleteNoteOffline } from '../notes/editor';
 import { syncNotes } from '../sync/noteSync';
+import { SyncProvider, useSyncState } from '../sync/syncManager';
 import { NotesList } from '../components/NotesList';
+import { SyncStatusIndicator } from '../components/SyncStatusIndicator';
 import { theme } from '../theme';
 import uuid from 'react-native-uuid';
 import { ReminderSetupModal } from '../reminders/ui/ReminderSetupModal';
 import { RescheduleModal } from '../reminders/ui/SnoozeModal';
 import { RepeatRule } from '../../../../packages/shared/types/reminder';
 
-const SELECTION_HEADER_HEIGHT = 56;
+const BOTTOM_ACTION_BAR_HEIGHT = 80;
 
 type NotesScreenProps = {
   rescheduleNoteId?: string | null;
@@ -33,7 +34,7 @@ type NotesScreenProps = {
   onEditHandled?: () => void;
 };
 
-export const NotesScreen = ({
+const NotesScreenContent = ({
   rescheduleNoteId,
   onRescheduleHandled,
   editNoteId,
@@ -79,6 +80,9 @@ export const NotesScreen = ({
 
   const selectionMode = selectedNoteIds.size > 0;
 
+  // Get sync state to listen for completion
+  const syncState = useSyncState();
+
   const loadNotes = useCallback(async () => {
     try {
       const db = await getDb();
@@ -93,40 +97,18 @@ export const NotesScreen = ({
     }
   }, []);
 
+  // Load notes on mount - SyncManager handles sync automatically
   useEffect(() => {
-    const init = async () => {
-      // 1. Load local notes immediately for speed
-      await loadNotes();
-
-      // 2. Trigger sync in background
-      try {
-        const db = await getDb();
-        await syncNotes(db);
-        await loadNotes();
-      } catch (e) {
-        console.error('Initial sync failed:', e);
-      }
-    };
-
-    init();
-
-    // 3. Listen for AppState changes to sync on resume
-    const subscription = AppState.addEventListener('change', async (nextAppState) => {
-      if (nextAppState === 'active') {
-        try {
-          const db = await getDb();
-          await syncNotes(db);
-          await loadNotes();
-        } catch (e) {
-          console.error('Resume sync failed:', e);
-        }
-      }
-    });
-
-    return () => {
-      subscription.remove();
-    };
+    loadNotes();
   }, [loadNotes]);
+
+  // Reload notes whenever sync completes
+  useEffect(() => {
+    if (syncState.lastSyncAt !== null) {
+      console.log('[NotesScreen] Sync completed, reloading notes');
+      loadNotes();
+    }
+  }, [syncState.lastSyncAt, loadNotes]);
 
   useEffect(() => {
     return () => {
@@ -544,31 +526,34 @@ export const NotesScreen = ({
         const db = await getDb();
         const now = Date.now();
         for (const note of toUpdate) {
-          if (note.done) continue;
-          const updated: Note = {
-            ...note,
-            active: true,
-            done: true,
-            triggerAt: undefined,
-            repeatRule: undefined,
-            repeatConfig: undefined,
-            repeat: undefined,
-            snoozedUntil: undefined,
-            scheduleStatus: undefined,
-            timezone: undefined,
-            baseAtLocal: undefined,
-            startAt: undefined,
-            nextTriggerAt: undefined,
-            lastFiredAt: undefined,
-            lastAcknowledgedAt: undefined,
-            updatedAt: now,
-          };
+          // Toggle done state
+          const updated: Note = note.done
+            ? { ...note, done: false, updatedAt: now }
+            : {
+                ...note,
+                active: true,
+                done: true,
+                triggerAt: undefined,
+                repeatRule: undefined,
+                repeatConfig: undefined,
+                repeat: undefined,
+                snoozedUntil: undefined,
+                scheduleStatus: undefined,
+                timezone: undefined,
+                baseAtLocal: undefined,
+                startAt: undefined,
+                nextTriggerAt: undefined,
+                lastFiredAt: undefined,
+                lastAcknowledgedAt: undefined,
+                updatedAt: now,
+              };
           await saveNoteOffline(db, updated, 'update');
         }
         await syncNotes(db);
         await loadNotes();
         clearSelection();
-        showToast('Marked done', false);
+        const allDone = toUpdate.every((n) => n.done);
+        showToast(allDone ? 'Marked undone' : 'Marked done', false);
       } catch (e) {
         console.error(e);
         showToast('Failed to update done', true);
@@ -586,50 +571,63 @@ export const NotesScreen = ({
       {/* Header */}
       <View style={[styles.header, selectionMode && styles.headerHidden]}>
         <Text style={styles.headerTitle}>My Notes</Text>
-        <Pressable
-          style={styles.iconButton}
-          onPress={() => setViewMode((prev) => (prev === 'grid' ? 'list' : 'grid'))}
-        >
-          <Ionicons
-            name={viewMode === 'grid' ? 'list' : 'grid'}
-            size={24}
-            color={theme.colors.primary}
-          />
-        </Pressable>
+        <View style={styles.headerRight}>
+          <SyncStatusIndicator />
+          <Pressable
+            style={styles.iconButton}
+            onPress={() => setViewMode((prev) => (prev === 'grid' ? 'list' : 'grid'))}
+          >
+            <Ionicons
+              name={viewMode === 'grid' ? 'list' : 'grid'}
+              size={24}
+              color={theme.colors.primary}
+            />
+          </Pressable>
+        </View>
       </View>
 
       <Animated.View
         pointerEvents={selectionMode ? 'auto' : 'none'}
         style={[
-          styles.selectionHeader,
+          styles.bottomActionBar,
           {
-            opacity: selectionHeaderAnim,
             transform: [
               {
                 translateY: selectionHeaderAnim.interpolate({
                   inputRange: [0, 1],
-                  outputRange: [-SELECTION_HEADER_HEIGHT, 0],
+                  outputRange: [BOTTOM_ACTION_BAR_HEIGHT, 0],
                 }),
               },
             ],
           },
         ]}
       >
-        <View style={styles.selectionHeaderContent}>
-          <Text style={styles.selectionHeaderTitle}>{selectedNoteIds.size} selected</Text>
-          {selectedNoteIds.size >= 2 && (
-            <View style={styles.selectionHeaderActions}>
-              <Pressable style={styles.selectionHeaderButton} onPress={handleBulkDeleteSelected}>
-                <Ionicons name="trash-outline" size={22} color={theme.colors.error} />
-              </Pressable>
-              <Pressable style={styles.selectionHeaderButton} onPress={clearSelection}>
-                <Ionicons name="close" size={24} color={theme.colors.text} />
-              </Pressable>
-              <Pressable style={styles.selectionHeaderButton} onPress={handleBulkMarkDone}>
-                <Ionicons name="checkmark" size={26} color={theme.colors.primary} />
-              </Pressable>
-            </View>
+        <View style={styles.bottomActionBarContent}>
+          <Pressable style={styles.bottomActionButton} onPress={clearSelection}>
+            <Ionicons name="close" size={24} color={theme.colors.text} />
+            <Text style={styles.bottomActionText}>Cancel</Text>
+          </Pressable>
+          <View style={styles.bottomActionSpacer} />
+          <Pressable style={styles.bottomActionButton} onPress={handleBulkMarkDone}>
+            <Ionicons name="checkmark-circle-outline" size={24} color={theme.colors.primary} />
+            <Text style={styles.bottomActionText}>Done</Text>
+          </Pressable>
+          {selectedNoteIds.size === 1 && (
+            <Pressable
+              style={styles.bottomActionButton}
+              onPress={() => {
+                const id = Array.from(selectedNoteIds)[0];
+                handleNoteReschedule(id);
+              }}
+            >
+              <Ionicons name="time-outline" size={24} color={theme.colors.text} />
+              <Text style={styles.bottomActionText}>Snooze</Text>
+            </Pressable>
           )}
+          <Pressable style={styles.bottomActionButton} onPress={handleBulkDeleteSelected}>
+            <Ionicons name="trash-outline" size={24} color={theme.colors.error} />
+            <Text style={styles.bottomActionText}>Delete</Text>
+          </Pressable>
         </View>
       </Animated.View>
 
@@ -661,9 +659,25 @@ export const NotesScreen = ({
       )}
 
       {/* FAB */}
-      <Pressable style={styles.fab} onPress={() => openEditor()}>
-        <Ionicons name="add" size={32} color="white" />
-      </Pressable>
+      <Animated.View
+        style={[
+          styles.fabContainer,
+          {
+            transform: [
+              {
+                translateY: selectionHeaderAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0, -BOTTOM_ACTION_BAR_HEIGHT + 16], // Move up
+                }),
+              },
+            ],
+          },
+        ]}
+      >
+        <Pressable style={styles.fab} onPress={() => openEditor()}>
+          <Ionicons name="add" size={32} color="white" />
+        </Pressable>
+      </Animated.View>
 
       {/* Editor Modal */}
       <Modal
@@ -870,45 +884,54 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     fontFamily: theme.typography.fontFamily,
   },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   iconButton: {
     padding: theme.spacing.xs,
   },
   headerHidden: {
     opacity: 0,
   },
-  selectionHeader: {
+  bottomActionBar: {
     position: 'absolute',
-    top: 0,
+    bottom: 0,
     left: 0,
     right: 0,
-    height: SELECTION_HEADER_HEIGHT,
-    paddingHorizontal: theme.spacing.md,
-    flexDirection: 'row',
-    alignItems: 'center',
+    height: BOTTOM_ACTION_BAR_HEIGHT,
     backgroundColor: theme.colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.border,
+    paddingHorizontal: theme.spacing.xl, // Increase padding for spacing
+    elevation: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    justifyContent: 'center',
+    zIndex: 1000,
   },
-  selectionHeaderContent: {
-    flex: 1,
+  bottomActionBarContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    height: '100%',
   },
-  selectionHeaderTitle: {
-    fontSize: theme.typography.sizes.lg,
-    fontWeight: theme.typography.weights.semibold as '600',
-    color: theme.colors.text,
-    fontFamily: theme.typography.fontFamily,
-  },
-  selectionHeaderActions: {
-    flexDirection: 'row',
+  bottomActionButton: {
     alignItems: 'center',
-    gap: theme.spacing.md,
+    justifyContent: 'center',
+    gap: 4,
+    minWidth: 60,
   },
-  selectionHeaderButton: {
-    padding: theme.spacing.xs,
-    borderRadius: theme.borderRadius.md,
+  bottomActionText: {
+    fontSize: 10,
+    color: theme.colors.text,
+    fontWeight: '500',
+  },
+  bottomActionSpacer: {
+    flex: 1,
   },
   centered: {
     flex: 1,
@@ -918,10 +941,13 @@ const styles = StyleSheet.create({
   contentPressable: {
     flex: 1,
   },
-  fab: {
+  fabContainer: {
     position: 'absolute',
     bottom: theme.spacing.xl,
     right: theme.spacing.xl,
+    zIndex: 900,
+  },
+  fab: {
     backgroundColor: theme.colors.primary,
     width: 56,
     height: 56,
@@ -1040,11 +1066,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
   },
-  headerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
   headerChip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1109,3 +1130,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 });
+
+// Wrapper component that provides SyncProvider context
+export const NotesScreen = (props: NotesScreenProps) => {
+  return (
+    <SyncProvider>
+      <NotesScreenContent {...props} />
+    </SyncProvider>
+  );
+};

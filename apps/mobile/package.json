@@ -30,6 +30,7 @@
   "devDependencies": {
     "@types/react": "^18.2.0",
     "babel-preset-expo": "~10.0.0",
+    "eas-cli": "^16.32.0",
     "typescript": "^5.4.0"
   }
 }

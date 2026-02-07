@@ -1,109 +1,187 @@
 import { SQLiteDatabase } from 'expo-sqlite/next';
-import { ConvexHttpClient } from 'convex/browser';
-import { api } from '../../../../convex/_generated/api';
-import { upsertNote } from '../db/notesRepo';
+import { Note, upsertNote } from '../db/notesRepo';
+import { markNoteConflict, markNoteSynced } from '../db/syncHelpers';
+import { resolveNoteConflict } from './conflictResolution';
 import { fetchNotes } from './fetchNotes';
-import { ReminderRepeatRule } from '../../../../packages/shared/types/reminder';
-import { ReminderScheduleStatus } from '../../../../packages/shared/types/reminder';
+import { enqueueNoteOperation, getAllOutboxEntries } from './noteOutbox';
+import { processQueue, getQueueStats } from './syncQueueProcessor';
 
-type NoteOutboxEntry = {
-  noteId: string;
-  userId: string;
-  operation: string; // "create" | "update" | "delete"
-  payloadJson: string;
-  attempts: number;
-  // ... other fields
+// ============================================================================
+// Structured Logging
+// ============================================================================
+
+type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+
+const log = (level: LogLevel, message: string, context?: Record<string, unknown>): void => {
+  const timestamp = new Date().toISOString();
+  const ctx = context ? ` ${JSON.stringify(context)}` : '';
+  const formatted = `[${timestamp}] [${level.toUpperCase()}] [Sync] ${message}${ctx}`;
+
+  switch (level) {
+    case 'error':
+      console.error(formatted);
+      break;
+    case 'warn':
+      console.warn(formatted);
+      break;
+    default:
+      console.log(formatted);
+  }
 };
 
-export const syncNotes = async (db: SQLiteDatabase, userId: string = 'local-user') => {
-  console.log('[Sync] Starting note sync...');
+// ============================================================================
+// Sync Result Types
+// ============================================================================
 
-  // 1. PUSH: Send Outbox items to Convex
-  const outboxItems = await db.getAllAsync<NoteOutboxEntry>(
-    `SELECT * FROM note_outbox ORDER BY createdAt ASC`,
-  );
+export type SyncResult = {
+  success: boolean;
+  pullCount: number;
+  pushResult: {
+    total: number;
+    succeeded: number;
+    failed: number;
+  };
+  conflictCount: number;
+  mergeCount: number;
+  error?: string;
+};
 
-  if (outboxItems.length > 0) {
-    console.log(`[Sync] Found ${outboxItems.length} items to push.`);
-    const changes = outboxItems.map((item) => {
-      const payload = JSON.parse(item.payloadJson);
-      return {
-        id: payload.id,
-        userId: item.userId,
-        title: payload.title ?? undefined,
-        content: payload.content ?? undefined,
-        color: payload.color ?? undefined,
-        active: payload.active,
-        done: payload.done ?? undefined,
-        triggerAt: payload.triggerAt ?? undefined,
-        repeatRule: payload.repeatRule ?? undefined,
-        repeatConfig: payload.repeatConfig ?? undefined,
-        snoozedUntil: payload.snoozedUntil ?? undefined,
-        scheduleStatus: payload.scheduleStatus ?? undefined,
-        timezone: payload.timezone ?? undefined,
-        updatedAt: payload.updatedAt,
-        createdAt: payload.createdAt,
-        operation: item.operation,
-        deviceId: 'mobile-device-id',
-      };
-    });
+// ============================================================================
+// Main Sync Function
+// ============================================================================
 
-    try {
-      const convexUrl = process.env.EXPO_PUBLIC_CONVEX_URL;
-      if (!convexUrl) throw new Error('Missing Convex URL');
-      const client = new ConvexHttpClient(convexUrl);
+export const syncNotes = async (
+  db: SQLiteDatabase,
+  userId: string = 'local-user',
+): Promise<SyncResult> => {
+  const startTime = Date.now();
+  let pullCount = 0;
+  let conflictCount = 0;
+  let mergeCount = 0;
 
-      // Call sync mutation
-      const result = await client.mutation(api.functions.notes.syncNotes, {
-        userId,
-        changes,
-        lastSyncAt: 0, // Simplified
-      });
+  log('info', 'Starting smart sync', { userId });
 
-      // If successful, clear outbox
-      // In a robust system, we'd clear only processed IDs
-      const ids = outboxItems
-        .map((i) => i.noteId)
-        .map((id) => `'${id}'`)
-        .join(',');
-      await db.runAsync(`DELETE FROM note_outbox WHERE noteId IN (${ids})`);
-      console.log('[Sync] Push successful. Outbox cleared.');
+  // Log queue stats before sync
+  const preStats = await getQueueStats(db);
+  log('debug', 'Pre-sync queue stats', preStats);
 
-      // Update local state with server state (Optimistic confirmation)
-      // The server returns the full list of notes. We can upsert them.
-      for (const serverNote of result.notes) {
-        await upsertNote(db, {
-          id: serverNote.id,
-          title: serverNote.title ?? null,
-          content: serverNote.content ?? null,
-          color: serverNote.color ?? null,
-          active: serverNote.active,
-          done: serverNote.done ?? false,
+  // -------------------------------------------------------------------------
+  // 1. PULL: Fetch latest state from server
+  // -------------------------------------------------------------------------
+  const fetchResult = await fetchNotes(userId);
 
-          triggerAt: serverNote.triggerAt,
-          repeatRule: serverNote.repeatRule as ReminderRepeatRule,
-          repeatConfig: serverNote.repeatConfig,
-          snoozedUntil: serverNote.snoozedUntil,
-          scheduleStatus: serverNote.scheduleStatus as ReminderScheduleStatus,
-          timezone: serverNote.timezone,
+  if (fetchResult.status === 'error') {
+    log('error', 'Pull failed, aborting sync', { error: fetchResult.error });
+    return {
+      success: false,
+      pullCount: 0,
+      pushResult: { total: 0, succeeded: 0, failed: 0 },
+      conflictCount: 0,
+      mergeCount: 0,
+      error: String(fetchResult.error),
+    };
+  }
 
-          updatedAt: serverNote.updatedAt,
-          createdAt: serverNote.createdAt,
+  const serverNotes = fetchResult.notes || [];
+  pullCount = serverNotes.length;
+  log('info', `Pulled ${pullCount} notes from server`);
+
+  // -------------------------------------------------------------------------
+  // 2. RECONCILE: Check for conflicts between Server and Outbox
+  // -------------------------------------------------------------------------
+  const allOutboxItems = await getAllOutboxEntries(db);
+  const outboxMap = new Map(allOutboxItems.map((item) => [item.noteId, item]));
+
+  log('debug', 'Reconciling with outbox', {
+    serverNotes: serverNotes.length,
+    outboxItems: allOutboxItems.length,
+  });
+
+  for (const serverNote of serverNotes) {
+    const outboxEntry = outboxMap.get(serverNote.id);
+
+    if (outboxEntry) {
+      // We have local changes pending. Check for conflict.
+      const localPayload = JSON.parse(outboxEntry.payloadJson) as Note;
+      const conflictResult = resolveNoteConflict(localPayload, serverNote);
+
+      if (conflictResult.type === 'input_required') {
+        log('warn', `Conflict detected for note ${serverNote.id}`, {
+          localVersion: localPayload.serverVersion,
+          serverVersion: serverNote.version,
         });
+
+        // Mark as conflict in DB
+        await markNoteConflict(db, serverNote.id);
+
+        // Remove from Outbox so we don't overwrite server
+        await db.runAsync('DELETE FROM note_outbox WHERE noteId = ?', [serverNote.id]);
+
+        conflictCount++;
+      } else {
+        // Auto-mergeable or no conflict
+        if (conflictResult.type === 'none' && conflictResult.mergedNote) {
+          const merged = conflictResult.mergedNote;
+
+          // If the merge actually changed something compared to our local pending state
+          if (JSON.stringify(merged) !== JSON.stringify(localPayload)) {
+            log('info', `Auto-merged note ${serverNote.id}`);
+
+            // Update Local DB
+            await upsertNote(db, merged);
+
+            // Update Outbox with merged payload
+            await enqueueNoteOperation(
+              db,
+              merged,
+              outboxEntry.operation,
+              userId,
+              outboxEntry.createdAt,
+            );
+
+            mergeCount++;
+          }
+        }
       }
-    } catch (e) {
-      console.error('[Sync] Push failed:', e);
-      // In a real app, increment attempt counters and implement backoff
-    }
-  } else {
-    // 2. PULL: If nothing to push, check for updates
-    // (If we pushed, we already got updates in response)
-    const fetchResult = await fetchNotes(userId);
-    if (fetchResult.status === 'ok') {
-      for (const serverNote of fetchResult.notes) {
-        await upsertNote(db, serverNote);
-      }
-      console.log(`[Sync] Pulled ${fetchResult.notes.length} notes.`);
+    } else {
+      // No pending local changes. Safe to update local DB with server state.
+      await upsertNote(db, serverNote);
+      await markNoteSynced(db, serverNote.id, serverNote.version || 0);
     }
   }
+
+  log('debug', 'Reconciliation complete', { conflictCount, mergeCount });
+
+  // -------------------------------------------------------------------------
+  // 3. PUSH: Process outbox queue with batching and partial failure handling
+  // -------------------------------------------------------------------------
+  const pushResult = await processQueue(db, userId);
+
+  // -------------------------------------------------------------------------
+  // 4. Summary
+  // -------------------------------------------------------------------------
+  const elapsed = Date.now() - startTime;
+  const postStats = await getQueueStats(db);
+
+  log('info', `Sync completed in ${elapsed}ms`, {
+    pullCount,
+    pushed: pushResult.succeeded,
+    failed: pushResult.failed,
+    conflicts: conflictCount,
+    merges: mergeCount,
+    remainingPending: postStats.pending,
+    remainingRetrying: postStats.retrying,
+  });
+
+  return {
+    success: pushResult.failed === 0 && conflictCount === 0,
+    pullCount,
+    pushResult: {
+      total: pushResult.total,
+      succeeded: pushResult.succeeded,
+      failed: pushResult.failed,
+    },
+    conflictCount,
+    mergeCount,
+  };
 };

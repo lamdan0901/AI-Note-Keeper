@@ -178,4 +178,22 @@ CREATE INDEX IF NOT EXISTS idx_notification_ledger_created ON notification_ledge
 CREATE INDEX IF NOT EXISTS idx_notification_ledger_source ON notification_ledger (source);
     `.trim(),
   },
+  {
+    id: '010_add_sync_status',
+    sql: `
+-- Add sync status tracking to notes
+ALTER TABLE notes ADD COLUMN syncStatus TEXT DEFAULT 'synced';
+ALTER TABLE notes ADD COLUMN serverVersion INTEGER DEFAULT 0;
+
+-- Add retry tracking to note outbox
+ALTER TABLE note_outbox ADD COLUMN retryCount INTEGER DEFAULT 0;
+ALTER TABLE note_outbox ADD COLUMN nextRetryAt INTEGER;
+
+-- Index for querying pending notes
+CREATE INDEX IF NOT EXISTS idx_notes_syncStatus ON notes (syncStatus);
+
+-- Index for retry processing
+CREATE INDEX IF NOT EXISTS idx_note_outbox_nextRetryAt ON note_outbox (nextRetryAt);
+    `.trim(),
+  },
 ];

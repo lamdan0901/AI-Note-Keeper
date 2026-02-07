@@ -7,24 +7,39 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 
 class ReminderReceiver : BroadcastReceiver() {
 
+    companion object {
+        private const val TAG = "ReminderReceiver"
+    }
+
     override fun onReceive(context: Context, intent: Intent) {
-        val id = intent.getStringExtra("id") ?: return
+        Log.d(TAG, "onReceive() called - ALARM TRIGGERED!")
+        
+        val id = intent.getStringExtra("id")
+        if (id == null) {
+            Log.e(TAG, "onReceive: id is null, returning early")
+            return
+        }
+        
         val title = intent.getStringExtra("title") ?: "Reminder"
         val body = intent.getStringExtra("body") ?: "You have a reminder"
         val eventId = intent.getStringExtra("eventId") ?: ""
+        
+        Log.d(TAG, "onReceive: id=$id, title=$title, body=$body, eventId=$eventId")
 
         // Record notification delivery in ledger (Phase 4)
         if (eventId.isNotEmpty()) {
             try {
                 NotificationLedgerHelper.recordLocalNotification(context, id, eventId)
+                Log.d(TAG, "Recorded notification in ledger")
             } catch (e: Exception) {
                 // Log but don't crash - notification should still be shown
-                e.printStackTrace()
+                Log.e(TAG, "Failed to record in ledger: ${e.message}", e)
             }
         }
 
@@ -32,6 +47,8 @@ class ReminderReceiver : BroadcastReceiver() {
     }
 
     private fun showNotification(context: Context, id: String, title: String, body: String, eventId: String) {
+        Log.d(TAG, "showNotification: id=$id, title=$title")
+        
         val channelId = "reminders_channel"
         
         // Ensure channel exists
@@ -133,9 +150,12 @@ class ReminderReceiver : BroadcastReceiver() {
             with(NotificationManagerCompat.from(context)) {
                notify(notificationId, builder.build())
             }
+            Log.d(TAG, "Notification displayed successfully: notificationId=$notificationId")
         } catch (e: SecurityException) {
             // Missing POST_NOTIFICATIONS permission on Android 13+
-            e.printStackTrace()
+            Log.e(TAG, "SecurityException showing notification (missing POST_NOTIFICATIONS?): ${e.message}", e)
+        } catch (e: Exception) {
+            Log.e(TAG, "Exception showing notification: ${e.message}", e)
         }
     }
 }

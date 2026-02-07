@@ -2,7 +2,7 @@ import { SQLiteDatabase } from 'expo-sqlite/next';
 import { Note } from '../../../../packages/shared/types/note';
 export { Note };
 
-type NoteRow = {
+export type NoteRow = {
   id: string;
   title: string | null;
   content: string | null;
@@ -24,6 +24,9 @@ type NoteRow = {
   lastFiredAt: number | null;
   lastAcknowledgedAt: number | null;
   version: number;
+
+  syncStatus: string | null;
+  serverVersion: number;
 
   updatedAt: number;
   createdAt: number;
@@ -53,6 +56,9 @@ export const mapNoteRow = (row: NoteRow): Note => ({
   lastFiredAt: row.lastFiredAt || undefined,
   lastAcknowledgedAt: row.lastAcknowledgedAt || undefined,
   version: row.version || 0,
+
+  syncStatus: (row.syncStatus as Note['syncStatus']) || 'synced',
+  serverVersion: row.serverVersion || 0,
 
   updatedAt: row.updatedAt,
   createdAt: row.createdAt,

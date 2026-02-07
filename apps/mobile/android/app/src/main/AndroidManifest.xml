@@ -7,6 +7,8 @@
   <uses-permission android:name="android.permission.VIBRATE"/>
   <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
   <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SHORT_SERVICE"/>
   <queries>
     <intent>
       <action android:name="android.intent.action.VIEW"/>
@@ -40,12 +42,12 @@
         android:taskAffinity=""
     />
     <activity android:name="com.facebook.react.devsupport.DevSettingsActivity" android:exported="false"/>
-    <receiver android:name=".ReminderReceiver" android:exported="false"/>
+    <receiver android:name=".ReminderReceiver" android:exported="true"/>
     <receiver android:name=".BootReceiver" android:exported="true">
         <intent-filter>
             <action android:name="android.intent.action.BOOT_COMPLETED" />
         </intent-filter>
     </receiver>
-    <service android:name=".ReminderTaskService" />
+    <service android:name=".ReminderTaskService" android:foregroundServiceType="shortService" android:exported="false" />
   </application>
 </manifest>
