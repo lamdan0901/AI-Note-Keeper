@@ -296,12 +296,15 @@ const NotesScreenContent = ({
     });
 
     if (repeatRule) {
-      const ruleLabel =
-        repeatRule.kind === 'custom' &&
-        repeatRule.frequency === 'minutes' &&
-        repeatRule.interval === 3
-          ? 'Every 3 min'
-          : repeatRule.kind.charAt(0).toUpperCase() + repeatRule.kind.slice(1);
+      let ruleLabel: string;
+      if (repeatRule.kind === 'daily' && repeatRule.interval > 1) {
+        ruleLabel = `Every ${repeatRule.interval} days`;
+      } else if (repeatRule.kind === 'custom') {
+        const unit = repeatRule.frequency === 'minutes' ? 'min' : repeatRule.frequency;
+        ruleLabel = `Every ${repeatRule.interval} ${unit}`;
+      } else {
+        ruleLabel = repeatRule.kind.charAt(0).toUpperCase() + repeatRule.kind.slice(1);
+      }
       return `${timeStr} (${ruleLabel})`;
     }
     return timeStr;

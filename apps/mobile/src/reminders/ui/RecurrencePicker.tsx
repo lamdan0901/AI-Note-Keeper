@@ -1,5 +1,5 @@
-import React, { useMemo } from 'react';
-import { StyleSheet, Text, View, Pressable } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { StyleSheet, Text, View, Pressable, TextInput } from 'react-native';
 import { type Theme, useTheme } from '../../theme';
 import { RepeatRule } from '../../../../../packages/shared/types/reminder';
 
@@ -13,11 +13,20 @@ const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 export const RecurrencePicker: React.FC<RecurrencePickerProps> = ({ repeat, onChange }) => {
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
-  const testKind = 'test-3-min';
-  const currentKind =
-    repeat?.kind === 'custom' && repeat.frequency === 'minutes' && repeat.interval === 3
-      ? testKind
-      : repeat?.kind || 'none';
+  const minCustomDays = 2;
+  const isCustomDays = repeat?.kind === 'daily' && repeat.interval >= minCustomDays;
+  const currentKind = isCustomDays ? 'custom' : repeat?.kind || 'none';
+  const [customDaysText, setCustomDaysText] = useState(
+    isCustomDays ? String(repeat?.interval ?? minCustomDays) : String(minCustomDays),
+  );
+
+  useEffect(() => {
+    if (isCustomDays) {
+      setCustomDaysText(String(repeat?.interval ?? minCustomDays));
+    } else if (currentKind !== 'custom') {
+      setCustomDaysText(String(minCustomDays));
+    }
+  }, [currentKind, isCustomDays, minCustomDays, repeat?.interval]);
 
   // Helper to safely update
   const setKind = (kind: string) => {
@@ -29,11 +38,22 @@ export const RecurrencePicker: React.FC<RecurrencePickerProps> = ({ repeat, onCh
       onChange({ kind: 'weekly', interval: 1, weekdays: [new Date().getDay()] }); // Default to today
     } else if (kind === 'monthly') {
       onChange({ kind: 'monthly', interval: 1, mode: 'day_of_month' });
-    } else if (kind === testKind) {
-      onChange({ kind: 'custom', interval: 3, frequency: 'minutes' });
     } else if (kind === 'custom') {
-      onChange({ kind: 'custom', interval: 1, frequency: 'days' });
+      onChange({ kind: 'daily', interval: minCustomDays });
+      setCustomDaysText(String(minCustomDays));
     }
+  };
+
+  const parseCustomDays = (text: string) => {
+    const parsed = Number.parseInt(text, 10);
+    if (Number.isNaN(parsed)) return minCustomDays;
+    return Math.max(minCustomDays, parsed);
+  };
+
+  const commitCustomDays = (text: string) => {
+    const interval = parseCustomDays(text);
+    setCustomDaysText(String(interval));
+    onChange({ kind: 'daily', interval });
   };
 
   const toggleWeekday = (dayIndex: number) => {
@@ -57,14 +77,14 @@ export const RecurrencePicker: React.FC<RecurrencePickerProps> = ({ repeat, onCh
     <View style={styles.container}>
       {/* Type Selector Tabs */}
       <View style={styles.tabs}>
-        {(['none', 'daily', 'weekly', 'monthly', testKind] as const).map((kind) => (
+        {(['none', 'daily', 'weekly', 'monthly', 'custom'] as const).map((kind) => (
           <Pressable
             key={kind}
             style={[styles.tab, currentKind === kind && styles.tabActive]}
             onPress={() => setKind(kind)}
           >
             <Text style={[styles.tabText, currentKind === kind && styles.tabTextActive]}>
-              {kind === testKind ? '3 min' : kind.charAt(0).toUpperCase() + kind.slice(1)}
+              {kind === 'custom' ? 'Custom' : kind.charAt(0).toUpperCase() + kind.slice(1)}
             </Text>
           </Pressable>
         ))}
@@ -97,9 +117,21 @@ export const RecurrencePicker: React.FC<RecurrencePickerProps> = ({ repeat, onCh
         </View>
       )}
 
-      {currentKind === testKind && (
+      {currentKind === 'custom' && (
         <View style={styles.details}>
-          <Text style={styles.hint}>Repeats every 3 minutes.</Text>
+          <Text style={styles.label}>Repeat every</Text>
+          <View style={styles.intervalRow}>
+            <TextInput
+              style={styles.intervalInput}
+              value={customDaysText}
+              keyboardType="number-pad"
+              onChangeText={(text) => setCustomDaysText(text.replace(/[^0-9]/g, ''))}
+              onEndEditing={(event) => commitCustomDays(event.nativeEvent.text)}
+              placeholder={String(minCustomDays)}
+            />
+            <Text style={styles.intervalSuffix}>days</Text>
+          </View>
+          <Text style={styles.hint}>Minimum 2 days. Starts from the start date.</Text>
         </View>
       )}
 
@@ -157,6 +189,27 @@ const createStyles = (theme: Theme) =>
       fontSize: theme.typography.sizes.sm,
       color: theme.colors.textMuted,
       fontStyle: 'italic',
+    },
+    intervalRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: theme.spacing.sm,
+    },
+    intervalInput: {
+      minWidth: 64,
+      paddingVertical: 6,
+      paddingHorizontal: 10,
+      borderRadius: theme.borderRadius.sm,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      color: theme.colors.text,
+      backgroundColor: theme.colors.surface,
+      textAlign: 'center',
+      fontSize: theme.typography.sizes.sm,
+    },
+    intervalSuffix: {
+      fontSize: theme.typography.sizes.sm,
+      color: theme.colors.text,
     },
     weekdays: {
       flexDirection: 'row',
