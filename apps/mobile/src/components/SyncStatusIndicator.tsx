@@ -1,10 +1,12 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSyncState } from '../sync/syncManager';
-import { theme } from '../theme';
+import { type Theme, useTheme } from '../theme';
 
 export const SyncStatusIndicator: React.FC = () => {
+  const { theme } = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const { isOnline, isSyncing, hasConflicts, actionResult, clearActionResult } = useSyncState();
 
   // 1. Error State (Highest Priority)
@@ -65,39 +67,40 @@ export const SyncStatusIndicator: React.FC = () => {
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
-    backgroundColor: theme.colors.surface,
-  },
-  text: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: theme.colors.text,
-  },
-  offlineText: {
-    color: theme.colors.textMuted,
-  },
-  conflictText: {
-    color: theme.colors.error,
-  },
-  errorContainer: {
-    backgroundColor: theme.colors.surface,
-    borderWidth: 1,
-    borderColor: theme.colors.error,
-  },
-  errorText: {
-    color: theme.colors.error,
-  },
-  successContainer: {
-    backgroundColor: theme.colors.surface,
-  },
-  successText: {
-    color: theme.colors.success,
-  },
-});
+const createStyles = (theme: Theme) =>
+  StyleSheet.create({
+    container: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: 12,
+      paddingVertical: 4,
+      borderRadius: 12,
+      backgroundColor: theme.colors.surface,
+    },
+    text: {
+      fontSize: 12,
+      fontWeight: '500',
+      color: theme.colors.text,
+    },
+    offlineText: {
+      color: theme.colors.textMuted,
+    },
+    conflictText: {
+      color: theme.colors.error,
+    },
+    errorContainer: {
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: theme.colors.error,
+    },
+    errorText: {
+      color: theme.colors.error,
+    },
+    successContainer: {
+      backgroundColor: theme.colors.surface,
+    },
+    successText: {
+      color: theme.colors.success,
+    },
+  });

@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { FlatList, StyleSheet, View, Text } from 'react-native';
 import { type Note } from '../db/notesRepo';
 import { NoteCard } from './NoteCard';
-import { theme } from '../theme';
+import { type Theme, useTheme } from '../theme';
 
 interface NotesListProps {
   notes: Note[];
@@ -31,6 +31,8 @@ export const NotesList: React.FC<NotesListProps> = ({
   onRefresh,
   refreshing,
 }) => {
+  const { theme } = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const isGrid = viewMode === 'grid';
   const showActionButtons = selectedNoteIds.size < 2;
 
@@ -164,42 +166,43 @@ export const NotesList: React.FC<NotesListProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
-  listContent: {
-    padding: theme.spacing.sm,
-    gap: theme.spacing.sm,
-    paddingBottom: 100,
-  },
-  sectionHeader: {
-    fontSize: theme.typography.sizes.xs,
-    fontWeight: '600',
-    color: theme.colors.textMuted,
-    marginBottom: theme.spacing.sm,
-    marginLeft: 4,
-    textTransform: 'uppercase',
-  },
-  masonryContainer: {
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-    marginBottom: theme.spacing.lg,
-  },
-  masonryColumn: {
-    flex: 1,
-    gap: theme.spacing.sm,
-  },
-  listContainer: {
-    gap: theme.spacing.sm,
-    marginBottom: theme.spacing.lg,
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: theme.spacing.xl,
-  },
-  emptyText: {
-    fontSize: theme.typography.sizes.base,
-    color: theme.colors.textMuted,
-    fontFamily: theme.typography.fontFamily,
-  },
-});
+const createStyles = (theme: Theme) =>
+  StyleSheet.create({
+    listContent: {
+      padding: theme.spacing.sm,
+      gap: theme.spacing.sm,
+      paddingBottom: 100,
+    },
+    sectionHeader: {
+      fontSize: theme.typography.sizes.xs,
+      fontWeight: '600',
+      color: theme.colors.textMuted,
+      marginBottom: theme.spacing.sm,
+      marginLeft: 4,
+      textTransform: 'uppercase',
+    },
+    masonryContainer: {
+      flexDirection: 'row',
+      gap: theme.spacing.sm,
+      marginBottom: theme.spacing.lg,
+    },
+    masonryColumn: {
+      flex: 1,
+      gap: theme.spacing.sm,
+    },
+    listContainer: {
+      gap: theme.spacing.sm,
+      marginBottom: theme.spacing.lg,
+    },
+    emptyContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: theme.spacing.xl,
+    },
+    emptyText: {
+      fontSize: theme.typography.sizes.base,
+      color: theme.colors.textMuted,
+      fontFamily: theme.typography.fontFamily,
+    },
+  });

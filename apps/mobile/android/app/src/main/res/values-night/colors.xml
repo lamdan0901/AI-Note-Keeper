@@ -1,1 +1,11 @@
-<resources/>
+<resources>
+  <color name="colorPrimary">#60A5FA</color>
+  <color name="colorPrimaryDark">#0F172A</color>
+  <color name="splashscreen_background">#0F172A</color>
+  <color name="iconBackground">#0F172A</color>
+  <color name="app_background">#0F172A</color>
+  <color name="app_surface">#1E293B</color>
+  <color name="text_primary">#F8FAFC</color>
+  <color name="text_secondary">#CCD0D7</color>
+  <color name="border_color">#334155</color>
+</resources>

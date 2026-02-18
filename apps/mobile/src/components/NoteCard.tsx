@@ -1,13 +1,11 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { type Note } from '../db/notesRepo';
-import { theme } from '../theme';
+import { darkTheme, lightTheme, type Theme, useTheme } from '../theme';
 import { Ionicons } from '@expo/vector-icons';
 import { RepeatRule } from '../../../../packages/shared/types/reminder';
 import { createHoldInteraction, getTapDecision, HOLD_DELAY_MS } from './noteCardInteractions';
 
-// const CORNER_BUTTON_SIZE = 24;
-// const CORNER_BUTTON_OFFSET = CORNER_BUTTON_SIZE / 2;
 const SELECTION_ANIMATION_DURATION_MS = 240;
 
 interface NoteCardProps {
@@ -30,11 +28,9 @@ export const NoteCard: React.FC<NoteCardProps> = ({
   onLongPress,
   selectionMode = false,
   isSelected = false,
-  // showActionButtons = true, // Not used anymore
-  // onDonePress, // Not used anymore
-  // onReschedulePress, // Not used anymore
-  // onDeletePress, // Not used anymore
 }) => {
+  const { theme } = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const isGrid = variant === 'grid';
   const isDone = !!note.done;
 
@@ -67,8 +63,9 @@ export const NoteCard: React.FC<NoteCardProps> = ({
     }).start();
   }, [isSelected, selectionAnim]);
 
-  // Use note color if available, otherwise surface white
-  const backgroundColor = note.color ?? theme.colors.surface;
+  const isDefaultColor =
+    note.color === lightTheme.colors.surface || note.color === darkTheme.colors.surface;
+  const backgroundColor = note.color && !isDefaultColor ? note.color : theme.colors.surface;
 
   // Dynamic styles based on variant
   const containerStyle = [
@@ -173,97 +170,95 @@ export const NoteCard: React.FC<NoteCardProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
-  wrapper: {
-    position: 'relative',
-  },
-  card: {
-    padding: theme.spacing.md,
-    borderRadius: theme.borderRadius.md,
-    ...theme.shadows.sm,
-    borderColor: theme.colors.border,
-    borderWidth: 1,
-  },
-  cardList: {
-    width: '100%',
-  },
-  cardGrid: {
-    flex: 1,
-    // No fixed height - let content determine the height naturally
-  },
-  wrapperList: {
-    marginBottom: theme.spacing.sm,
-  },
-  wrapperGrid: {
-    // Margin handled by masonry column gap
-  },
-  cardDone: {
-    opacity: 0.7,
-  },
-  pressed: {
-    opacity: 0.92,
-  },
-  selected: {
-    opacity: 0.98,
-    borderColor: theme.colors.primary,
-    borderWidth: 2,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'baseline',
-    marginBottom: theme.spacing.xs,
-  },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 6,
-    flex: 1,
-  },
-  title: {
-    fontSize: theme.typography.sizes.base,
-    fontWeight: theme.typography.weights.semibold as '600',
-    color: theme.colors.text,
-    flex: 1,
-  },
-  titleDone: {
-    textDecorationLine: 'line-through',
-  },
-  content: {
-    fontSize: theme.typography.sizes.sm,
-    color: theme.colors.textMuted,
-    lineHeight: 20,
-  },
-  textDone: {
-    color: theme.colors.textMuted,
-  },
-  metaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: theme.spacing.sm,
-    gap: 8,
-    flexWrap: 'wrap',
-  },
-  syncStatusBadge: {
-    padding: 4,
-    borderRadius: theme.borderRadius.sm,
-    backgroundColor: 'rgba(0,0,0,0.05)',
-  },
-  conflictBadge: {
-    backgroundColor: 'rgba(239,68,68,0.1)',
-  },
-  reminderContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.05)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: theme.borderRadius.sm,
-    gap: 4,
-  },
-  reminderText: {
-    fontSize: 11,
-    color: theme.colors.textMuted,
-    fontWeight: '500',
-  },
-});
+const createStyles = (theme: Theme) =>
+  StyleSheet.create({
+    wrapper: {
+      position: 'relative',
+    },
+    card: {
+      padding: theme.spacing.md,
+      borderRadius: theme.borderRadius.md,
+      ...theme.shadows.sm,
+      borderColor: theme.colors.border,
+      borderWidth: 1,
+    },
+    cardList: {
+      width: '100%',
+    },
+    cardGrid: {
+      flex: 1,
+    },
+    wrapperList: {
+      marginBottom: theme.spacing.sm,
+    },
+    wrapperGrid: {},
+    cardDone: {
+      opacity: 0.7,
+    },
+    pressed: {
+      opacity: 0.92,
+    },
+    selected: {
+      opacity: 0.98,
+      borderColor: theme.colors.primary,
+      borderWidth: 2,
+    },
+    header: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'baseline',
+      marginBottom: theme.spacing.xs,
+    },
+    headerLeft: {
+      flexDirection: 'row',
+      alignItems: 'baseline',
+      gap: 6,
+      flex: 1,
+    },
+    title: {
+      fontSize: theme.typography.sizes.base,
+      fontWeight: theme.typography.weights.semibold as '600',
+      color: theme.colors.text,
+      flex: 1,
+    },
+    titleDone: {
+      textDecorationLine: 'line-through',
+    },
+    content: {
+      fontSize: theme.typography.sizes.sm,
+      color: theme.colors.textMuted,
+      lineHeight: 20,
+    },
+    textDone: {
+      color: theme.colors.textMuted,
+    },
+    metaRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginTop: theme.spacing.sm,
+      gap: 8,
+      flexWrap: 'wrap',
+    },
+    syncStatusBadge: {
+      padding: 4,
+      borderRadius: theme.borderRadius.sm,
+      backgroundColor: 'rgba(0,0,0,0.05)',
+    },
+    conflictBadge: {
+      backgroundColor: 'rgba(239,68,68,0.1)',
+    },
+    reminderContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: theme.colors.border,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: theme.borderRadius.sm,
+      gap: 4,
+    },
+    reminderText: {
+      fontSize: 11,
+      color: theme.colors.textMuted,
+      fontWeight: '500',
+    },
+  });

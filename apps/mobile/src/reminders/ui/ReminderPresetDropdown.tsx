@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { theme } from '../../theme';
+import { type Theme, useTheme } from '../../theme';
 
 type PresetTimeKey = 'morning' | 'afternoon' | 'evening' | 'night';
 
@@ -92,6 +92,8 @@ export const ReminderPresetDropdown: React.FC<ReminderPresetDropdownProps> = ({
   onSelect,
   onInvalidSelection,
 }) => {
+  const { theme } = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const [open, setOpen] = useState(false);
   const presetGroups = useMemo(() => buildReminderPresetOptions(now), [now]);
   const allOptions = useMemo(
@@ -173,79 +175,80 @@ export const ReminderPresetDropdown: React.FC<ReminderPresetDropdownProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
-  trigger: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: theme.spacing.md,
-    padding: theme.spacing.sm,
-    backgroundColor: theme.colors.background,
-    borderRadius: theme.borderRadius.sm,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-  },
-  triggerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    flexShrink: 0,
-  },
-  triggerTitle: {
-    fontSize: theme.typography.sizes.base,
-    color: theme.colors.text,
-    fontWeight: '600',
-  },
-  triggerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
-  triggerValue: {
-    fontSize: theme.typography.sizes.sm,
-    color: theme.colors.textMuted,
-    flexShrink: 1,
-    textAlign: 'right',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    justifyContent: 'center',
-    padding: theme.spacing.md,
-  },
-  modalCard: {
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.borderRadius.lg,
-    padding: theme.spacing.md,
-    ...theme.shadows.md,
-  },
-  modalTitle: {
-    fontSize: theme.typography.sizes.lg,
-    fontWeight: theme.typography.weights.bold as '700',
-    color: theme.colors.text,
-    marginBottom: theme.spacing.sm,
-  },
-  groupLabel: {
-    fontSize: theme.typography.sizes.xs,
-    color: theme.colors.textMuted,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
-    marginTop: theme.spacing.sm,
-    marginBottom: theme.spacing.xs,
-  },
-  groupSpacer: {
-    height: 8,
-  },
-  optionRow: {
-    paddingVertical: 10,
-    paddingHorizontal: 10,
-    borderRadius: theme.borderRadius.md,
-  },
-  optionText: {
-    color: theme.colors.text,
-    fontSize: theme.typography.sizes.base,
-  },
-});
+const createStyles = (theme: Theme) =>
+  StyleSheet.create({
+    trigger: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: theme.spacing.md,
+      padding: theme.spacing.sm,
+      backgroundColor: theme.colors.background,
+      borderRadius: theme.borderRadius.sm,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    triggerLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      flexShrink: 0,
+    },
+    triggerTitle: {
+      fontSize: theme.typography.sizes.base,
+      color: theme.colors.text,
+      fontWeight: '600',
+    },
+    triggerRight: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      flex: 1,
+      justifyContent: 'flex-end',
+    },
+    triggerValue: {
+      fontSize: theme.typography.sizes.sm,
+      color: theme.colors.textMuted,
+      flexShrink: 1,
+      textAlign: 'right',
+    },
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.4)',
+      justifyContent: 'center',
+      padding: theme.spacing.md,
+    },
+    modalCard: {
+      backgroundColor: theme.colors.surface,
+      borderRadius: theme.borderRadius.lg,
+      padding: theme.spacing.md,
+      ...theme.shadows.md,
+    },
+    modalTitle: {
+      fontSize: theme.typography.sizes.lg,
+      fontWeight: theme.typography.weights.bold as '700',
+      color: theme.colors.text,
+      marginBottom: theme.spacing.sm,
+    },
+    groupLabel: {
+      fontSize: theme.typography.sizes.xs,
+      color: theme.colors.textMuted,
+      fontWeight: '700',
+      textTransform: 'uppercase',
+      letterSpacing: 0.6,
+      marginTop: theme.spacing.sm,
+      marginBottom: theme.spacing.xs,
+    },
+    groupSpacer: {
+      height: 8,
+    },
+    optionRow: {
+      paddingVertical: 10,
+      paddingHorizontal: 10,
+      borderRadius: theme.borderRadius.md,
+    },
+    optionText: {
+      color: theme.colors.text,
+      fontSize: theme.typography.sizes.base,
+    },
+  });

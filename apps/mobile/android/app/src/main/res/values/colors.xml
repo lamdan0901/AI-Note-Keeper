@@ -3,4 +3,9 @@
   <color name="colorPrimaryDark">#ffffff</color>
   <color name="splashscreen_background">#ffffff</color>
   <color name="iconBackground">#ffffff</color>
+  <color name="app_background">#F8FAFC</color>
+  <color name="app_surface">#FFFFFF</color>
+  <color name="text_primary">#1E293B</color>
+  <color name="text_secondary">#475569</color>
+  <color name="border_color">#E2E8F0</color>
 </resources>

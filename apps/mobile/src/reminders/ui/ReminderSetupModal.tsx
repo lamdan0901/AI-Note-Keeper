@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { Modal, View, Text, StyleSheet, Pressable, Platform, Alert } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { theme } from '../../theme';
+import { type Theme, useTheme } from '../../theme';
 import { Ionicons } from '@expo/vector-icons';
 import { RepeatRule } from '../../../../../packages/shared/types/reminder';
 import { RecurrencePicker } from './RecurrencePicker';
@@ -22,6 +22,8 @@ export const ReminderSetupModal: React.FC<ReminderSetupModalProps> = ({
   onClose,
   onSave,
 }) => {
+  const { theme, resolvedMode } = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const [triggerDate, setTriggerDate] = useState<Date>(new Date());
   const [repeat, setRepeat] = useState<RepeatRule | null>(null);
   const [now, setNow] = useState<Date>(new Date());
@@ -138,6 +140,7 @@ export const ReminderSetupModal: React.FC<ReminderSetupModalProps> = ({
                     value={triggerDate}
                     mode="datetime"
                     display="spinner" // or compact
+                    themeVariant={resolvedMode}
                     onChange={handleDateChange}
                     style={{ height: 120 }} // Constrain height
                   />
@@ -195,6 +198,7 @@ export const ReminderSetupModal: React.FC<ReminderSetupModalProps> = ({
           mode={pickerMode}
           is24Hour={false}
           display="default"
+          themeVariant={resolvedMode}
           onChange={handleDateChange}
         />
       )}
@@ -202,98 +206,99 @@ export const ReminderSetupModal: React.FC<ReminderSetupModalProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    padding: theme.spacing.md,
-  },
-  container: {
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.borderRadius.lg,
-    ...theme.shadows.md,
-    maxHeight: '90%',
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: theme.spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
-  },
-  title: {
-    fontSize: theme.typography.sizes.lg,
-    fontWeight: theme.typography.weights.bold as '700',
-    color: theme.colors.text,
-  },
-  content: {
-    padding: theme.spacing.md,
-  },
-  section: {
-    marginBottom: theme.spacing.md,
-  },
-  sectionTitle: {
-    fontSize: theme.typography.sizes.sm,
-    color: theme.colors.textMuted,
-    fontWeight: '600',
-    marginBottom: theme.spacing.sm,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  separator: {
-    height: 1,
-    backgroundColor: theme.colors.border,
-    marginBottom: theme.spacing.md,
-  },
-  androidRow: {
-    flexDirection: 'row',
-    gap: theme.spacing.md,
-  },
-  dateButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    padding: theme.spacing.sm,
-    backgroundColor: theme.colors.background,
-    borderRadius: theme.borderRadius.sm,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-  },
-  dateButtonText: {
-    fontSize: theme.typography.sizes.base,
-    color: theme.colors.text,
-  },
-  iosPickerContainer: {
-    alignItems: 'center',
-  },
-  footer: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    padding: theme.spacing.md,
-    gap: theme.spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.border,
-  },
-  cancelButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: theme.borderRadius.md,
-  },
-  cancelButtonText: {
-    color: theme.colors.textMuted,
-    fontWeight: '600',
-  },
-  saveButton: {
-    backgroundColor: theme.colors.primary,
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: theme.borderRadius.md,
-  },
-  saveButtonText: {
-    color: 'white',
-    fontWeight: '600',
-  },
-});
+const createStyles = (theme: Theme) =>
+  StyleSheet.create({
+    overlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.5)',
+      justifyContent: 'center',
+      padding: theme.spacing.md,
+    },
+    container: {
+      backgroundColor: theme.colors.surface,
+      borderRadius: theme.borderRadius.lg,
+      ...theme.shadows.md,
+      maxHeight: '90%',
+    },
+    header: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      padding: theme.spacing.md,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.colors.border,
+    },
+    title: {
+      fontSize: theme.typography.sizes.lg,
+      fontWeight: theme.typography.weights.bold as '700',
+      color: theme.colors.text,
+    },
+    content: {
+      padding: theme.spacing.md,
+    },
+    section: {
+      marginBottom: theme.spacing.md,
+    },
+    sectionTitle: {
+      fontSize: theme.typography.sizes.sm,
+      color: theme.colors.textMuted,
+      fontWeight: '600',
+      marginBottom: theme.spacing.sm,
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
+    },
+    separator: {
+      height: 1,
+      backgroundColor: theme.colors.border,
+      marginBottom: theme.spacing.md,
+    },
+    androidRow: {
+      flexDirection: 'row',
+      gap: theme.spacing.md,
+    },
+    dateButton: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      padding: theme.spacing.sm,
+      backgroundColor: theme.colors.background,
+      borderRadius: theme.borderRadius.sm,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    dateButtonText: {
+      fontSize: theme.typography.sizes.base,
+      color: theme.colors.text,
+    },
+    iosPickerContainer: {
+      alignItems: 'center',
+    },
+    footer: {
+      flexDirection: 'row',
+      justifyContent: 'flex-end',
+      padding: theme.spacing.md,
+      gap: theme.spacing.md,
+      borderTopWidth: 1,
+      borderTopColor: theme.colors.border,
+    },
+    cancelButton: {
+      paddingVertical: 10,
+      paddingHorizontal: 16,
+      borderRadius: theme.borderRadius.md,
+    },
+    cancelButtonText: {
+      color: theme.colors.textMuted,
+      fontWeight: '600',
+    },
+    saveButton: {
+      backgroundColor: theme.colors.primary,
+      paddingVertical: 10,
+      paddingHorizontal: 20,
+      borderRadius: theme.borderRadius.md,
+    },
+    saveButtonText: {
+      color: 'white',
+      fontWeight: '600',
+    },
+  });

@@ -1,12 +1,14 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
+  Easing,
   Modal,
   Pressable,
   SafeAreaView,
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
   ActivityIndicator,
   Alert,
@@ -19,7 +21,7 @@ import { syncNotes } from '../sync/noteSync';
 import { SyncProvider, useSyncState } from '../sync/syncManager';
 import { NotesList } from '../components/NotesList';
 import { SyncStatusIndicator } from '../components/SyncStatusIndicator';
-import { theme } from '../theme';
+import { darkTheme, lightTheme, type Theme, useTheme } from '../theme';
 import uuid from 'react-native-uuid';
 import { ReminderSetupModal } from '../reminders/ui/ReminderSetupModal';
 import { RescheduleModal } from '../reminders/ui/SnoozeModal';
@@ -34,17 +36,31 @@ type NotesScreenProps = {
   onEditHandled?: () => void;
 };
 
+const themeOptions = [
+  { key: 'light', label: 'Light', description: 'Always light', icon: 'sunny-outline' },
+  { key: 'dark', label: 'Dark', description: 'Always dark', icon: 'moon-outline' },
+  {
+    key: 'auto',
+    label: 'Auto',
+    description: 'Follow system',
+    icon: 'desktop-outline',
+  },
+] as const;
+
 const NotesScreenContent = ({
   rescheduleNoteId,
   onRescheduleHandled,
   editNoteId,
   onEditHandled,
 }: NotesScreenProps) => {
+  const { theme, mode, setMode } = useTheme();
+  const { width } = useWindowDimensions();
   const [notes, setNotes] = useState<Note[]>([]);
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('grid'); // Default to Bento/Grid
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedNoteIds, setSelectedNoteIds] = useState<Set<string>>(new Set());
+  const [drawerVisible, setDrawerVisible] = useState(false);
 
   // Editor State
   const [modalVisible, setModalVisible] = useState(false);
@@ -68,8 +84,39 @@ const NotesScreenContent = ({
   const editorTranslateY = useRef(new Animated.Value(0)).current;
   const editorTouchStartRef = useRef<{ x: number; y: number; timeMs: number } | null>(null);
   const editorDraggingRef = useRef(false);
+  const drawerAnim = useRef(new Animated.Value(0)).current;
 
   const selectionMode = selectedNoteIds.size > 0;
+  const drawerWidth = Math.min(320, Math.round(width * 0.82));
+  const drawerTranslateX = drawerAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-drawerWidth, 0],
+  });
+  const drawerOverlayOpacity = drawerAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 0.4],
+  });
+
+  const openDrawer = useCallback(() => {
+    setDrawerVisible(true);
+    Animated.timing(drawerAnim, {
+      toValue: 1,
+      duration: 260,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [drawerAnim]);
+
+  const closeDrawer = useCallback(() => {
+    Animated.timing(drawerAnim, {
+      toValue: 0,
+      duration: 220,
+      easing: Easing.in(Easing.cubic),
+      useNativeDriver: true,
+    }).start(() => {
+      setDrawerVisible(false);
+    });
+  }, [drawerAnim]);
 
   // Get sync state and action helpers
   const { notifyActionPending, notifyActionSuccess, notifyActionError, lastSyncAt } =
@@ -376,7 +423,12 @@ const NotesScreenContent = ({
       id: editingNote ? editingNote.id : uuid.v4().toString(),
       title: title.trim(),
       content: content.trim(),
-      color: editingNote?.color || theme.colors.surface,
+      color:
+        editingNote?.color &&
+        editingNote.color !== lightTheme.colors.surface &&
+        editingNote.color !== darkTheme.colors.surface
+          ? editingNote.color
+          : null,
       active: true,
       done: reminder ? false : (editingNote?.done ?? false),
       isPinned,
@@ -614,11 +666,18 @@ const NotesScreenContent = ({
     setRescheduleTargetId(null);
   }, []);
 
+  const styles = useMemo(() => createStyles(theme), [theme]);
+
   return (
     <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={[styles.header, selectionMode && styles.headerHidden]}>
-        <Text style={styles.headerTitle}>My Notes</Text>
+        <View style={styles.headerLeft}>
+          <Pressable style={styles.iconButton} onPress={openDrawer}>
+            <Ionicons name="menu" size={26} color={theme.colors.text} />
+          </Pressable>
+          <Text style={styles.headerTitle}>My Notes</Text>
+        </View>
         <View style={styles.headerRight}>
           <SyncStatusIndicator />
           <Pressable
@@ -633,6 +692,61 @@ const NotesScreenContent = ({
           </Pressable>
         </View>
       </View>
+
+      <Animated.View
+        pointerEvents={drawerVisible ? 'auto' : 'none'}
+        style={[styles.drawerOverlay, { opacity: drawerOverlayOpacity }]}
+      >
+        <Pressable style={StyleSheet.absoluteFillObject} onPress={closeDrawer} />
+      </Animated.View>
+
+      <Animated.View
+        pointerEvents={drawerVisible ? 'auto' : 'none'}
+        style={[
+          styles.drawer,
+          {
+            width: drawerWidth,
+            transform: [{ translateX: drawerTranslateX }],
+          },
+        ]}
+      >
+        <View style={styles.drawerContent}>
+          <Text style={styles.drawerTitle}>AI Note Keeper</Text>
+          <View style={styles.drawerSection}>
+            <Text style={styles.drawerSectionTitle}>Settings</Text>
+            <Text style={styles.drawerSectionSubtitle}>Theme</Text>
+            <View style={styles.themeOptions}>
+              {themeOptions.map((option) => {
+                const isSelected = mode === option.key;
+                return (
+                  <Pressable
+                    key={option.key}
+                    style={[styles.themeOption, isSelected && styles.themeOptionSelected]}
+                    onPress={() => setMode(option.key)}
+                  >
+                    <View style={styles.themeOptionLeft}>
+                      <Ionicons
+                        name={option.icon}
+                        size={20}
+                        color={isSelected ? theme.colors.primary : theme.colors.textMuted}
+                      />
+                      <View>
+                        <Text style={styles.themeOptionLabel}>{option.label}</Text>
+                        <Text style={styles.themeOptionDescription}>{option.description}</Text>
+                      </View>
+                    </View>
+                    <Ionicons
+                      name={isSelected ? 'checkmark-circle' : 'ellipse-outline'}
+                      size={20}
+                      color={isSelected ? theme.colors.primary : theme.colors.textMuted}
+                    />
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        </View>
+      </Animated.View>
 
       <Animated.View
         pointerEvents={selectionMode ? 'auto' : 'none'}
@@ -926,223 +1040,302 @@ const NotesScreenContent = ({
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: theme.colors.background,
-  },
-  header: {
-    padding: theme.spacing.md,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: theme.colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
-  },
-  headerTitle: {
-    fontSize: theme.typography.sizes.xl,
-    fontWeight: theme.typography.weights.bold as '700',
-    color: theme.colors.text,
-    fontFamily: theme.typography.fontFamily,
-  },
-  headerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  iconButton: {
-    padding: theme.spacing.xs,
-  },
-  headerHidden: {
-    opacity: 0,
-  },
-  bottomActionBar: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: BOTTOM_ACTION_BAR_HEIGHT,
-    backgroundColor: theme.colors.surface,
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.border,
-    paddingHorizontal: theme.spacing.xl, // Increase padding for spacing
-    elevation: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    justifyContent: 'center',
-    zIndex: 1000,
-  },
-  bottomActionBarContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    height: '100%',
-  },
-  bottomActionButton: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-    minWidth: 60,
-  },
-  bottomActionText: {
-    fontSize: 10,
-    color: theme.colors.text,
-    fontWeight: '500',
-  },
-  bottomActionSpacer: {
-    flex: 1,
-  },
-  centered: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  contentPressable: {
-    flex: 1,
-  },
-  fabContainer: {
-    position: 'absolute',
-    bottom: theme.spacing.xl,
-    right: theme.spacing.xl,
-    zIndex: 900,
-  },
-  fab: {
-    backgroundColor: theme.colors.primary,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    justifyContent: 'center',
-    alignItems: 'center',
-    ...theme.shadows.md,
-  },
-  // Modal Styles
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    backgroundColor: theme.colors.surface,
-    borderTopLeftRadius: theme.borderRadius.xl,
-    borderTopRightRadius: theme.borderRadius.xl,
-    padding: theme.spacing.lg,
-    height: '80%',
-    ...theme.shadows.md,
-  },
-  sheetHandleHitArea: {
-    alignSelf: 'stretch',
-    alignItems: 'center',
-    paddingBottom: theme.spacing.md,
-    paddingTop: theme.spacing.xs,
-  },
-  sheetHandle: {
-    width: 44,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: theme.colors.border,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: theme.spacing.lg,
-  },
-  modalTitle: {
-    fontSize: theme.typography.sizes.lg,
-    fontWeight: theme.typography.weights.bold as '700',
-    color: theme.colors.text,
-  },
-  inputTitle: {
-    fontSize: theme.typography.sizes.xl,
-    fontWeight: theme.typography.weights.semibold as '600',
-    color: theme.colors.text,
-    marginBottom: theme.spacing.md,
-    padding: theme.spacing.sm,
-  },
-  inputContent: {
-    fontSize: theme.typography.sizes.base,
-    color: theme.colors.text,
-    flex: 1,
-    padding: theme.spacing.sm,
-  },
-  modalActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: theme.spacing.md,
-    gap: theme.spacing.md,
-  },
-  button: {
-    paddingVertical: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.lg,
-    borderRadius: theme.borderRadius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  buttonSave: {
-    backgroundColor: theme.colors.primary,
-  },
-  buttonCancel: {
-    backgroundColor: theme.colors.surface,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-  },
-  buttonDelete: {
-    backgroundColor: '#fee2e2',
-    paddingHorizontal: theme.spacing.md,
-  },
-  buttonTextSave: {
-    color: 'white',
-    fontWeight: '600',
-  },
-  buttonTextCancel: {
-    color: theme.colors.text,
-    fontWeight: '600',
-  },
-  toastContainer: {
-    position: 'absolute',
-    bottom: 50,
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  toast: {
-    backgroundColor: '#333333',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
-  },
-  toastError: {
-    backgroundColor: theme.colors.error,
-  },
-  toastText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  headerChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: theme.colors.border,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: theme.borderRadius.sm,
-    gap: 4,
-  },
-  headerChipText: {
-    fontSize: 12, // Smaller font for header
-    color: theme.colors.text,
-    fontWeight: '500',
-  },
-});
+const createStyles = (theme: Theme) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.colors.background,
+    },
+    header: {
+      padding: theme.spacing.md,
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      backgroundColor: theme.colors.surface,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.colors.border,
+    },
+    headerLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      flex: 1,
+    },
+    headerTitle: {
+      fontSize: theme.typography.sizes.xl,
+      fontWeight: theme.typography.weights.bold as '700',
+      color: theme.colors.text,
+      fontFamily: theme.typography.fontFamily,
+    },
+    headerRight: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+    },
+    iconButton: {
+      padding: theme.spacing.xs,
+    },
+    headerHidden: {
+      opacity: 0,
+    },
+    drawerOverlay: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: '#000000',
+      zIndex: 1200,
+    },
+    drawer: {
+      position: 'absolute',
+      left: 0,
+      top: 0,
+      bottom: 0,
+      backgroundColor: theme.colors.surface,
+      borderRightWidth: 1,
+      borderRightColor: theme.colors.border,
+      zIndex: 1300,
+      paddingTop: theme.spacing.lg,
+    },
+    drawerContent: {
+      flex: 1,
+      paddingHorizontal: theme.spacing.lg,
+      gap: theme.spacing.lg,
+    },
+    drawerTitle: {
+      fontSize: theme.typography.sizes.lg,
+      fontWeight: theme.typography.weights.bold as '700',
+      color: theme.colors.text,
+    },
+    drawerSection: {
+      gap: theme.spacing.sm,
+    },
+    drawerSectionTitle: {
+      fontSize: theme.typography.sizes.sm,
+      color: theme.colors.textMuted,
+      fontWeight: '600',
+      textTransform: 'uppercase',
+      letterSpacing: 0.6,
+    },
+    drawerSectionSubtitle: {
+      fontSize: theme.typography.sizes.base,
+      color: theme.colors.text,
+      fontWeight: '600',
+    },
+    themeOptions: {
+      gap: theme.spacing.sm,
+    },
+    themeOption: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      padding: theme.spacing.sm,
+      borderRadius: theme.borderRadius.md,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      backgroundColor: theme.colors.background,
+    },
+    themeOptionSelected: {
+      borderColor: theme.colors.primary,
+      backgroundColor: theme.colors.surface,
+    },
+    themeOptionLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: theme.spacing.sm,
+    },
+    themeOptionLabel: {
+      fontSize: theme.typography.sizes.base,
+      color: theme.colors.text,
+      fontWeight: '600',
+    },
+    themeOptionDescription: {
+      fontSize: theme.typography.sizes.xs,
+      color: theme.colors.textMuted,
+    },
+    bottomActionBar: {
+      position: 'absolute',
+      bottom: 0,
+      left: 0,
+      right: 0,
+      height: BOTTOM_ACTION_BAR_HEIGHT,
+      backgroundColor: theme.colors.surface,
+      borderTopWidth: 1,
+      borderTopColor: theme.colors.border,
+      paddingHorizontal: theme.spacing.xl, // Increase padding for spacing
+      elevation: 20,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: -2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 4,
+      justifyContent: 'center',
+      zIndex: 1000,
+    },
+    bottomActionBarContent: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      height: '100%',
+    },
+    bottomActionButton: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 4,
+      minWidth: 60,
+    },
+    bottomActionText: {
+      fontSize: 10,
+      color: theme.colors.text,
+      fontWeight: '500',
+    },
+    bottomActionSpacer: {
+      flex: 1,
+    },
+    centered: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    contentPressable: {
+      flex: 1,
+    },
+    fabContainer: {
+      position: 'absolute',
+      bottom: theme.spacing.xl,
+      right: theme.spacing.xl,
+      zIndex: 900,
+    },
+    fab: {
+      backgroundColor: theme.colors.primary,
+      width: 56,
+      height: 56,
+      borderRadius: 28,
+      justifyContent: 'center',
+      alignItems: 'center',
+      ...theme.shadows.md,
+    },
+    // Modal Styles
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.5)',
+      justifyContent: 'flex-end',
+    },
+    modalContent: {
+      backgroundColor: theme.colors.surface,
+      borderTopLeftRadius: theme.borderRadius.xl,
+      borderTopRightRadius: theme.borderRadius.xl,
+      padding: theme.spacing.lg,
+      height: '80%',
+      ...theme.shadows.md,
+    },
+    sheetHandleHitArea: {
+      alignSelf: 'stretch',
+      alignItems: 'center',
+      paddingBottom: theme.spacing.md,
+      paddingTop: theme.spacing.xs,
+    },
+    sheetHandle: {
+      width: 44,
+      height: 5,
+      borderRadius: 3,
+      backgroundColor: theme.colors.border,
+    },
+    modalHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: theme.spacing.lg,
+    },
+    modalTitle: {
+      fontSize: theme.typography.sizes.lg,
+      fontWeight: theme.typography.weights.bold as '700',
+      color: theme.colors.text,
+    },
+    inputTitle: {
+      fontSize: theme.typography.sizes.xl,
+      fontWeight: theme.typography.weights.semibold as '600',
+      color: theme.colors.text,
+      marginBottom: theme.spacing.md,
+      padding: theme.spacing.sm,
+    },
+    inputContent: {
+      fontSize: theme.typography.sizes.base,
+      color: theme.colors.text,
+      flex: 1,
+      padding: theme.spacing.sm,
+    },
+    modalActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginTop: theme.spacing.md,
+      gap: theme.spacing.md,
+    },
+    button: {
+      paddingVertical: theme.spacing.sm,
+      paddingHorizontal: theme.spacing.lg,
+      borderRadius: theme.borderRadius.md,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    buttonSave: {
+      backgroundColor: theme.colors.primary,
+    },
+    buttonCancel: {
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    buttonDelete: {
+      backgroundColor: '#fee2e2',
+      paddingHorizontal: theme.spacing.md,
+    },
+    buttonTextSave: {
+      color: 'white',
+      fontWeight: '600',
+    },
+    buttonTextCancel: {
+      color: theme.colors.text,
+      fontWeight: '600',
+    },
+    toastContainer: {
+      position: 'absolute',
+      bottom: 50,
+      left: 0,
+      right: 0,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    toast: {
+      backgroundColor: '#333333',
+      paddingHorizontal: 20,
+      paddingVertical: 12,
+      borderRadius: 24,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.25,
+      shadowRadius: 3.84,
+      elevation: 5,
+    },
+    toastError: {
+      backgroundColor: theme.colors.error,
+    },
+    toastText: {
+      color: '#FFFFFF',
+      fontSize: 14,
+      fontWeight: '500',
+    },
+    headerChip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: theme.colors.border,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: theme.borderRadius.sm,
+      gap: 4,
+    },
+    headerChipText: {
+      fontSize: 12,
+      color: theme.colors.textMuted,
+      fontWeight: '500',
+    },
+  });
 
 // Wrapper component that provides SyncProvider context
 export const NotesScreen = (props: NotesScreenProps) => {

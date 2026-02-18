@@ -12,7 +12,7 @@ import { registerDevicePushToken } from './src/sync/registerDeviceToken';
 import { handleFcmMessage, handleNotificationResponse } from './src/sync/fcmMessageHandler';
 import { checkStartupPermissions } from './src/reminders/permissions';
 import { NotesScreen } from './src/screens/NotesScreen';
-import { theme } from './src/theme';
+import { ThemeProvider, useTheme } from './src/theme';
 
 // Keep the splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync();
@@ -122,37 +122,62 @@ export default function App(): JSX.Element | null {
   const effectiveRescheduleNoteId = convexClient ? rescheduleNoteId : null;
   const effectiveEditNoteId = editNoteId;
   const content = (
-    <View style={styles.container}>
+    <AppContent
+      rescheduleNoteId={effectiveRescheduleNoteId ?? undefined}
+      onRescheduleHandled={() => setRescheduleNoteId(null)}
+      editNoteId={effectiveEditNoteId ?? undefined}
+      onEditHandled={() => setEditNoteId(null)}
+    />
+  );
+
+  if (!convexClient) {
+    return <ThemeProvider>{content}</ThemeProvider>;
+  }
+
+  return (
+    <ThemeProvider>
+      <ConvexProvider client={convexClient}>{content}</ConvexProvider>
+    </ThemeProvider>
+  );
+}
+
+const AppContent = ({
+  rescheduleNoteId,
+  onRescheduleHandled,
+  editNoteId,
+  onEditHandled,
+}: {
+  rescheduleNoteId?: string;
+  onRescheduleHandled: () => void;
+  editNoteId?: string;
+  onEditHandled: () => void;
+}) => {
+  const { theme, resolvedMode } = useTheme();
+
+  return (
+    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <StatusBar
-        barStyle="dark-content"
+        barStyle={resolvedMode === 'dark' ? 'light-content' : 'dark-content'}
         backgroundColor={theme.colors.background}
         translucent={false}
       />
       <NotesScreen
-        rescheduleNoteId={effectiveRescheduleNoteId ?? undefined}
-        onRescheduleHandled={() => setRescheduleNoteId(null)}
-        editNoteId={effectiveEditNoteId ?? undefined}
-        onEditHandled={() => setEditNoteId(null)}
+        rescheduleNoteId={rescheduleNoteId}
+        onRescheduleHandled={onRescheduleHandled}
+        editNoteId={editNoteId}
+        onEditHandled={onEditHandled}
       />
     </View>
   );
-
-  if (!convexClient) {
-    return content;
-  }
-
-  return <ConvexProvider client={convexClient}>{content}</ConvexProvider>;
-}
+};
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.colors.background,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: theme.colors.background,
   },
 });

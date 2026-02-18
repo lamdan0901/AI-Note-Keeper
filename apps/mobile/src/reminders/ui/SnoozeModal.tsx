@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { theme } from '../../theme';
+import { type Theme, useTheme } from '../../theme';
 import { buildReminderPresetOptions } from './ReminderPresetDropdown';
 
 interface RescheduleModalProps {
@@ -34,6 +34,8 @@ export const RescheduleModal = ({
   onSaveStart,
   onError,
 }: RescheduleModalProps) => {
+  const { theme, resolvedMode } = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [datePickerMode, setDatePickerMode] = useState<'date' | 'time'>('date');
   const [customDate, setCustomDate] = useState(new Date());
@@ -202,6 +204,7 @@ export const RescheduleModal = ({
                 value={customDate}
                 mode={datePickerMode}
                 is24Hour={false}
+                themeVariant={resolvedMode}
                 onChange={onDateChange}
               />
             )}
@@ -212,65 +215,66 @@ export const RescheduleModal = ({
   );
 };
 
-const styles = StyleSheet.create({
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalContentPressable: {
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    backgroundColor: theme.colors.surface,
-    borderTopLeftRadius: theme.borderRadius.xl,
-    borderTopRightRadius: theme.borderRadius.xl,
-    padding: theme.spacing.lg,
-    paddingBottom: theme.spacing.xl, // Safe area
-  },
-  sheetHandleHitArea: {
-    alignSelf: 'stretch',
-    alignItems: 'center',
-    paddingBottom: theme.spacing.md,
-    paddingTop: theme.spacing.xs,
-  },
-  sheetHandle: {
-    width: 44,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: theme.colors.border,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: theme.spacing.md,
-  },
-  title: {
-    fontSize: theme.typography.sizes.lg,
-    fontWeight: 'bold',
-    color: theme.colors.text,
-  },
-  groupLabel: {
-    fontSize: theme.typography.sizes.xs,
-    color: theme.colors.textMuted,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
-    marginTop: theme.spacing.sm,
-    marginBottom: theme.spacing.xs,
-  },
-  option: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: theme.spacing.md,
-    gap: theme.spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
-  },
-  optionText: {
-    fontSize: theme.typography.sizes.base,
-    color: theme.colors.text,
-  },
-});
+const createStyles = (theme: Theme) =>
+  StyleSheet.create({
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.5)',
+      justifyContent: 'flex-end',
+    },
+    modalContentPressable: {
+      flex: 1,
+      justifyContent: 'flex-end',
+    },
+    modalContent: {
+      backgroundColor: theme.colors.surface,
+      borderTopLeftRadius: theme.borderRadius.xl,
+      borderTopRightRadius: theme.borderRadius.xl,
+      padding: theme.spacing.lg,
+      paddingBottom: theme.spacing.xl,
+    },
+    sheetHandleHitArea: {
+      alignSelf: 'stretch',
+      alignItems: 'center',
+      paddingBottom: theme.spacing.md,
+      paddingTop: theme.spacing.xs,
+    },
+    sheetHandle: {
+      width: 44,
+      height: 5,
+      borderRadius: 3,
+      backgroundColor: theme.colors.border,
+    },
+    header: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: theme.spacing.md,
+    },
+    title: {
+      fontSize: theme.typography.sizes.lg,
+      fontWeight: 'bold',
+      color: theme.colors.text,
+    },
+    groupLabel: {
+      fontSize: theme.typography.sizes.xs,
+      color: theme.colors.textMuted,
+      fontWeight: '700',
+      textTransform: 'uppercase',
+      letterSpacing: 0.6,
+      marginTop: theme.spacing.sm,
+      marginBottom: theme.spacing.xs,
+    },
+    option: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: theme.spacing.md,
+      gap: theme.spacing.md,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.colors.border,
+    },
+    optionText: {
+      fontSize: theme.typography.sizes.base,
+      color: theme.colors.text,
+    },
+  });
