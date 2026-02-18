@@ -756,26 +756,27 @@ const NotesScreenContent = ({
 
               <View style={styles.headerRight}>
                 {reminder && (
-                  <View style={styles.headerChip}>
-                    <Text style={styles.headerChipText}>{formatReminder(reminder, repeat)}</Text>
-                    <Pressable
-                      onPress={() => {
-                        setReminder(null);
-                        setRepeat(null);
-                      }}
-                      hitSlop={8}
-                    >
-                      <Ionicons name="close-circle" size={16} color={theme.colors.text} />
-                    </Pressable>
-                  </View>
+                  <Pressable onPress={handleReminderPress}>
+                    <View style={styles.headerChip}>
+                      <Text style={styles.headerChipText}>{formatReminder(reminder, repeat)}</Text>
+                      <Pressable
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          setReminder(null);
+                          setRepeat(null);
+                        }}
+                        hitSlop={8}
+                      >
+                        <Ionicons name="close-circle" size={16} color={theme.colors.text} />
+                      </Pressable>
+                    </View>
+                  </Pressable>
                 )}
-                <Pressable style={styles.iconButton} onPress={handleReminderPress}>
-                  <Ionicons
-                    name={reminder ? 'alarm' : 'alarm-outline'}
-                    size={24}
-                    color={theme.colors.text}
-                  />
-                </Pressable>
+                {!reminder && (
+                  <Pressable style={styles.iconButton} onPress={handleReminderPress}>
+                    <Ionicons name={'alarm-outline'} size={24} color={theme.colors.text} />
+                  </Pressable>
+                )}
                 <Pressable style={styles.iconButton} onPress={() => setIsPinned(!isPinned)}>
                   <Ionicons
                     name={isPinned ? 'push' : 'push-outline'}
@@ -783,22 +784,20 @@ const NotesScreenContent = ({
                     color={isPinned ? theme.colors.primary : theme.colors.text}
                   />
                 </Pressable>
-                <Pressable onPress={closeEditor} style={styles.iconButton}>
-                  <Ionicons name="close" size={24} color={theme.colors.text} />
-                </Pressable>
               </View>
             </View>
 
             <TextInput
               style={styles.inputTitle}
               placeholder="Title"
+              multiline
               value={title}
               onChangeText={setTitle}
               placeholderTextColor={theme.colors.textMuted}
             />
             <TextInput
               style={styles.inputContent}
-              placeholder="Start typing..."
+              placeholder="Description"
               value={content}
               onChangeText={setContent}
               multiline
@@ -950,7 +949,7 @@ const styles = StyleSheet.create({
   headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 4,
   },
   iconButton: {
     padding: theme.spacing.xs,

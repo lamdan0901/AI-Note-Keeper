@@ -107,11 +107,6 @@ export const NoteCard: React.FC<NoteCardProps> = ({
   const title = note.title?.trim();
   const content = note.content?.trim();
 
-  // const title = note.title?.trim();
-  // const content = note.content?.trim();
-
-  // const cornerButtonOpacity = isSelected ? selectionAnim : 0;
-
   return (
     <View style={[styles.wrapper, isGrid ? styles.wrapperGrid : styles.wrapperList]}>
       <Pressable

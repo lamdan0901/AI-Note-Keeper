@@ -101,7 +101,7 @@ export const NotesList: React.FC<NotesListProps> = ({
 
     if (isGrid) {
       return (
-        <View style={styles.sectionContainer}>
+        <View>
           <Text style={styles.sectionHeader}>Pinned</Text>
           <View style={styles.masonryContainer}>
             <View style={styles.masonryColumn}>{pinnedLeft.map(renderNote)}</View>
@@ -113,7 +113,7 @@ export const NotesList: React.FC<NotesListProps> = ({
     }
 
     return (
-      <View style={styles.sectionContainer}>
+      <View>
         <Text style={styles.sectionHeader}>Pinned</Text>
         <View style={styles.listContainer}>{pinnedNotes.map(renderNote)}</View>
         <Text style={styles.sectionHeader}>Others</Text>
@@ -170,20 +170,18 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
     paddingBottom: 100,
   },
-  sectionContainer: {
-    marginBottom: theme.spacing.sm,
-  },
   sectionHeader: {
     fontSize: theme.typography.sizes.xs,
     fontWeight: '600',
     color: theme.colors.textMuted,
-    marginBottom: theme.spacing.xs,
+    marginBottom: theme.spacing.sm,
     marginLeft: 4,
     textTransform: 'uppercase',
   },
   masonryContainer: {
     flexDirection: 'row',
     gap: theme.spacing.sm,
+    marginBottom: theme.spacing.lg,
   },
   masonryColumn: {
     flex: 1,
@@ -191,6 +189,7 @@ const styles = StyleSheet.create({
   },
   listContainer: {
     gap: theme.spacing.sm,
+    marginBottom: theme.spacing.lg,
   },
   emptyContainer: {
     flex: 1,
