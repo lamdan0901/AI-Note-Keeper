@@ -36,7 +36,7 @@ class ReminderTaskService : HeadlessJsTaskService() {
             val notification = NotificationCompat.Builder(this, CHANNEL_ID)
                 .setContentTitle("Processing reminders")
                 .setContentText("Running background task...")
-                .setSmallIcon(applicationInfo.icon)
+                .setSmallIcon(R.drawable.ic_notification)
                 .setPriority(NotificationCompat.PRIORITY_LOW)
                 .build()
             
