@@ -6,6 +6,21 @@ export type FetchNotesResult =
   | { status: 'ok'; notes: Note[]; syncedAt: number }
   | { status: 'error'; notes: null; error: unknown };
 
+const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number): Promise<T> => {
+  let timeoutId: NodeJS.Timeout | null = null;
+  const timeoutPromise = new Promise<T>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error('Fetch notes timed out'));
+    }, timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+};
+
 export const fetchNotes = async (userId: string): Promise<FetchNotesResult> => {
   try {
     const convexUrl = process.env.EXPO_PUBLIC_CONVEX_URL;
@@ -18,7 +33,10 @@ export const fetchNotes = async (userId: string): Promise<FetchNotesResult> => {
     // but here we might want just a query if we were doing pure pull.
     // Instead, let's use the query.
 
-    const notes = (await client.query(api.functions.notes.getNotes, { userId })) as Note[];
+    const notes = (await withTimeout(
+      client.query(api.functions.notes.getNotes, { userId }),
+      15000,
+    )) as Note[];
 
     // Map Convex result to local Note type if needed (mostly same)
     const mappedNotes: Note[] = notes.map((n) => ({

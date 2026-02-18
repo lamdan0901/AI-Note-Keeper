@@ -62,22 +62,12 @@ const NotesScreenContent = ({
     message: '',
     isError: false,
   });
-  const [deleteConfirm, setDeleteConfirm] = useState<{ visible: boolean; noteIds: string[] }>({
-    visible: false,
-    noteIds: [],
-  });
+
   const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const selectionHeaderAnim = useRef(new Animated.Value(0)).current;
   const editorTranslateY = useRef(new Animated.Value(0)).current;
   const editorTouchStartRef = useRef<{ x: number; y: number; timeMs: number } | null>(null);
   const editorDraggingRef = useRef(false);
-  const deleteConfirmCount = deleteConfirm.noteIds.length;
-  const deleteConfirmTitle =
-    deleteConfirmCount === 1 ? 'Delete note?' : `Delete ${deleteConfirmCount} notes?`;
-  const deleteConfirmMessage =
-    deleteConfirmCount === 1
-      ? 'This will remove the note from your list.'
-      : 'This will remove the selected notes from your list.';
 
   const selectionMode = selectedNoteIds.size > 0;
 
@@ -373,15 +363,6 @@ const NotesScreenContent = ({
     });
   }, [closeEditorFromGesture, editorTranslateY]);
 
-  const openDeleteConfirm = useCallback((noteIds: string[]) => {
-    if (noteIds.length === 0) return;
-    setDeleteConfirm({ visible: true, noteIds });
-  }, []);
-
-  const closeDeleteConfirm = useCallback(() => {
-    setDeleteConfirm({ visible: false, noteIds: [] });
-  }, []);
-
   const saveNote = async () => {
     if (!title.trim() && !content.trim()) {
       closeEditor();
@@ -440,76 +421,57 @@ const NotesScreenContent = ({
     }
   };
 
+  const performDelete = useCallback(
+    (ids: string[]) => {
+      if (ids.length === 0) return;
+
+      if (editingNote?.id && ids.includes(editingNote.id)) closeEditor();
+      if (selectionMode && ids.some((id) => selectedNoteIds.has(id))) clearSelection();
+
+      // Optimistic Update: Remove from list
+      setNotes((prev) => prev.filter((n) => !ids.includes(n.id)));
+      showToast('Deleted', false);
+
+      // Background: Persist and Sync
+      notifyActionPending();
+      void (async () => {
+        try {
+          const db = await getDb();
+          for (const id of ids) {
+            const noteToDelete = await getNoteById(db, id);
+            if (noteToDelete) {
+              await deleteNoteOffline(db, noteToDelete);
+            }
+          }
+
+          await syncNotes(db);
+          notifyActionSuccess();
+        } catch (e) {
+          console.error(e);
+          notifyActionError('Failed to delete');
+          // Revert/Reload
+          loadNotes();
+        }
+      })();
+    },
+    [
+      clearSelection,
+      closeEditor,
+      editingNote?.id,
+      loadNotes,
+      notifyActionError,
+      notifyActionPending,
+      notifyActionSuccess,
+      selectedNoteIds,
+      selectionMode,
+      showToast,
+    ],
+  );
+
   const handleDelete = () => {
     if (!editingNote) return;
-    openDeleteConfirm([editingNote.id]);
+    performDelete([editingNote.id]);
   };
-
-  const confirmDelete = useCallback(() => {
-    const ids = deleteConfirm.noteIds;
-    if (ids.length === 0) return;
-
-    // Close immediately
-    closeDeleteConfirm();
-    if (editingNote?.id && ids.includes(editingNote.id)) closeEditor();
-    if (selectionMode && ids.some((id) => selectedNoteIds.has(id))) clearSelection();
-
-    // Optimistic Update: Remove from list
-    setNotes((prev) => prev.filter((n) => !ids.includes(n.id)));
-    showToast('Deleted', false);
-
-    // Background: Persist and Sync
-    notifyActionPending();
-    void (async () => {
-      try {
-        const db = await getDb();
-        // Get the notes to delete (we need their data for soft delete)
-        // Since we already removed them from state, we ideally should have kept a ref
-        // But for soft delete we just need ID mostly, except `deleteNoteOffline` takes full note.
-        // We can fetch from DB or just construct a minimal object if needed,
-        // but let's rely on DB fetch inside delete if possible, or just pass what we have.
-        // Actually `deleteNoteOffline` takes a Note.
-        // We can't easily get them from `notes` state since we just filtered them out.
-        // Let's rely on the fact that `deleteNoteOffline` uses `upsertNote`.
-        // Better strategy: fetch from DB first, then optimistic update.
-
-        // Wait, we can't fetch if we want to be optimistic.
-        // `deleteNoteOffline` modifies the note and saves it.
-        // A better approach for the background task is to re-fetch the specific notes from DB
-        // (which are still there, just removed from UI state).
-
-        for (const id of ids) {
-          const noteToDelete = await getNoteById(db, id);
-          if (noteToDelete) {
-            await deleteNoteOffline(db, noteToDelete);
-          }
-        }
-
-        await syncNotes(db);
-        notifyActionSuccess();
-      } catch (e) {
-        console.error(e);
-        notifyActionError('Failed to delete');
-        // Revert/Reload
-        loadNotes();
-      }
-    })();
-  }, [
-    clearSelection,
-    closeDeleteConfirm,
-    closeEditor,
-    deleteConfirm.noteIds,
-    editingNote?.id,
-    loadNotes,
-    // notes, // Removed dependency on notes to avoid stale closures if possible, though needed for logic?
-    // Actually we don't need `notes` dependency if we fetch from DB in background.
-    notifyActionError,
-    notifyActionPending,
-    notifyActionSuccess,
-    selectedNoteIds,
-    selectionMode,
-    showToast,
-  ]);
 
   const handleNoteDone = useCallback(
     (noteId: string) => {
@@ -567,14 +529,14 @@ const NotesScreenContent = ({
 
   const handleNoteDelete = useCallback(
     (noteId: string) => {
-      openDeleteConfirm([noteId]);
+      performDelete([noteId]);
     },
-    [openDeleteConfirm],
+    [performDelete],
   );
 
   const handleBulkDeleteSelected = useCallback(() => {
-    openDeleteConfirm(Array.from(selectedNoteIds));
-  }, [openDeleteConfirm, selectedNoteIds]);
+    performDelete(Array.from(selectedNoteIds));
+  }, [performDelete, selectedNoteIds]);
 
   const handleBulkMarkDone = useCallback(() => {
     const ids = Array.from(selectedNoteIds);
@@ -954,34 +916,6 @@ const NotesScreenContent = ({
         />
       )}
 
-      <Modal
-        animationType="fade"
-        transparent
-        visible={deleteConfirm.visible}
-        onRequestClose={closeDeleteConfirm}
-      >
-        <Pressable style={styles.confirmOverlay} onPress={closeDeleteConfirm}>
-          <Pressable style={styles.confirmCard} onPress={() => {}}>
-            <Text style={styles.confirmTitle}>{deleteConfirmTitle}</Text>
-            <Text style={styles.confirmMessage}>{deleteConfirmMessage}</Text>
-            <View style={styles.confirmActions}>
-              <Pressable
-                style={[styles.confirmButton, styles.confirmCancel]}
-                onPress={closeDeleteConfirm}
-              >
-                <Text style={styles.confirmCancelText}>Cancel</Text>
-              </Pressable>
-              <Pressable
-                style={[styles.confirmButton, styles.confirmDelete]}
-                onPress={confirmDelete}
-              >
-                <Text style={styles.confirmDeleteText}>Delete</Text>
-              </Pressable>
-            </View>
-          </Pressable>
-        </Pressable>
-      </Modal>
-
       {toast.show && (
         <View style={styles.toastContainer} pointerEvents="none">
           <View style={[styles.toast, toast.isError && styles.toastError]}>
@@ -1208,55 +1142,6 @@ const styles = StyleSheet.create({
     fontSize: 12, // Smaller font for header
     color: theme.colors.text,
     fontWeight: '500',
-  },
-  confirmOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    padding: theme.spacing.md,
-  },
-  confirmCard: {
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.borderRadius.lg,
-    padding: theme.spacing.lg,
-    ...theme.shadows.md,
-  },
-  confirmTitle: {
-    fontSize: theme.typography.sizes.lg,
-    fontWeight: theme.typography.weights.bold as '700',
-    color: theme.colors.text,
-    marginBottom: theme.spacing.sm,
-  },
-  confirmMessage: {
-    fontSize: theme.typography.sizes.base,
-    color: theme.colors.text,
-    marginBottom: theme.spacing.lg,
-  },
-  confirmActions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: theme.spacing.md,
-  },
-  confirmButton: {
-    paddingVertical: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.lg,
-    borderRadius: theme.borderRadius.md,
-  },
-  confirmCancel: {
-    backgroundColor: theme.colors.surface,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-  },
-  confirmDelete: {
-    backgroundColor: theme.colors.error,
-  },
-  confirmCancelText: {
-    color: theme.colors.text,
-    fontWeight: '600',
-  },
-  confirmDeleteText: {
-    color: 'white',
-    fontWeight: '600',
   },
 });
 

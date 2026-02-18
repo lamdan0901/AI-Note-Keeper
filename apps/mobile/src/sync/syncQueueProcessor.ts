@@ -110,6 +110,21 @@ const DEFAULT_CONFIG: QueueProcessorConfig = {
   timeoutMs: 30000, // 30 second timeout per batch
 };
 
+const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number): Promise<T> => {
+  let timeoutId: NodeJS.Timeout | null = null;
+  const timeoutPromise = new Promise<T>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error('Sync batch timed out'));
+    }, timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+};
+
 // ============================================================================
 // Queue Processor
 // ============================================================================
@@ -151,6 +166,7 @@ const processBatch = async (
   db: SQLiteDatabase,
   items: OutboxItem[],
   userId: string,
+  timeoutMs: number,
 ): Promise<BatchResult> => {
   const results: SyncOperationResult[] = [];
   const startTime = nowMs();
@@ -173,11 +189,14 @@ const processBatch = async (
 
   try {
     // Send batch to server
-    const result = await client.mutation(api.functions.notes.syncNotes, {
-      userId,
-      changes,
-      lastSyncAt: 0,
-    });
+    const result = await withTimeout(
+      client.mutation(api.functions.notes.syncNotes, {
+        userId,
+        changes,
+        lastSyncAt: 0,
+      }),
+      timeoutMs,
+    );
 
     // Process results - assume all succeeded if we got here
     // Map server responses back to our items
@@ -296,7 +315,7 @@ export const processQueue = async (
       batchSize: batch.length,
     });
 
-    const batchResult = await processBatch(client, db, batch, userId);
+    const batchResult = await processBatch(client, db, batch, userId, cfg.timeoutMs);
     allResults.push(...batchResult.results);
 
     // If entire batch failed, consider stopping (circuit breaker)
