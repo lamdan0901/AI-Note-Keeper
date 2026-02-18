@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, View, StatusBar } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { getMessaging, onMessage } from '@react-native-firebase/messaging';
 import { ConvexProvider, ConvexReactClient } from 'convex/react';
@@ -123,6 +123,11 @@ export default function App(): JSX.Element | null {
   const effectiveEditNoteId = editNoteId;
   const content = (
     <View style={styles.container}>
+      <StatusBar
+        barStyle="dark-content"
+        backgroundColor={theme.colors.background}
+        translucent={false}
+      />
       <NotesScreen
         rescheduleNoteId={effectiveRescheduleNoteId ?? undefined}
         onRescheduleHandled={() => setRescheduleNoteId(null)}
