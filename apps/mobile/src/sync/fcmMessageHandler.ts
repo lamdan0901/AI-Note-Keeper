@@ -1,20 +1,17 @@
 import * as Notifications from 'expo-notifications';
-import { AppState, NativeModules, Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import { logSyncEvent } from '../reminders/logging';
 import { getDb } from '../db/bootstrap';
-import { upsertNote, deleteNote, getNoteById } from '../db/notesRepo';
+import { upsertNote, deleteNote } from '../db/notesRepo';
 import { fetchReminder } from './fetchReminder';
-import {
-  rescheduleNoteWithLedger,
-  cancelNoteWithLedger,
-  mapNoteToReminder,
-} from '../reminders/scheduler';
+import { cancelNoteWithLedger } from '../reminders/scheduler';
 import { Note } from '../db/notesRepo';
 import {
   hasLocalNotificationSent,
   recordNotificationSent,
   cleanOldRecords,
 } from '../reminders/notificationLedger';
+import { REMINDER_CHANNEL_ID } from '../reminders/notifications';
 
 export type FcmRemoteMessage = {
   messageId?: string;
@@ -33,57 +30,29 @@ export type FcmRemoteMessage = {
   };
 };
 
-const scheduleNativeNotification = async (
+/**
+ * Display a notification immediately via Expo Notifications.
+ * Works reliably in foreground (no AlarmManager throttling).
+ * Also used as the fallback for any FCM-triggered notification.
+ */
+const showImmediateNotification = async (
   reminderId: string,
   title: string,
   body: string,
   eventId?: string,
-): Promise<boolean> => {
-  if (Platform.OS !== 'android') {
-    return false;
-  }
-
-  const { ReminderModule } = NativeModules;
-  if (!ReminderModule?.schedule) {
-    return false;
-  }
-
-  try {
-    // Generate eventId if not provided (for FCM-triggered notifications)
-    const finalEventId = eventId || `fcm-${Date.now()}`;
-    ReminderModule.schedule(reminderId, Date.now() + 250, title, body, finalEventId);
-    logSyncEvent('info', 'fcm_native_notification_displayed', { reminderId });
-    return true;
-  } catch (error) {
-    logSyncEvent('error', 'fcm_native_notification_failed', {
-      reminderId,
-      error: error instanceof Error ? error.message : String(error),
-    });
-    return false;
-  }
-};
-
-const shouldSuppressTriggerNotification = async (reminderId: string): Promise<boolean> => {
-  if (Platform.OS !== 'android') {
-    return false;
-  }
-
-  try {
-    const db = await getDb();
-    const note = await getNoteById(db, reminderId);
-    if (!note?.triggerAt) {
-      return false;
-    }
-
-    const diff = Math.abs(Date.now() - note.triggerAt);
-    return diff <= 60_000;
-  } catch (error) {
-    logSyncEvent('warn', 'fcm_trigger_suppress_check_failed', {
-      reminderId,
-      error: error instanceof Error ? error.message : String(error),
-    });
-    return false;
-  }
+): Promise<void> => {
+  await Notifications.scheduleNotificationAsync({
+    content: {
+      title,
+      body,
+      data: { reminderId, eventId },
+      sound: 'default',
+      priority: Notifications.AndroidNotificationPriority.MAX,
+      ...(Platform.OS === 'android' ? { channelId: REMINDER_CHANNEL_ID } : {}),
+    },
+    trigger: null, // immediate
+  });
+  logSyncEvent('info', 'fcm_immediate_notification_displayed', { reminderId });
 };
 
 /**
@@ -117,16 +86,12 @@ export const handleFcmMessage = async (remoteMessage: FcmRemoteMessage): Promise
         const reminder = result.reminder;
 
         // 1. Update Local DB (Mirror Server)
-        // We cast Reminder -> Note safely because they are compatible structs for storage
-        // The fetchReminder returns shared Reminder type, but we store as Note in SQLite.
-        // We can just spread it.
         await upsertNote(db, reminder as unknown as Note);
 
-        // 2. Reschedule Alarm
-        // We map it to the "Reminder" type expected by scheduler (though it's nearly identical)
-        // mapNoteToReminder handles the specific `repeat` field logic if needed.
-        const schedulerReminder = mapNoteToReminder(reminder as unknown as Note);
-        await rescheduleNoteWithLedger(db, schedulerReminder);
+        // 2. Do NOT reschedule a local AlarmManager alarm here.
+        //    If we're receiving an FCM message, the device is online
+        //    and the server cron + FCM push path handles delivery.
+        //    Local alarms are only armed when the device is offline.
 
         logSyncEvent('info', 'fcm_sync_processed_update', { reminderId });
       } else if (result.status === 'not_found') {
@@ -157,6 +122,9 @@ export const handleFcmMessage = async (remoteMessage: FcmRemoteMessage): Promise
     return;
   }
 
+  // When FCM carries a `notification` payload AND the app is in the
+  // background/killed, Android has already auto-displayed it in the system
+  // tray. We only need to handle the foreground case or data-only messages.
   if (remoteMessage.notification && AppState.currentState !== 'active') {
     logSyncEvent('info', 'fcm_notification_handled_by_android', {
       reminderId: remoteMessage.data?.reminderId ?? remoteMessage.data?.id,
@@ -183,13 +151,9 @@ export const handleFcmMessage = async (remoteMessage: FcmRemoteMessage): Promise
     titleText && bodyText ? bodyText : titleText || bodyText ? '' : 'You have a reminder';
 
   if (remoteMessage.data?.type === 'trigger_reminder') {
-    const suppress = await shouldSuppressTriggerNotification(reminderId);
-    if (suppress) {
-      logSyncEvent('info', 'fcm_trigger_suppressed_local_alarm', { reminderId });
-      return;
-    }
-
-    // Phase 3: Check notification ledger for duplicate prevention
+    // Deduplicate using the notification ledger.
+    // The local alarm (if it fired first) will have already recorded
+    // an entry with the same eventId – in that case we skip.
     const eventId = remoteMessage.data?.eventId;
     if (eventId) {
       try {
@@ -205,8 +169,7 @@ export const handleFcmMessage = async (remoteMessage: FcmRemoteMessage): Promise
           return;
         }
 
-        // Periodically clean old ledger entries (>7 days) - do this opportunistically
-        // We do this in the background, don't await
+        // Opportunistic cleanup of old ledger entries (>7 days)
         cleanOldRecords(db, 7).catch((err) => {
           logSyncEvent('warn', 'fcm_ledger_cleanup_failed', {
             error: err instanceof Error ? err.message : String(err),
@@ -222,9 +185,12 @@ export const handleFcmMessage = async (remoteMessage: FcmRemoteMessage): Promise
       }
     }
 
-    const handled = await scheduleNativeNotification(reminderId, title, body, eventId);
-    if (handled) {
-      // Record FCM delivery in ledger
+    // Show notification immediately (foreground path)
+    try {
+      await showImmediateNotification(reminderId, title, body, eventId);
+
+      // Record delivery in the ledger so the local alarm (if it fires
+      // later) knows not to duplicate.
       if (eventId) {
         try {
           const db = await getDb();
@@ -239,24 +205,19 @@ export const handleFcmMessage = async (remoteMessage: FcmRemoteMessage): Promise
         }
       }
       return;
+    } catch (error) {
+      logSyncEvent('error', 'fcm_trigger_notification_failed', {
+        reminderId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      // Fall through to generic notification below
     }
   }
 
+  // Fallback: show generic notification for any remaining message type
   try {
-    await Notifications.scheduleNotificationAsync({
-      content: {
-        title,
-        body,
-        data: { reminderId, eventId: remoteMessage.data?.eventId },
-        sound: 'default',
-        priority: Notifications.AndroidNotificationPriority.MAX,
-      },
-      trigger: null,
-    });
+    await showImmediateNotification(reminderId, title, body, remoteMessage.data?.eventId);
 
-    logSyncEvent('info', 'fcm_local_notification_displayed', { reminderId });
-
-    // Record FCM delivery in ledger
     const eventId = remoteMessage.data?.eventId;
     if (eventId) {
       try {

@@ -49,12 +49,14 @@ class ReminderReceiver : BroadcastReceiver() {
     private fun showNotification(context: Context, id: String, title: String, body: String, eventId: String) {
         Log.d(TAG, "showNotification: id=$id, title=$title")
         
-        val channelId = "reminders_channel"
+        // Must match the channel created by Expo JS in notifications.ts
+        val channelId = "reminders"
         
-        // Ensure channel exists
+        // Ensure channel exists (idempotent – createNotificationChannel is a no-op
+        // if the channel already exists with matching ID)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val name = "Reminders"
-            val descriptionText = "Offline reminders"
+            val descriptionText = "Reminder notifications"
             val importance = NotificationManager.IMPORTANCE_HIGH
             val channel = NotificationChannel(channelId, name, importance).apply {
                 description = descriptionText

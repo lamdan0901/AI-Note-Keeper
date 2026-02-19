@@ -86,6 +86,9 @@ async function getAccessToken(serviceAccount: FirebaseServiceAccount): Promise<s
   return tokenData.access_token;
 }
 
+const NOTIFICATION_CHANNEL_ID = 'reminders';
+const MAX_PUSH_RETRIES = 2;
+
 export const sendPush = internalAction({
   args: {
     userId: v.string(),
@@ -93,8 +96,13 @@ export const sendPush = internalAction({
     reminderId: v.string(),
     changeEventId: v.string(),
     isTrigger: v.optional(v.boolean()),
+    retryCount: v.optional(v.number()),
   },
-  handler: async (ctx, { userId, excludeDeviceId, reminderId, changeEventId, isTrigger }) => {
+  handler: async (
+    ctx,
+    { userId, excludeDeviceId, reminderId, changeEventId, isTrigger, retryCount },
+  ) => {
+    const attempt = retryCount ?? 0;
     console.log(`[Push] Starting push for reminder ${reminderId}, user ${userId}`);
 
     // 1. Get tokens
@@ -164,10 +172,25 @@ export const sendPush = internalAction({
             body,
           };
 
-          const messagePayload = {
+          // For trigger messages, include a notification payload so Android
+          // auto-displays even when the app is killed or in deep Doze.
+          // Data-only messages are NOT guaranteed to wake the app on
+          // battery-optimised OEM devices (Samsung, Xiaomi, Huawei, etc.).
+          const messagePayload: Record<string, unknown> = {
             data: dataPayload,
             android: {
               priority: 'high',
+              ...(isTrigger
+                ? {
+                    notification: {
+                      title,
+                      body,
+                      channel_id: NOTIFICATION_CHANNEL_ID,
+                      default_sound: true,
+                      notification_priority: 'PRIORITY_HIGH',
+                    },
+                  }
+                : {}),
             },
           };
 
@@ -200,6 +223,21 @@ export const sendPush = internalAction({
                 deviceId: token.deviceId,
               });
               console.warn(`[Push] Removed unregistered token for ${token.deviceId}`);
+            } else if ((res.status === 429 || res.status >= 500) && attempt < MAX_PUSH_RETRIES) {
+              // Transient failure – schedule a retry after 30 seconds
+              const delaySec = 30 * (attempt + 1); // 30s, 60s
+              console.warn(
+                `[Push] Transient error (${res.status}) for ${token.deviceId}, ` +
+                  `scheduling retry ${attempt + 1}/${MAX_PUSH_RETRIES} in ${delaySec}s`,
+              );
+              await ctx.scheduler.runAfter(delaySec * 1000, internal.functions.push.sendPush, {
+                userId,
+                excludeDeviceId,
+                reminderId,
+                changeEventId,
+                isTrigger,
+                retryCount: attempt + 1,
+              });
             }
             return { deviceId: token.deviceId, success: false, error: responseBody };
           }

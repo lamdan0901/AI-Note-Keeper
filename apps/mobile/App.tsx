@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, View, StatusBar } from 'react-native';
 import * as Notifications from 'expo-notifications';
-import { getMessaging, onMessage } from '@react-native-firebase/messaging';
+import { getMessaging, onMessage, onTokenRefresh } from '@react-native-firebase/messaging';
 import { ConvexProvider, ConvexReactClient } from 'convex/react';
 
 import * as SplashScreen from 'expo-splash-screen';
@@ -20,6 +20,7 @@ SplashScreen.preventAutoHideAsync();
 import { Linking } from 'react-native';
 import { rescheduleAllActiveReminders } from './src/reminders/scheduler';
 import { getDb } from './src/db/bootstrap';
+import NetInfo from '@react-native-community/netinfo';
 
 const convexUrl = process.env.EXPO_PUBLIC_CONVEX_URL;
 const convexClient = convexUrl ? new ConvexReactClient(convexUrl) : null;
@@ -42,9 +43,14 @@ export default function App(): JSX.Element | null {
         await checkStartupPermissions();
         await registerDevicePushToken();
 
-        // Reschedule alarms on app open to ensure consistency
-        const db = await getDb();
-        await rescheduleAllActiveReminders(db);
+        // Only schedule local alarms when the device is offline.
+        // When online, the server cron + FCM push path handles delivery.
+        const netState = await NetInfo.fetch();
+        const isOnline = netState.isConnected === true && netState.isInternetReachable === true;
+        if (!isOnline) {
+          const db = await getDb();
+          await rescheduleAllActiveReminders(db);
+        }
 
         // Check for initial launch props from MainActivity
         // @ts-expect-error - RN internal API
@@ -103,6 +109,15 @@ export default function App(): JSX.Element | null {
       await handleFcmMessage(remoteMessage);
     });
 
+    // Re-register device token whenever FCM rotates it
+    const unsubscribeTokenRefresh = onTokenRefresh(messaging, async () => {
+      try {
+        await registerDevicePushToken();
+      } catch (e) {
+        console.error('[TokenRefresh] Failed to re-register token:', e);
+      }
+    });
+
     // Handle notification tap/interaction
     const notificationSubscription = Notifications.addNotificationResponseReceivedListener(
       handleNotificationResponse,
@@ -110,6 +125,7 @@ export default function App(): JSX.Element | null {
 
     return () => {
       unsubscribeFcm();
+      unsubscribeTokenRefresh();
       notificationSubscription.remove();
       linkSub.remove();
     };

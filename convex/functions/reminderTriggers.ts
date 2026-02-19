@@ -4,6 +4,10 @@ import { internal } from '../_generated/api';
 import { computeNextTrigger } from '../../packages/shared/utils/recurrence';
 import type { RepeatRule } from '../../packages/shared/types/reminder';
 
+/** Maximum look-back window (ms) to prevent scanning the entire table
+ *  if the cron has been offline for a long time. */
+const MAX_LOOKBACK_MS = 5 * 60 * 1000; // 5 minutes
+
 type RepeatConfigShape = {
   kind?: unknown;
   interval?: unknown;
@@ -61,14 +65,13 @@ const getRepeatRule = (note: {
 };
 
 /**
- * Query to find notes with reminders due in the past minute.
- * Called by the cron job.
+ * Query to find notes with reminders due between a watermark and now.
+ * Uses [since, now] instead of a fixed 60-second window so no
+ * reminders are missed even when the cron fires slightly late.
  */
 export const getDueReminders = internalQuery({
-  args: { now: v.number() },
-  handler: async (ctx, { now }) => {
-    const oneMinuteAgo = now - 60 * 1000;
-
+  args: { since: v.number(), now: v.number() },
+  handler: async (ctx, { since, now }) => {
     const notes = await ctx.db
       .query('notes')
       .filter((q) =>
@@ -78,17 +81,17 @@ export const getDueReminders = internalQuery({
             q.and(
               q.neq(q.field('snoozedUntil'), undefined),
               q.lte(q.field('snoozedUntil'), now),
-              q.gte(q.field('snoozedUntil'), oneMinuteAgo),
+              q.gte(q.field('snoozedUntil'), since),
             ),
             q.and(
               q.neq(q.field('nextTriggerAt'), undefined),
               q.lte(q.field('nextTriggerAt'), now),
-              q.gte(q.field('nextTriggerAt'), oneMinuteAgo),
+              q.gte(q.field('nextTriggerAt'), since),
             ),
             q.and(
               q.neq(q.field('triggerAt'), undefined),
               q.lte(q.field('triggerAt'), now),
-              q.gte(q.field('triggerAt'), oneMinuteAgo),
+              q.gte(q.field('triggerAt'), since),
             ),
           ),
         ),
@@ -156,6 +159,37 @@ export const markReminderTriggered = internalMutation({
 });
 
 /**
+ * Read (and optionally initialise) the cron watermark.
+ */
+export const getCronWatermark = internalQuery({
+  args: { key: v.string() },
+  handler: async (ctx, { key }) => {
+    return ctx.db
+      .query('cronState')
+      .filter((q) => q.eq(q.field('key'), key))
+      .first();
+  },
+});
+
+/**
+ * Update the cron watermark after a successful run.
+ */
+export const updateCronWatermark = internalMutation({
+  args: { key: v.string(), lastCheckedAt: v.number() },
+  handler: async (ctx, { key, lastCheckedAt }) => {
+    const existing = await ctx.db
+      .query('cronState')
+      .filter((q) => q.eq(q.field('key'), key))
+      .first();
+    if (existing) {
+      await ctx.db.patch(existing._id, { lastCheckedAt });
+    } else {
+      await ctx.db.insert('cronState', { key, lastCheckedAt });
+    }
+  },
+});
+
+/**
  * Check for due reminders and send FCM pushes.
  * Called by cron job every minute.
  */
@@ -164,12 +198,24 @@ export const checkAndTriggerReminders = internalAction({
   handler: async (ctx) => {
     const now = Date.now();
 
-    // Get all due reminders
+    // Read the watermark to know where we left off
+    const watermark = await ctx.runQuery(internal.functions.reminderTriggers.getCronWatermark, {
+      key: 'check-reminders',
+    });
+
+    // If no watermark yet, look back at most MAX_LOOKBACK_MS
+    const since = watermark ? watermark.lastCheckedAt : now - MAX_LOOKBACK_MS;
+
+    // Get all due reminders in the [since, now] window
     const dueNotes = await ctx.runQuery(internal.functions.reminderTriggers.getDueReminders, {
+      since,
       now,
     });
 
-    console.log(`[Cron] Found ${dueNotes.length} due reminders at ${new Date(now).toISOString()}`);
+    console.log(
+      `[Cron] Found ${dueNotes.length} due reminders ` +
+        `(window ${new Date(since).toISOString()} → ${new Date(now).toISOString()})`,
+    );
 
     // Send FCM push for each due reminder
     for (const note of dueNotes) {
@@ -199,5 +245,11 @@ export const checkAndTriggerReminders = internalAction({
         console.error(`[Cron] Failed to trigger reminder for note ${note.id}:`, error);
       }
     }
+
+    // Advance the watermark so the next run picks up from here
+    await ctx.runMutation(internal.functions.reminderTriggers.updateCronWatermark, {
+      key: 'check-reminders',
+      lastCheckedAt: now,
+    });
   },
 });

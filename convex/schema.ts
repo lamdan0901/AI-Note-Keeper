@@ -51,4 +51,8 @@ export default defineSchema({
     deviceId: v.string(),
     payloadHash: v.string(),
   }),
+  cronState: defineTable({
+    key: v.string(), // e.g. 'check-reminders'
+    lastCheckedAt: v.number(), // epoch ms watermark
+  }),
 });

@@ -153,6 +153,17 @@ export const scheduleReminderNotification = async (
         const netState = await NetInfo.fetch();
         const isOnline = netState.isConnected === true && netState.isInternetReachable === true;
 
+        if (isOnline) {
+          // When online, the server-side cron + FCM push handles
+          // notification delivery.  Don't schedule a local AlarmManager
+          // alarm – it would cause a duplicate notification.
+          logSyncEvent('info', 'local_alarm_skipped_online', {
+            reminderId: reminder.id,
+            eventId,
+          });
+          return [];
+        }
+
         const { title, body } = buildNotificationText(reminder, notification);
 
         // Schedule via native AlarmManager
@@ -189,7 +200,6 @@ export const scheduleReminderNotification = async (
           reminderId: reminder.id,
           platform: Platform.OS,
           eventId,
-          isOnline,
         });
 
         return [reminder.id];
@@ -547,6 +557,30 @@ export const rescheduleAllActiveReminders = async (db: DbLike): Promise<number> 
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     logScheduleEvent('error', 'scheduler_batch_reschedule_failed', { error: msg });
+    throw error;
+  }
+};
+
+/**
+ * Cancel every pending local AlarmManager alarm.
+ * Called when the device comes online so only FCM handles delivery.
+ */
+export const cancelAllLocalAlarms = async (db: DbLike): Promise<number> => {
+  logScheduleEvent('info', 'scheduler_cancel_all_start');
+  try {
+    const notes = await listNotes(db, 1000);
+    let count = 0;
+    for (const note of notes) {
+      if (note.active && (note.triggerAt || note.snoozedUntil)) {
+        await cancelNoteWithLedger(db, note.id);
+        count++;
+      }
+    }
+    logScheduleEvent('info', 'scheduler_cancel_all_complete', { count });
+    return count;
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    logScheduleEvent('error', 'scheduler_cancel_all_failed', { error: msg });
     throw error;
   }
 };

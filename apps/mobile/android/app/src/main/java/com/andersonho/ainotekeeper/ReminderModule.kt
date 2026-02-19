@@ -35,7 +35,7 @@ class ReminderModule(reactContext: ReactApplicationContext) : ReactContextBaseJa
             val canSchedule = alarmManager.canScheduleExactAlarms()
             Log.d(TAG, "canScheduleExactAlarms: $canSchedule")
             if (!canSchedule) {
-                Log.e(TAG, "EXACT_ALARM permission not granted! Alarm may not fire.")
+                Log.w(TAG, "EXACT_ALARM permission not granted – falling back to inexact alarm")
             }
         }
         
@@ -63,16 +63,37 @@ class ReminderModule(reactContext: ReactApplicationContext) : ReactContextBaseJa
             val nowMs = System.currentTimeMillis()
             Log.d(TAG, "Scheduling alarm: triggerMs=$triggerMs, now=$nowMs, diff=${(triggerMs - nowMs) / 1000}s")
             
-            alarmManager.setExactAndAllowWhileIdle(
-                AlarmManager.RTC_WAKEUP,
-                triggerMs,
-                pendingIntent
-            )
-            Log.d(TAG, "Alarm scheduled successfully for id=$id at $triggerMs")
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarmManager.canScheduleExactAlarms()) {
+                // Fallback: inexact but still fires close to the requested time.
+                // Better than silently dropping the alarm.
+                alarmManager.setAndAllowWhileIdle(
+                    AlarmManager.RTC_WAKEUP,
+                    triggerMs,
+                    pendingIntent
+                )
+                Log.w(TAG, "Scheduled INEXACT alarm for id=$id at $triggerMs (no SCHEDULE_EXACT_ALARM)")
+            } else {
+                alarmManager.setExactAndAllowWhileIdle(
+                    AlarmManager.RTC_WAKEUP,
+                    triggerMs,
+                    pendingIntent
+                )
+                Log.d(TAG, "Alarm scheduled successfully for id=$id at $triggerMs")
+            }
         } catch (e: SecurityException) {
-            // Handle permission denial appropriately or log.
-            // On Android 12+, we need SCHEDULE_EXACT_ALARM permission.
-            Log.e(TAG, "SecurityException scheduling alarm: ${e.message}", e)
+            // Last resort: try inexact alarm when SecurityException still occurs
+            Log.e(TAG, "SecurityException scheduling exact alarm, trying inexact: ${e.message}", e)
+            try {
+                val triggerMs = triggerAt.toLong()
+                alarmManager.setAndAllowWhileIdle(
+                    AlarmManager.RTC_WAKEUP,
+                    triggerMs,
+                    pendingIntent
+                )
+                Log.w(TAG, "Fallback inexact alarm scheduled for id=$id")
+            } catch (e2: Exception) {
+                Log.e(TAG, "Failed to schedule even inexact alarm: ${e2.message}", e2)
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Exception scheduling alarm: ${e.message}", e)
         }

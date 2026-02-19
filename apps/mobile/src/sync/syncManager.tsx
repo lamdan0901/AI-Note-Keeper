@@ -4,6 +4,7 @@ import { AppState, AppStateStatus } from 'react-native';
 import { getDb } from '../db/bootstrap';
 import { syncNotes, SyncResult } from './noteSync';
 import { getPendingCount } from './noteOutbox';
+import { rescheduleAllActiveReminders, cancelAllLocalAlarms } from '../reminders/scheduler';
 
 export type ActionResult = {
   status: 'pending' | 'success' | 'error';
@@ -179,10 +180,23 @@ export const SyncProvider: React.FC<SyncProviderProps> = ({ children, userId = '
 
       setSyncState((prev) => ({ ...prev, isOnline }));
 
-      // If we just came online, trigger sync
+      // If we just came online, trigger sync and cancel local alarms
+      // (the server cron + FCM push path takes over).
       if (isOnline && !wasOnline) {
-        console.log('[SyncManager] Coming online - triggering sync');
+        console.log('[SyncManager] Coming online - triggering sync & cancelling local alarms');
+        getDb()
+          .then((db) => cancelAllLocalAlarms(db))
+          .catch((err) => console.warn('[SyncManager] Failed to cancel local alarms:', err));
         debouncedSync();
+      }
+
+      // If we just went offline, arm local AlarmManager alarms for
+      // every active reminder so the device can still fire them.
+      if (!isOnline && wasOnline) {
+        console.log('[SyncManager] Going offline - scheduling local alarms');
+        getDb()
+          .then((db) => rescheduleAllActiveReminders(db))
+          .catch((err) => console.warn('[SyncManager] Failed to schedule local alarms:', err));
       }
     },
     [syncState.isOnline, debouncedSync],
