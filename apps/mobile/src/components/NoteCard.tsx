@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { type Note } from '../db/notesRepo';
-import { darkTheme, lightTheme, type Theme, useTheme } from '../theme';
+import { type Theme, useTheme } from '../theme';
 import { Ionicons } from '@expo/vector-icons';
 import { createHoldInteraction, getTapDecision, HOLD_DELAY_MS } from './noteCardInteractions';
 import { formatReminder } from '../utils/formatReminder';
+import { hasCustomColor, resolveNoteColor } from '../constants/noteColors';
 
 const SELECTION_ANIMATION_DURATION_MS = 240;
 
@@ -29,7 +30,7 @@ export const NoteCard: React.FC<NoteCardProps> = ({
   selectionMode = false,
   isSelected = false,
 }) => {
-  const { theme } = useTheme();
+  const { theme, resolvedMode } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const isGrid = variant === 'grid';
   const isDone = !!note.done;
@@ -63,9 +64,13 @@ export const NoteCard: React.FC<NoteCardProps> = ({
     }).start();
   }, [isSelected, selectionAnim]);
 
-  const isDefaultColor =
-    note.color === lightTheme.colors.surface || note.color === darkTheme.colors.surface;
-  const backgroundColor = note.color && !isDefaultColor ? note.color : theme.colors.surface;
+  const isDark = resolvedMode === 'dark';
+  const resolvedBg = resolveNoteColor(note.color, isDark);
+  const backgroundColor = resolvedBg || theme.colors.surface;
+  const hasColor = hasCustomColor(note.color);
+  const useWhiteText = hasColor && isDark;
+  const textColor = useWhiteText ? '#ffffff' : theme.colors.text;
+  const mutedTextColor = useWhiteText ? 'rgba(255, 255, 255, 0.8)' : theme.colors.textMuted;
 
   // Dynamic styles based on variant
   const containerStyle = [
@@ -115,12 +120,16 @@ export const NoteCard: React.FC<NoteCardProps> = ({
             {!!title && (
               <View style={styles.header}>
                 <View style={styles.headerLeft}>
-                  <Text style={[styles.title, isDone && styles.titleDone]}>{title}</Text>
+                  <Text style={[styles.title, isDone && styles.titleDone, { color: textColor }]}>
+                    {title}
+                  </Text>
                 </View>
               </View>
             )}
             {!!content && (
-              <Text style={[styles.content, isDone && styles.textDone]}>{content}</Text>
+              <Text style={[styles.content, isDone && styles.textDone, { color: mutedTextColor }]}>
+                {content}
+              </Text>
             )}
 
             {/* Sync Status & Reminder Row */}
@@ -128,7 +137,11 @@ export const NoteCard: React.FC<NoteCardProps> = ({
               {/* Sync Status Icon */}
               {note.syncStatus === 'pending' && (
                 <View style={styles.syncStatusBadge}>
-                  <Ionicons name="cloud-upload-outline" size={14} color={theme.colors.textMuted} />
+                  <Ionicons
+                    name="cloud-upload-outline"
+                    size={14}
+                    color={useWhiteText ? mutedTextColor : theme.colors.textMuted}
+                  />
                 </View>
               )}
               {note.syncStatus === 'conflict' && (
@@ -140,8 +153,18 @@ export const NoteCard: React.FC<NoteCardProps> = ({
               {/* Reminder Badge */}
               {effectiveTriggerAt && (
                 <View style={styles.reminderContainer}>
-                  <Ionicons name="alarm-outline" size={14} color={theme.colors.textMuted} />
-                  <Text style={[styles.reminderText, isDone && styles.textDone]}>
+                  <Ionicons
+                    name="alarm-outline"
+                    size={14}
+                    color={useWhiteText ? mutedTextColor : theme.colors.textMuted}
+                  />
+                  <Text
+                    style={[
+                      styles.reminderText,
+                      isDone && styles.textDone,
+                      { color: mutedTextColor },
+                    ]}
+                  >
                     {formatReminder(new Date(effectiveTriggerAt), note.repeat ?? null)}
                   </Text>
                 </View>

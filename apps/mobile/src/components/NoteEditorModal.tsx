@@ -7,6 +7,8 @@ import { formatReminder } from '../utils/formatReminder';
 import { type Theme, useTheme } from '../theme';
 import { RepeatRule } from '../../../../packages/shared/types/reminder';
 import { useNoteEditor } from '../hooks/useNoteEditor';
+import { ColorPicker } from './ColorPicker';
+import { toPresetId, hasCustomColor, resolveNoteColor } from '../constants/noteColors';
 
 type NoteEditorModalProps = {
   onSave: (editorState: {
@@ -16,6 +18,7 @@ type NoteEditorModalProps = {
     reminder: Date | null;
     repeat: RepeatRule | null;
     isPinned: boolean;
+    color: string | null;
   }) => void;
   onDelete: () => void;
   onClose?: () => void;
@@ -31,6 +34,7 @@ export type NoteEditorModalRef = {
     reminder: Date | null;
     repeat: RepeatRule | null;
     isPinned: boolean;
+    color: string | null;
   };
   setEditingNote: (note: Note | null) => void;
   setReminder: (date: Date | null) => void;
@@ -38,7 +42,7 @@ export type NoteEditorModalRef = {
 
 export const NoteEditorModal = forwardRef<NoteEditorModalRef, NoteEditorModalProps>(
   function NoteEditorModal({ onSave, onDelete, onClose }, ref) {
-    const { theme } = useTheme();
+    const { theme, resolvedMode } = useTheme();
     const styles = useMemo(() => createStyles(theme), [theme]);
 
     const {
@@ -49,6 +53,7 @@ export const NoteEditorModal = forwardRef<NoteEditorModalRef, NoteEditorModalPro
       reminder,
       repeat,
       isPinned,
+      color,
       showReminderModal,
       editorTranslateY,
       openEditor,
@@ -60,6 +65,7 @@ export const NoteEditorModal = forwardRef<NoteEditorModalRef, NoteEditorModalPro
       setReminder,
       setRepeat,
       setIsPinned,
+      setColor,
       setEditingNote,
       setShowReminderModal,
       handleEditorTouchStart,
@@ -77,6 +83,7 @@ export const NoteEditorModal = forwardRef<NoteEditorModalRef, NoteEditorModalPro
         reminder,
         repeat,
         isPinned,
+        color,
       }),
       setEditingNote,
       setReminder,
@@ -88,8 +95,21 @@ export const NoteEditorModal = forwardRef<NoteEditorModalRef, NoteEditorModalPro
     };
 
     const handleSave = () => {
-      onSave({ editingNote, title, content, reminder, repeat, isPinned });
+      onSave({ editingNote, title, content, reminder, repeat, isPinned, color });
     };
+
+    const handleColorSelect = (presetId: string) => {
+      setColor(presetId === 'default' ? null : presetId);
+    };
+
+    const currentColorId = toPresetId(color);
+    const isDark = resolvedMode === 'dark';
+    const resolvedBg = resolveNoteColor(color, isDark);
+    const modalBackgroundColor = resolvedBg || theme.colors.surface;
+    const hasColor = hasCustomColor(color);
+    const useWhiteText = hasColor && isDark;
+    const textColor = useWhiteText ? '#ffffff' : theme.colors.text;
+    const mutedTextColor = useWhiteText ? 'rgba(255, 255, 255, 0.8)' : theme.colors.textMuted;
 
     return (
       <Modal
@@ -104,6 +124,7 @@ export const NoteEditorModal = forwardRef<NoteEditorModalRef, NoteEditorModalPro
             style={[
               styles.modalContent,
               {
+                backgroundColor: modalBackgroundColor,
                 transform: [{ translateY: editorTranslateY }],
               },
             ]}
@@ -116,13 +137,17 @@ export const NoteEditorModal = forwardRef<NoteEditorModalRef, NoteEditorModalPro
               <View style={styles.sheetHandle} />
             </View>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{editingNote ? 'Edit Note' : 'New Note'}</Text>
+              <Text style={[styles.modalTitle, { color: textColor }]}>
+                {editingNote ? 'Edit Note' : 'New Note'}
+              </Text>
 
               <View style={styles.headerRight}>
                 {reminder && (
                   <Pressable onPress={handleReminderPress}>
                     <View style={styles.headerChip}>
-                      <Text style={styles.headerChipText}>{formatReminder(reminder, repeat)}</Text>
+                      <Text style={[styles.headerChipText, { color: textColor }]}>
+                        {formatReminder(reminder, repeat)}
+                      </Text>
                       <Pressable
                         onPress={(e) => {
                           e.stopPropagation();
@@ -131,43 +156,53 @@ export const NoteEditorModal = forwardRef<NoteEditorModalRef, NoteEditorModalPro
                         }}
                         hitSlop={8}
                       >
-                        <Ionicons name="close-circle" size={16} color={theme.colors.text} />
+                        <Ionicons name="close-circle" size={16} color={textColor} />
                       </Pressable>
                     </View>
                   </Pressable>
                 )}
                 {!reminder && (
                   <Pressable style={styles.iconButton} onPress={handleReminderPress}>
-                    <Ionicons name={'alarm-outline'} size={24} color={theme.colors.text} />
+                    <Ionicons name={'alarm-outline'} size={24} color={textColor} />
                   </Pressable>
                 )}
                 <Pressable style={styles.iconButton} onPress={() => setIsPinned(!isPinned)}>
                   <Ionicons
                     name={isPinned ? 'push' : 'push-outline'}
                     size={24}
-                    color={isPinned ? theme.colors.primary : theme.colors.text}
+                    color={isPinned ? (useWhiteText ? '#ffffff' : theme.colors.primary) : textColor}
                   />
                 </Pressable>
               </View>
             </View>
 
             <TextInput
-              style={styles.inputTitle}
+              style={[styles.inputTitle, { color: textColor }]}
               placeholder="Title"
               multiline
               value={title}
               onChangeText={setTitle}
-              placeholderTextColor={theme.colors.textMuted}
+              placeholderTextColor={mutedTextColor}
             />
             <TextInput
-              style={styles.inputContent}
+              style={[styles.inputContent, { color: textColor }]}
               placeholder="Description"
               value={content}
               onChangeText={setContent}
               multiline
               textAlignVertical="top"
-              placeholderTextColor={theme.colors.textMuted}
+              placeholderTextColor={mutedTextColor}
             />
+
+            <View style={styles.colorSection}>
+              <Text style={[styles.sectionLabel, { color: mutedTextColor }]}>Background Color</Text>
+              <ColorPicker
+                selectedColorId={currentColorId}
+                onColorSelect={handleColorSelect}
+                theme={theme}
+                isDark={resolvedMode === 'dark'}
+              />
+            </View>
 
             <View style={styles.modalActions}>
               {editingNote && (
@@ -258,6 +293,17 @@ const createStyles = (theme: Theme) =>
       color: theme.colors.text,
       flex: 1,
       padding: theme.spacing.sm,
+    },
+    colorSection: {
+      marginTop: theme.spacing.md,
+      paddingVertical: theme.spacing.sm,
+    },
+    sectionLabel: {
+      fontSize: theme.typography.sizes.sm,
+      fontWeight: theme.typography.weights.semibold as '600',
+      color: theme.colors.textMuted,
+      marginBottom: theme.spacing.xs,
+      paddingHorizontal: theme.spacing.sm,
     },
     modalActions: {
       flexDirection: 'row',

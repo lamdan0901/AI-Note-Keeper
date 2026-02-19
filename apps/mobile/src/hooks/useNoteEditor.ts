@@ -13,6 +13,7 @@ type UseNoteEditorResult = {
   reminder: Date | null;
   repeat: RepeatRule | null;
   isPinned: boolean;
+  color: string | null;
   showReminderModal: boolean;
   editorTranslateY: Animated.Value;
   openEditor: (note?: Note) => void;
@@ -25,6 +26,7 @@ type UseNoteEditorResult = {
   setReminder: (value: Date | null) => void;
   setRepeat: (value: RepeatRule | null) => void;
   setIsPinned: (value: boolean) => void;
+  setColor: (value: string | null) => void;
   setEditingNote: (value: Note | null) => void;
   setShowReminderModal: (value: boolean) => void;
   handleEditorTouchStart: (e: { nativeEvent: { pageX: number; pageY: number } }) => void;
@@ -40,6 +42,7 @@ export const useNoteEditor = (): UseNoteEditorResult => {
   const [reminder, setReminder] = useState<Date | null>(null);
   const [repeat, setRepeat] = useState<RepeatRule | null>(null);
   const [isPinned, setIsPinned] = useState(false);
+  const [color, setColor] = useState<string | null>(null);
   const [showReminderModal, setShowReminderModal] = useState(false);
 
   const editorTranslateY = useRef(new Animated.Value(0)).current;
@@ -60,6 +63,7 @@ export const useNoteEditor = (): UseNoteEditorResult => {
         setRepeat(null);
       }
       setIsPinned(note.isPinned ?? false);
+      setColor(note.color || null);
     } else {
       setEditingNote(null);
       setTitle('');
@@ -67,6 +71,7 @@ export const useNoteEditor = (): UseNoteEditorResult => {
       setReminder(null);
       setRepeat(null);
       setIsPinned(false);
+      setColor(null);
     }
     setModalVisible(true);
   }, []);
@@ -79,6 +84,7 @@ export const useNoteEditor = (): UseNoteEditorResult => {
     setReminder(null);
     setRepeat(null);
     setIsPinned(false);
+    setColor(null);
   }, []);
 
   const handleReminderPress = useCallback(() => {
@@ -167,6 +173,7 @@ export const useNoteEditor = (): UseNoteEditorResult => {
     reminder,
     repeat,
     isPinned,
+    color,
     showReminderModal,
     editorTranslateY,
     openEditor,
@@ -179,6 +186,7 @@ export const useNoteEditor = (): UseNoteEditorResult => {
     setReminder,
     setRepeat,
     setIsPinned,
+    setColor,
     setEditingNote,
     setShowReminderModal,
     handleEditorTouchStart,

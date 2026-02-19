@@ -5,7 +5,6 @@ import { getDb } from '../db/bootstrap';
 import { getNoteById, listNotes, type Note } from '../db/notesRepo';
 import { saveNoteOffline, deleteNoteOffline } from '../notes/editor';
 import { syncNotes } from '../sync/noteSync';
-import { darkTheme, lightTheme } from '../theme';
 import { RepeatRule } from '../../../../packages/shared/types/reminder';
 
 type EditorState = {
@@ -15,6 +14,7 @@ type EditorState = {
   reminder: Date | null;
   repeat: RepeatRule | null;
   isPinned: boolean;
+  color: string | null;
 };
 
 type UseNoteActionsParams = {
@@ -88,7 +88,7 @@ export const useNoteActions = ({
 
   const saveNote = useCallback(
     async (editorState: EditorState) => {
-      const { editingNote, title, content, reminder, repeat, isPinned } = editorState;
+      const { editingNote, title, content, reminder, repeat, isPinned, color } = editorState;
 
       if (!title.trim() && !content.trim()) {
         closeEditor();
@@ -102,12 +102,7 @@ export const useNoteActions = ({
         id: editingNote ? editingNote.id : uuid.v4().toString(),
         title: title.trim(),
         content: content.trim(),
-        color:
-          editingNote?.color &&
-          editingNote.color !== lightTheme.colors.surface &&
-          editingNote.color !== darkTheme.colors.surface
-            ? editingNote.color
-            : null,
+        color: color || null,
         active: true,
         done: reminder ? false : (editingNote?.done ?? false),
         isPinned,

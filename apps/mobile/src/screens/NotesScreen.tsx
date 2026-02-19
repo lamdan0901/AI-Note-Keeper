@@ -111,6 +111,7 @@ const NotesScreenContent = ({
       reminder: Date | null;
       repeat: RepeatRule | null;
       isPinned: boolean;
+      color: string | null;
     }) => {
       saveNoteAction(editorState);
     },
@@ -206,7 +207,7 @@ const NotesScreenContent = ({
     handleNoteReschedule(id);
   }, [handleNoteReschedule, selectedNoteIds]);
 
-  const handleBulkMarkDone = useCallback(() => {
+  const handleBulkMarkDone = useCallback(async () => {
     const ids = Array.from(selectedNoteIds);
     const toUpdate = notes.filter((n) => ids.includes(n.id));
     if (toUpdate.length === 0) return;
@@ -217,32 +218,32 @@ const NotesScreenContent = ({
 
     setNotes((prev) =>
       prev.map((note) => {
-        if (ids.includes(note.id)) {
-          // Toggle done state
-          const updated: Note = note.done
-            ? { ...note, done: false, updatedAt: now }
-            : {
-                ...note,
-                active: true,
-                done: true,
-                triggerAt: undefined,
-                repeatRule: undefined,
-                repeatConfig: undefined,
-                repeat: undefined,
-                snoozedUntil: undefined,
-                scheduleStatus: undefined,
-                timezone: undefined,
-                baseAtLocal: undefined,
-                startAt: undefined,
-                nextTriggerAt: undefined,
-                lastFiredAt: undefined,
-                lastAcknowledgedAt: undefined,
-                updatedAt: now,
-              };
-          updatedNotes.push(updated);
-          return updated;
-        }
-        return note;
+        if (!ids.includes(note.id)) return note;
+
+        // Toggle done state
+        const updated: Note = note.done
+          ? { ...note, done: false, updatedAt: now }
+          : {
+              ...note,
+              active: true,
+              done: true,
+              triggerAt: undefined,
+              repeatRule: undefined,
+              repeatConfig: undefined,
+              repeat: undefined,
+              snoozedUntil: undefined,
+              scheduleStatus: undefined,
+              timezone: undefined,
+              baseAtLocal: undefined,
+              startAt: undefined,
+              nextTriggerAt: undefined,
+              lastFiredAt: undefined,
+              lastAcknowledgedAt: undefined,
+              updatedAt: now,
+            };
+
+        updatedNotes.push(updated);
+        return updated;
       }),
     );
 
@@ -250,22 +251,18 @@ const NotesScreenContent = ({
     const allDone = toUpdate.every((n) => n.done);
     showToast(allDone ? 'Marked undone' : 'Marked done', false);
 
-    // Background Sync
     notifyActionPending();
-    void (async () => {
-      try {
-        const db = await getDb();
-        for (const note of updatedNotes) {
-          await saveNoteOffline(db, note, 'update');
-        }
-        await syncNotes(db);
-        notifyActionSuccess();
-      } catch (e) {
-        console.error(e);
-        notifyActionError('Failed to update done');
-        loadNotes();
-      }
-    })();
+
+    try {
+      const db = await getDb();
+      await Promise.all(updatedNotes.map((note) => saveNoteOffline(db, note, 'update')));
+      await syncNotes(db);
+      notifyActionSuccess();
+    } catch (e) {
+      console.error(e);
+      notifyActionError('Failed to update done');
+      loadNotes();
+    }
   }, [
     clearSelection,
     loadNotes,
