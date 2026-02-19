@@ -14,7 +14,6 @@ import { checkStartupPermissions } from './src/reminders/permissions';
 import { NotesScreen } from './src/screens/NotesScreen';
 import { ThemeProvider, useTheme } from './src/theme';
 
-// Keep the splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync();
 
 import { Linking } from 'react-native';
@@ -31,11 +30,8 @@ export default function App(): JSX.Element | null {
   const [editNoteId, setEditNoteId] = useState<string | null>(null);
 
   useEffect(() => {
-    const bootstrap = async () => {
+    const runBackgroundInitialization = async () => {
       try {
-        await runMigrations();
-        await configureReminderNotifications();
-
         const permissions = await Notifications.getPermissionsAsync();
         if (!permissions.granted) {
           await Notifications.requestPermissionsAsync();
@@ -51,6 +47,18 @@ export default function App(): JSX.Element | null {
           const db = await getDb();
           await rescheduleAllActiveReminders(db);
         }
+      } catch (e) {
+        console.error('Background initialization error:', e);
+      }
+    };
+
+    const bootstrap = async () => {
+      try {
+        // Critical blocking tasks
+        await runMigrations();
+        await configureReminderNotifications();
+
+        runBackgroundInitialization();
 
         // Check for initial launch props from MainActivity
         // @ts-expect-error - RN internal API

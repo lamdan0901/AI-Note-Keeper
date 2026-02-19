@@ -119,6 +119,36 @@ class ReminderModule(reactContext: ReactApplicationContext) : ReactContextBaseJa
         }
     }
 
+    /**
+     * Show a notification immediately (no AlarmManager) using the shared
+     * NotificationHelper.  This gives the same look as offline local-alarm
+     * notifications: app icon, action buttons (Done / Delete / Reschedule),
+     * HIGH priority, and the unified "reminders" channel.
+     *
+     * Called from JS when an FCM trigger message arrives while online.
+     */
+    @ReactMethod
+    fun showNow(id: String, title: String, body: String, eventId: String) {
+        Log.d(TAG, "showNow() called: id=$id, title=$title, eventId=$eventId")
+
+        val ctx = reactApplicationContext
+
+        // ── Dedup check ────────────────────────────────────────────────
+        // The JS FCM handler does its own check, but there is a small
+        // race window where the local alarm fires between the JS check
+        // and this call.  A native ledger check closes that gap.
+        if (eventId.isNotEmpty()) {
+            if (NotificationLedgerHelper.hasNotificationBeenSent(ctx, id, eventId)) {
+                Log.d(TAG, "showNow: already sent for eventId=$eventId – skipping")
+                return
+            }
+            // Record BEFORE showing, so a concurrent ReminderReceiver sees it.
+            NotificationLedgerHelper.recordFcmNotification(ctx, id, eventId)
+        }
+
+        NotificationHelper.show(ctx, id, title, body, eventId)
+    }
+
     @ReactMethod
     fun hasExactAlarmPermission(promise: Promise) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {

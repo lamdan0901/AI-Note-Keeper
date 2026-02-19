@@ -58,6 +58,76 @@ object NotificationLedgerHelper {
     }
 
     /**
+     * Record an FCM-delivered notification in the ledger.
+     * Called from ReminderModule.showNow() so the native ReminderReceiver
+     * can see it and skip duplicate display.
+     */
+    fun recordFcmNotification(context: Context, reminderId: String, eventId: String) {
+        var db: SQLiteDatabase? = null
+        try {
+            val dbPath = context.getDatabasePath(DB_NAME)
+            db = SQLiteDatabase.openDatabase(
+                dbPath.absolutePath,
+                null,
+                SQLiteDatabase.OPEN_READWRITE
+            )
+
+            val id = UUID.randomUUID().toString()
+            val now = System.currentTimeMillis()
+
+            db.execSQL(
+                """
+                INSERT INTO notification_ledger 
+                (id, reminderId, eventId, source, sentAt, dismissed, createdAt)
+                VALUES (?, ?, ?, 'fcm', ?, 0, ?)
+                """,
+                arrayOf(id, reminderId, eventId, now, now)
+            )
+
+            Log.d(TAG, "Recorded FCM notification: reminderId=$reminderId, eventId=$eventId")
+
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to record FCM notification in ledger", e)
+        } finally {
+            db?.close()
+        }
+    }
+
+    /**
+     * Check if ANY notification (local or FCM) has already been sent for a
+     * given reminderId + eventId combo.  Used by both ReminderReceiver and
+     * ReminderModule.showNow() to prevent duplicates.
+     */
+    fun hasNotificationBeenSent(context: Context, reminderId: String, eventId: String): Boolean {
+        var db: SQLiteDatabase? = null
+        try {
+            val dbPath = context.getDatabasePath(DB_NAME)
+            db = SQLiteDatabase.openDatabase(
+                dbPath.absolutePath,
+                null,
+                SQLiteDatabase.OPEN_READONLY
+            )
+
+            val cursor = db.rawQuery(
+                "SELECT COUNT(*) FROM notification_ledger WHERE reminderId = ? AND eventId = ?",
+                arrayOf(reminderId, eventId)
+            )
+            cursor.use {
+                if (it.moveToFirst()) {
+                    val count = it.getInt(0)
+                    Log.d(TAG, "hasNotificationBeenSent: reminderId=$reminderId, eventId=$eventId, count=$count")
+                    return count > 0
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to check notification ledger", e)
+        } finally {
+            db?.close()
+        }
+        return false
+    }
+
+    /**
      * Mark a notification as dismissed in the ledger.
      * 
      * @param context Android context

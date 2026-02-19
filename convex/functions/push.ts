@@ -86,7 +86,6 @@ async function getAccessToken(serviceAccount: FirebaseServiceAccount): Promise<s
   return tokenData.access_token;
 }
 
-const NOTIFICATION_CHANNEL_ID = 'reminders';
 const MAX_PUSH_RETRIES = 2;
 
 export const sendPush = internalAction({
@@ -172,25 +171,14 @@ export const sendPush = internalAction({
             body,
           };
 
-          // For trigger messages, include a notification payload so Android
-          // auto-displays even when the app is killed or in deep Doze.
-          // Data-only messages are NOT guaranteed to wake the app on
-          // battery-optimised OEM devices (Samsung, Xiaomi, Huawei, etc.).
+          // Always send data-only messages so the app controls how the
+          // notification is displayed (icon, action buttons, channel).
+          // FCM `notification` payloads cause Android to auto-display a
+          // basic notification without our custom actions.
           const messagePayload: Record<string, unknown> = {
             data: dataPayload,
             android: {
               priority: 'high',
-              ...(isTrigger
-                ? {
-                    notification: {
-                      title,
-                      body,
-                      channel_id: NOTIFICATION_CHANNEL_ID,
-                      default_sound: true,
-                      notification_priority: 'PRIORITY_HIGH',
-                    },
-                  }
-                : {}),
             },
           };
 

@@ -1,5 +1,5 @@
 import * as Notifications from 'expo-notifications';
-import { AppState, Platform } from 'react-native';
+import { AppState, NativeModules, Platform } from 'react-native';
 import { logSyncEvent } from '../reminders/logging';
 import { getDb } from '../db/bootstrap';
 import { upsertNote, deleteNote } from '../db/notesRepo';
@@ -11,7 +11,6 @@ import {
   recordNotificationSent,
   cleanOldRecords,
 } from '../reminders/notificationLedger';
-import { REMINDER_CHANNEL_ID } from '../reminders/notifications';
 
 export type FcmRemoteMessage = {
   messageId?: string;
@@ -31,9 +30,9 @@ export type FcmRemoteMessage = {
 };
 
 /**
- * Display a notification immediately via Expo Notifications.
- * Works reliably in foreground (no AlarmManager throttling).
- * Also used as the fallback for any FCM-triggered notification.
+ * Show a notification using the native NotificationHelper (same look as
+ * offline local-alarm notifications: app icon + action buttons).
+ * Falls back to Expo Notifications if the native module is unavailable.
  */
 const showImmediateNotification = async (
   reminderId: string,
@@ -41,6 +40,16 @@ const showImmediateNotification = async (
   body: string,
   eventId?: string,
 ): Promise<void> => {
+  if (Platform.OS === 'android') {
+    const { ReminderModule } = NativeModules;
+    if (ReminderModule?.showNow) {
+      ReminderModule.showNow(reminderId, title, body, eventId ?? '');
+      logSyncEvent('info', 'fcm_native_notification_displayed', { reminderId });
+      return;
+    }
+  }
+
+  // Fallback (iOS or missing native module)
   await Notifications.scheduleNotificationAsync({
     content: {
       title,
@@ -48,9 +57,8 @@ const showImmediateNotification = async (
       data: { reminderId, eventId },
       sound: 'default',
       priority: Notifications.AndroidNotificationPriority.MAX,
-      ...(Platform.OS === 'android' ? { channelId: REMINDER_CHANNEL_ID } : {}),
     },
-    trigger: null, // immediate
+    trigger: null,
   });
   logSyncEvent('info', 'fcm_immediate_notification_displayed', { reminderId });
 };
@@ -122,15 +130,11 @@ export const handleFcmMessage = async (remoteMessage: FcmRemoteMessage): Promise
     return;
   }
 
-  // When FCM carries a `notification` payload AND the app is in the
-  // background/killed, Android has already auto-displayed it in the system
-  // tray. We only need to handle the foreground case or data-only messages.
-  if (remoteMessage.notification && AppState.currentState !== 'active') {
-    logSyncEvent('info', 'fcm_notification_handled_by_android', {
-      reminderId: remoteMessage.data?.reminderId ?? remoteMessage.data?.id,
-    });
-    return;
-  }
+  // For data-only messages (our default), Android does NOT auto-display
+  // anything.  We always need to show the notification ourselves via
+  // the handler — whether foreground, background, or killed.
+  // (The background/killed path is handled by setBackgroundMessageHandler
+  //  and the headless task, both of which call this same function.)
 
   const reminderId = remoteMessage.data?.reminderId ?? remoteMessage.data?.id;
   if (!reminderId) {
