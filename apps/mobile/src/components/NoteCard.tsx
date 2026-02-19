@@ -3,8 +3,8 @@ import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { type Note } from '../db/notesRepo';
 import { darkTheme, lightTheme, type Theme, useTheme } from '../theme';
 import { Ionicons } from '@expo/vector-icons';
-import { RepeatRule } from '../../../../packages/shared/types/reminder';
 import { createHoldInteraction, getTapDecision, HOLD_DELAY_MS } from './noteCardInteractions';
+import { formatReminder } from '../utils/formatReminder';
 
 const SELECTION_ANIMATION_DURATION_MS = 240;
 
@@ -77,22 +77,6 @@ export const NoteCard: React.FC<NoteCardProps> = ({
 
   const effectiveTriggerAt = note.snoozedUntil ?? note.nextTriggerAt ?? note.triggerAt;
 
-  const formatReminder = (timestamp: number, repeat: RepeatRule | null | undefined) => {
-    const date = new Date(timestamp);
-    const timeStr = date.toLocaleString([], {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-
-    if (repeat) {
-      return `${timeStr} 🔁`;
-    }
-    return timeStr;
-  };
-
   const selectionCardStyle = useMemo(() => {
     const scale = selectionAnim.interpolate({
       inputRange: [0, 1],
@@ -158,7 +142,7 @@ export const NoteCard: React.FC<NoteCardProps> = ({
                 <View style={styles.reminderContainer}>
                   <Ionicons name="alarm-outline" size={14} color={theme.colors.textMuted} />
                   <Text style={[styles.reminderText, isDone && styles.textDone]}>
-                    {formatReminder(effectiveTriggerAt, note.repeat)}
+                    {formatReminder(new Date(effectiveTriggerAt), note.repeat ?? null)}
                   </Text>
                 </View>
               )}

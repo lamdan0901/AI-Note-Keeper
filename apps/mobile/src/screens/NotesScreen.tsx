@@ -2,32 +2,31 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Animated,
   Easing,
-  Modal,
   Pressable,
   SafeAreaView,
   StyleSheet,
-  Text,
-  TextInput,
-  useWindowDimensions,
   View,
   ActivityIndicator,
   Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { getDb } from '../db/bootstrap';
-import { getNoteById, listNotes, Note } from '../db/notesRepo';
-import { saveNoteOffline, deleteNoteOffline } from '../notes/editor';
+import { getNoteById, Note } from '../db/notesRepo';
+import { saveNoteOffline } from '../notes/editor';
 import { syncNotes } from '../sync/noteSync';
 import { SyncProvider, useSyncState } from '../sync/syncManager';
 import { NotesList } from '../components/NotesList';
-import { SyncStatusIndicator } from '../components/SyncStatusIndicator';
-import { darkTheme, lightTheme, type Theme, useTheme } from '../theme';
-import uuid from 'react-native-uuid';
-import { ReminderSetupModal } from '../reminders/ui/ReminderSetupModal';
+import { NotesHeader } from '../components/NotesHeader';
+import { SettingsDrawer } from '../components/SettingsDrawer';
+import { BOTTOM_ACTION_BAR_HEIGHT, SelectionActionBar } from '../components/SelectionActionBar';
+import { NoteEditorModal, NoteEditorModalRef } from '../components/NoteEditorModal';
+import { Toast } from '../components/Toast';
+import { type Theme, useTheme } from '../theme';
 import { RescheduleModal } from '../reminders/ui/SnoozeModal';
+import { useNoteActions } from '../hooks/useNoteActions';
+import { useNoteSelection } from '../hooks/useNoteSelection';
+import { useToast } from '../hooks/useToast';
 import { RepeatRule } from '../../../../packages/shared/types/reminder';
-
-const BOTTOM_ACTION_BAR_HEIGHT = 80;
 
 type NotesScreenProps = {
   rescheduleNoteId?: string | null;
@@ -36,66 +35,19 @@ type NotesScreenProps = {
   onEditHandled?: () => void;
 };
 
-const themeOptions = [
-  { key: 'light', label: 'Light', description: 'Always light', icon: 'sunny-outline' },
-  { key: 'dark', label: 'Dark', description: 'Always dark', icon: 'moon-outline' },
-  {
-    key: 'auto',
-    label: 'Auto',
-    description: 'Follow system',
-    icon: 'desktop-outline',
-  },
-] as const;
-
 const NotesScreenContent = ({
   rescheduleNoteId,
   onRescheduleHandled,
   editNoteId,
   onEditHandled,
 }: NotesScreenProps) => {
-  const { theme, mode, setMode } = useTheme();
-  const { width } = useWindowDimensions();
-  const [notes, setNotes] = useState<Note[]>([]);
+  const { theme } = useTheme();
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('grid'); // Default to Bento/Grid
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [selectedNoteIds, setSelectedNoteIds] = useState<Set<string>>(new Set());
   const [drawerVisible, setDrawerVisible] = useState(false);
-
-  // Editor State
-  const [modalVisible, setModalVisible] = useState(false);
-  const [editingNote, setEditingNote] = useState<Note | null>(null);
-  const [title, setTitle] = useState('');
-  const [content, setContent] = useState('');
-  const [reminder, setReminder] = useState<Date | null>(null);
-  const [repeat, setRepeat] = useState<RepeatRule | null>(null);
-  const [isPinned, setIsPinned] = useState(false);
-  const [showReminderModal, setShowReminderModal] = useState(false);
   const [rescheduleTargetId, setRescheduleTargetId] = useState<string | null>(null);
   const [showRescheduleModal, setShowRescheduleModal] = useState(false);
-  const [toast, setToast] = useState<{ show: boolean; message: string; isError: boolean }>({
-    show: false,
-    message: '',
-    isError: false,
-  });
-
-  const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const selectionHeaderAnim = useRef(new Animated.Value(0)).current;
-  const editorTranslateY = useRef(new Animated.Value(0)).current;
-  const editorTouchStartRef = useRef<{ x: number; y: number; timeMs: number } | null>(null);
-  const editorDraggingRef = useRef(false);
   const drawerAnim = useRef(new Animated.Value(0)).current;
-
-  const selectionMode = selectedNoteIds.size > 0;
-  const drawerWidth = Math.min(320, Math.round(width * 0.82));
-  const drawerTranslateX = drawerAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [-drawerWidth, 0],
-  });
-  const drawerOverlayOpacity = drawerAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, 0.4],
-  });
+  const editorModalRef = useRef<NoteEditorModalRef>(null);
 
   const openDrawer = useCallback(() => {
     setDrawerVisible(true);
@@ -122,82 +74,48 @@ const NotesScreenContent = ({
   const { notifyActionPending, notifyActionSuccess, notifyActionError, lastSyncAt } =
     useSyncState();
 
-  const loadNotes = useCallback(async () => {
-    try {
-      const db = await getDb();
-      const loadedNotes = await listNotes(db);
-      setNotes(loadedNotes);
-    } catch (e) {
-      console.error(e);
-      Alert.alert('Error', 'Failed to load notes');
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, []);
+  const { toast, showToast } = useToast();
 
-  // Load notes on mount - SyncManager handles sync automatically
-  useEffect(() => {
-    loadNotes();
-  }, [loadNotes]);
+  const {
+    notes,
+    setNotes,
+    loading,
+    refreshing,
+    loadNotes,
+    handleRefresh,
+    saveNote: saveNoteAction,
+    performDelete,
+    handleNoteDone,
+  } = useNoteActions({
+    notifyActionPending,
+    notifyActionSuccess,
+    notifyActionError,
+    lastSyncAt,
+    showToast,
+    closeEditor: () => editorModalRef.current?.closeEditor(),
+  });
 
-  // Reload notes whenever sync completes
-  useEffect(() => {
-    if (lastSyncAt !== null) {
-      console.log('[NotesScreen] Sync completed, reloading notes');
-      loadNotes();
-    }
-  }, [lastSyncAt, loadNotes]);
+  const {
+    selectedNoteIds,
+    selectionMode,
+    selectionHeaderAnim,
+    clearSelection,
+    handleNoteLongPress,
+  } = useNoteSelection(notes);
 
-  useEffect(() => {
-    return () => {
-      if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
-    };
-  }, []);
-
-  useEffect(() => {
-    Animated.timing(selectionHeaderAnim, {
-      toValue: selectionMode ? 1 : 0,
-      duration: 240,
-      useNativeDriver: true,
-    }).start();
-  }, [selectionHeaderAnim, selectionMode]);
-
-  useEffect(() => {
-    if (selectedNoteIds.size === 0) return;
-    const currentIds = new Set(notes.map((n) => n.id));
-    setSelectedNoteIds((prev) => {
-      let changed = false;
-      const next = new Set<string>();
-      prev.forEach((id) => {
-        if (currentIds.has(id)) next.add(id);
-        else changed = true;
-      });
-      return changed ? next : prev;
-    });
-  }, [notes, selectedNoteIds.size]);
-
-  const showToast = useCallback((message: string, isError: boolean) => {
-    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
-    setToast({ show: true, message, isError });
-    toastTimeoutRef.current = setTimeout(() => {
-      setToast((prev) => (prev.show ? { ...prev, show: false } : prev));
-      toastTimeoutRef.current = null;
-    }, 1000);
-  }, []);
-
-  const clearSelection = useCallback(() => {
-    setSelectedNoteIds(new Set());
-  }, []);
-
-  const handleNoteLongPress = useCallback((noteId: string) => {
-    setSelectedNoteIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(noteId)) next.delete(noteId);
-      else next.add(noteId);
-      return next;
-    });
-  }, []);
+  const saveNote = useCallback(
+    (editorState: {
+      editingNote: Note | null;
+      title: string;
+      content: string;
+      reminder: Date | null;
+      repeat: RepeatRule | null;
+      isPinned: boolean;
+    }) => {
+      saveNoteAction(editorState);
+    },
+    [saveNoteAction],
+  );
 
   useEffect(() => {
     if (!rescheduleNoteId) return;
@@ -238,21 +156,7 @@ const NotesScreenContent = ({
           return;
         }
 
-        // Set editor state directly to avoid dependency issues
-        setEditingNote(note);
-        setTitle(note.title || '');
-        setContent(note.content || '');
-
-        const effectiveTriggerAt = note.snoozedUntil ?? note.nextTriggerAt ?? note.triggerAt;
-        if (effectiveTriggerAt) {
-          setReminder(new Date(effectiveTriggerAt));
-          setRepeat(note.repeat || null);
-        } else {
-          setReminder(null);
-          setRepeat(null);
-        }
-
-        setModalVisible(true);
+        editorModalRef.current?.openEditor(note);
       } finally {
         onEditHandled?.();
       }
@@ -265,317 +169,20 @@ const NotesScreenContent = ({
     };
   }, [editNoteId, onEditHandled]);
 
-  const handleRefresh = async () => {
-    setRefreshing(true);
-    try {
-      const db = await getDb();
-      await syncNotes(db);
-    } catch (e) {
-      console.error('Sync failed:', e);
-    }
-    loadNotes();
-  };
-
-  const handleReminderPress = () => {
-    setShowReminderModal(true);
-  };
-
-  const handleReminderSave = (date: Date, newRepeat: RepeatRule | null) => {
-    setReminder(date);
-    setRepeat(newRepeat);
-    setShowReminderModal(false);
-  };
-
-  const formatReminder = (date: Date, repeatRule: RepeatRule | null) => {
-    const timeStr = date.toLocaleString([], {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-
-    if (repeatRule) {
-      let ruleLabel: string;
-      if (repeatRule.kind === 'daily' && repeatRule.interval > 1) {
-        ruleLabel = `Every ${repeatRule.interval} days`;
-      } else if (repeatRule.kind === 'custom') {
-        const unit = repeatRule.frequency === 'minutes' ? 'min' : repeatRule.frequency;
-        ruleLabel = `Every ${repeatRule.interval} ${unit}`;
-      } else {
-        ruleLabel = repeatRule.kind.charAt(0).toUpperCase() + repeatRule.kind.slice(1);
-      }
-      return `${timeStr} (${ruleLabel})`;
-    }
-    return timeStr;
-  };
-
-  const openEditor = (note?: Note) => {
-    if (note) {
-      setEditingNote(note);
-      setTitle(note.title || '');
-      setContent(note.content || '');
-      const effectiveTriggerAt = note.snoozedUntil ?? note.nextTriggerAt ?? note.triggerAt;
-      if (effectiveTriggerAt) {
-        setReminder(new Date(effectiveTriggerAt));
-        setRepeat(note.repeat || null);
-      } else {
-        setReminder(null);
-        setRepeat(null);
-      }
-      setIsPinned(note.isPinned ?? false);
-    } else {
-      setEditingNote(null);
-      setTitle('');
-      setContent('');
-      setReminder(null);
-      setRepeat(null);
-      setIsPinned(false);
-    }
-    setModalVisible(true);
-  };
-
-  const closeEditor = useCallback(() => {
-    setModalVisible(false);
-    setEditingNote(null);
-    setTitle('');
-    setContent('');
-    setReminder(null);
-    setRepeat(null);
-    setIsPinned(false);
-  }, []);
-
-  useEffect(() => {
-    if (modalVisible) {
-      editorTranslateY.setValue(0);
-    }
-  }, [editorTranslateY, modalVisible]);
-
-  const closeEditorFromGesture = useCallback(() => {
-    Animated.timing(editorTranslateY, {
-      toValue: 600,
-      duration: 180,
-      useNativeDriver: true,
-    }).start(() => {
-      editorTranslateY.setValue(0);
-      closeEditor();
-    });
-  }, [closeEditor, editorTranslateY]);
-
-  const handleEditorTouchStart = useCallback(
-    (e: { nativeEvent: { pageX: number; pageY: number } }) => {
-      editorTouchStartRef.current = {
-        x: e.nativeEvent.pageX,
-        y: e.nativeEvent.pageY,
-        timeMs: Date.now(),
-      };
-      editorDraggingRef.current = false;
-    },
-    [],
-  );
-
-  const handleEditorTouchMove = useCallback(
-    (e: { nativeEvent: { pageX: number; pageY: number } }) => {
-      const start = editorTouchStartRef.current;
-      if (!start) return;
-      const dx = e.nativeEvent.pageX - start.x;
-      const dy = e.nativeEvent.pageY - start.y;
-      if (dy <= 0) return;
-
-      if (!editorDraggingRef.current) {
-        if (Math.abs(dy) < 12) return;
-        if (Math.abs(dy) <= Math.abs(dx)) return;
-        editorDraggingRef.current = true;
-      }
-
-      editorTranslateY.setValue(dy);
-    },
-    [editorTranslateY],
-  );
-
-  const handleEditorTouchEnd = useCallback(() => {
-    const start = editorTouchStartRef.current;
-    if (!start) return;
-    editorTouchStartRef.current = null;
-
-    if (!editorDraggingRef.current) return;
-    editorDraggingRef.current = false;
-
-    editorTranslateY.stopAnimation((value) => {
-      const dtMs = Math.max(1, Date.now() - start.timeMs);
-      const vy = value / dtMs;
-      const shouldClose = value > 140 || vy > 0.9;
-      if (shouldClose) {
-        closeEditorFromGesture();
-        return;
-      }
-      Animated.spring(editorTranslateY, { toValue: 0, useNativeDriver: true }).start();
-    });
-  }, [closeEditorFromGesture, editorTranslateY]);
-
-  const saveNote = async () => {
-    if (!title.trim() && !content.trim()) {
-      closeEditor();
-      return;
-    }
-
-    const now = Date.now();
-    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-
-    const noteToSave: Note = {
-      id: editingNote ? editingNote.id : uuid.v4().toString(),
-      title: title.trim(),
-      content: content.trim(),
-      color:
-        editingNote?.color &&
-        editingNote.color !== lightTheme.colors.surface &&
-        editingNote.color !== darkTheme.colors.surface
-          ? editingNote.color
-          : null,
-      active: true,
-      done: reminder ? false : (editingNote?.done ?? false),
-      isPinned,
-
-      // Unified Reminder Logic
-      triggerAt: reminder ? reminder.getTime() : undefined,
-      repeatRule: reminder && repeat ? 'custom' : undefined, // Legacy fallback
-      repeatConfig: reminder && repeat ? { ...repeat } : undefined, // Legacy fallback
-      repeat: reminder ? repeat : undefined, // New source of truth
-      snoozedUntil: reminder ? undefined : undefined,
-      scheduleStatus: reminder ? 'unscheduled' : undefined, // Reset to unscheduled on save needed?
-      timezone: reminder ? timezone : undefined,
-
-      createdAt: editingNote ? editingNote.createdAt : now,
-      updatedAt: now,
-    };
-
-    // Optimistic Update: Update local state immediately
-    setNotes((prev) => {
-      if (editingNote) {
-        return prev.map((n) => (n.id === noteToSave.id ? noteToSave : n));
-      } else {
-        return [noteToSave, ...prev];
-      }
-    });
-
-    // Close editor immediately
-    closeEditor();
-
-    // Background: Persist and Sync
-    notifyActionPending();
-    try {
-      const db = await getDb();
-      await saveNoteOffline(db, noteToSave, editingNote ? 'update' : 'create');
-      await syncNotes(db);
-      notifyActionSuccess();
-    } catch (e) {
-      console.error(e);
-      notifyActionError('Failed to save note');
-      // Revert or reload on error
-      loadNotes();
-    }
-  };
-
-  const performDelete = useCallback(
+  const handleSelectionAwareDelete = useCallback(
     (ids: string[]) => {
-      if (ids.length === 0) return;
-
-      if (editingNote?.id && ids.includes(editingNote.id)) closeEditor();
       if (selectionMode && ids.some((id) => selectedNoteIds.has(id))) clearSelection();
-
-      // Optimistic Update: Remove from list
-      setNotes((prev) => prev.filter((n) => !ids.includes(n.id)));
-      showToast('Deleted', false);
-
-      // Background: Persist and Sync
-      notifyActionPending();
-      void (async () => {
-        try {
-          const db = await getDb();
-          for (const id of ids) {
-            const noteToDelete = await getNoteById(db, id);
-            if (noteToDelete) {
-              await deleteNoteOffline(db, noteToDelete);
-            }
-          }
-
-          await syncNotes(db);
-          notifyActionSuccess();
-        } catch (e) {
-          console.error(e);
-          notifyActionError('Failed to delete');
-          // Revert/Reload
-          loadNotes();
-        }
-      })();
+      performDelete(ids);
     },
-    [
-      clearSelection,
-      closeEditor,
-      editingNote?.id,
-      loadNotes,
-      notifyActionError,
-      notifyActionPending,
-      notifyActionSuccess,
-      selectedNoteIds,
-      selectionMode,
-      showToast,
-    ],
+    [clearSelection, performDelete, selectedNoteIds, selectionMode],
   );
 
-  const handleDelete = () => {
+  const handleDelete = useCallback(() => {
+    const editingNote = editorModalRef.current?.getEditorState()?.editingNote;
     if (!editingNote) return;
-    performDelete([editingNote.id]);
-  };
-
-  const handleNoteDone = useCallback(
-    (noteId: string) => {
-      const note = notes.find((n) => n.id === noteId);
-      if (!note) return;
-
-      const now = Date.now();
-      const updated: Note = note.done
-        ? { ...note, done: false, updatedAt: now }
-        : {
-            ...note,
-            active: true,
-            done: true,
-            triggerAt: undefined,
-            repeatRule: undefined,
-            repeatConfig: undefined,
-            repeat: undefined,
-            snoozedUntil: undefined,
-            scheduleStatus: undefined,
-            timezone: undefined,
-            baseAtLocal: undefined,
-            startAt: undefined,
-            nextTriggerAt: undefined,
-            lastFiredAt: undefined,
-            lastAcknowledgedAt: undefined,
-            updatedAt: now,
-          };
-
-      // Optimistic Update
-      setNotes((prev) => prev.map((n) => (n.id === noteId ? updated : n)));
-      showToast(note.done ? 'Marked undone' : 'Marked done', false);
-
-      // Background Sync
-      notifyActionPending();
-      void (async () => {
-        try {
-          const db = await getDb();
-          await saveNoteOffline(db, updated, 'update');
-          await syncNotes(db);
-          notifyActionSuccess();
-        } catch (e) {
-          console.error(e);
-          notifyActionError('Failed to update done');
-          loadNotes();
-        }
-      })();
-    },
-    [loadNotes, notes, notifyActionError, notifyActionPending, notifyActionSuccess, showToast],
-  );
+    editorModalRef.current?.closeEditor();
+    handleSelectionAwareDelete([editingNote.id]);
+  }, [handleSelectionAwareDelete]);
 
   const handleNoteReschedule = useCallback((noteId: string) => {
     setRescheduleTargetId(noteId);
@@ -584,14 +191,20 @@ const NotesScreenContent = ({
 
   const handleNoteDelete = useCallback(
     (noteId: string) => {
-      performDelete([noteId]);
+      handleSelectionAwareDelete([noteId]);
     },
-    [performDelete],
+    [handleSelectionAwareDelete],
   );
 
   const handleBulkDeleteSelected = useCallback(() => {
-    performDelete(Array.from(selectedNoteIds));
-  }, [performDelete, selectedNoteIds]);
+    handleSelectionAwareDelete(Array.from(selectedNoteIds));
+  }, [handleSelectionAwareDelete, selectedNoteIds]);
+
+  const handleBulkSnoozeSelected = useCallback(() => {
+    const [id] = Array.from(selectedNoteIds);
+    if (!id) return;
+    handleNoteReschedule(id);
+  }, [handleNoteReschedule, selectedNoteIds]);
 
   const handleBulkMarkDone = useCallback(() => {
     const ids = Array.from(selectedNoteIds);
@@ -661,6 +274,7 @@ const NotesScreenContent = ({
     notifyActionPending,
     notifyActionSuccess,
     selectedNoteIds,
+    setNotes,
     showToast,
   ]);
 
@@ -669,132 +283,98 @@ const NotesScreenContent = ({
     setRescheduleTargetId(null);
   }, []);
 
+  const handleRescheduled = async (noteId: string, snoozedUntil: number) => {
+    const now = Date.now();
+
+    // 1. Optimistic Update (Immediate UI Refresh)
+    setNotes((prev) =>
+      prev.map((note) =>
+        note.id === noteId
+          ? {
+              ...note,
+              done: false,
+              snoozedUntil,
+              triggerAt: snoozedUntil,
+              nextTriggerAt: snoozedUntil,
+              scheduleStatus: 'scheduled',
+              active: true,
+              updatedAt: now,
+            }
+          : note,
+      ),
+    );
+
+    const editorState = editorModalRef.current?.getEditorState();
+    if (editorState?.editingNote?.id === noteId) {
+      const updatedNote = {
+        ...editorState.editingNote,
+        done: false,
+        snoozedUntil,
+        triggerAt: snoozedUntil,
+        nextTriggerAt: snoozedUntil,
+        scheduleStatus: 'scheduled' as const,
+        active: true,
+        updatedAt: now,
+      };
+      editorModalRef.current?.setEditingNote(updatedNote);
+      editorModalRef.current?.setReminder(new Date(snoozedUntil));
+    }
+
+    showToast('Rescheduled successfully', false);
+
+    // 2. Background Persistence & Sync
+    notifyActionPending();
+
+    try {
+      const db = await getDb();
+      const note = await getNoteById(db, noteId);
+
+      if (note) {
+        const updatedNote: Note = {
+          ...note,
+          done: false,
+          snoozedUntil,
+          triggerAt: snoozedUntil,
+          nextTriggerAt: snoozedUntil,
+          scheduleStatus: 'scheduled',
+          active: true,
+          updatedAt: now,
+        };
+
+        await saveNoteOffline(db, updatedNote, 'update');
+        await syncNotes(db);
+        notifyActionSuccess();
+
+        loadNotes();
+      }
+    } catch (e) {
+      console.error(e);
+      notifyActionError('Failed to reschedule');
+      loadNotes();
+    }
+  };
+
   const styles = useMemo(() => createStyles(theme), [theme]);
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <View style={[styles.header, selectionMode && styles.headerHidden]}>
-        <View style={styles.headerLeft}>
-          <Pressable style={styles.iconButton} onPress={openDrawer}>
-            <Ionicons name="menu" size={26} color={theme.colors.text} />
-          </Pressable>
-          <Text style={styles.headerTitle}>My Notes</Text>
-        </View>
-        <View style={styles.headerRight}>
-          <SyncStatusIndicator />
-          <Pressable
-            style={styles.iconButton}
-            onPress={() => setViewMode((prev) => (prev === 'grid' ? 'list' : 'grid'))}
-          >
-            <Ionicons
-              name={viewMode === 'grid' ? 'list' : 'grid'}
-              size={24}
-              color={theme.colors.primary}
-            />
-          </Pressable>
-        </View>
-      </View>
+      <NotesHeader
+        viewMode={viewMode}
+        selectionMode={selectionMode}
+        onMenuPress={openDrawer}
+        onViewModeToggle={() => setViewMode((prev) => (prev === 'grid' ? 'list' : 'grid'))}
+      />
 
-      <Animated.View
-        pointerEvents={drawerVisible ? 'auto' : 'none'}
-        style={[styles.drawerOverlay, { opacity: drawerOverlayOpacity }]}
-      >
-        <Pressable style={StyleSheet.absoluteFillObject} onPress={closeDrawer} />
-      </Animated.View>
+      <SettingsDrawer visible={drawerVisible} onClose={closeDrawer} drawerAnim={drawerAnim} />
 
-      <Animated.View
-        pointerEvents={drawerVisible ? 'auto' : 'none'}
-        style={[
-          styles.drawer,
-          {
-            width: drawerWidth,
-            transform: [{ translateX: drawerTranslateX }],
-          },
-        ]}
-      >
-        <View style={styles.drawerContent}>
-          <Text style={styles.drawerTitle}>AI Note Keeper</Text>
-          <View style={styles.drawerSection}>
-            <Text style={styles.drawerSectionTitle}>Settings</Text>
-            <Text style={styles.drawerSectionSubtitle}>Theme</Text>
-            <View style={styles.themeOptions}>
-              {themeOptions.map((option) => {
-                const isSelected = mode === option.key;
-                return (
-                  <Pressable
-                    key={option.key}
-                    style={[styles.themeOption, isSelected && styles.themeOptionSelected]}
-                    onPress={() => setMode(option.key)}
-                  >
-                    <View style={styles.themeOptionLeft}>
-                      <Ionicons
-                        name={option.icon}
-                        size={20}
-                        color={isSelected ? theme.colors.primary : theme.colors.textMuted}
-                      />
-                      <View>
-                        <Text style={styles.themeOptionLabel}>{option.label}</Text>
-                        <Text style={styles.themeOptionDescription}>{option.description}</Text>
-                      </View>
-                    </View>
-                    <Ionicons
-                      name={isSelected ? 'checkmark-circle' : 'ellipse-outline'}
-                      size={20}
-                      color={isSelected ? theme.colors.primary : theme.colors.textMuted}
-                    />
-                  </Pressable>
-                );
-              })}
-            </View>
-          </View>
-        </View>
-      </Animated.View>
-
-      <Animated.View
-        pointerEvents={selectionMode ? 'auto' : 'none'}
-        style={[
-          styles.bottomActionBar,
-          {
-            transform: [
-              {
-                translateY: selectionHeaderAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [BOTTOM_ACTION_BAR_HEIGHT, 0],
-                }),
-              },
-            ],
-          },
-        ]}
-      >
-        <View style={styles.bottomActionBarContent}>
-          <Pressable style={styles.bottomActionButton} onPress={clearSelection}>
-            <Ionicons name="close" size={24} color={theme.colors.text} />
-            <Text style={styles.bottomActionText}>Cancel</Text>
-          </Pressable>
-          <View style={styles.bottomActionSpacer} />
-          <Pressable style={styles.bottomActionButton} onPress={handleBulkMarkDone}>
-            <Ionicons name="checkmark-circle-outline" size={24} color={theme.colors.primary} />
-            <Text style={styles.bottomActionText}>Done</Text>
-          </Pressable>
-          {selectedNoteIds.size === 1 && (
-            <Pressable
-              style={styles.bottomActionButton}
-              onPress={() => {
-                const id = Array.from(selectedNoteIds)[0];
-                handleNoteReschedule(id);
-              }}
-            >
-              <Ionicons name="time-outline" size={24} color={theme.colors.text} />
-              <Text style={styles.bottomActionText}>Snooze</Text>
-            </Pressable>
-          )}
-          <Pressable style={styles.bottomActionButton} onPress={handleBulkDeleteSelected}>
-            <Ionicons name="trash-outline" size={24} color={theme.colors.error} />
-            <Text style={styles.bottomActionText}>Delete</Text>
-          </Pressable>
-        </View>
-      </Animated.View>
+      <SelectionActionBar
+        selectionHeaderAnim={selectionHeaderAnim}
+        selectedCount={selectedNoteIds.size}
+        onCancel={clearSelection}
+        onMarkDone={handleBulkMarkDone}
+        onSnooze={handleBulkSnoozeSelected}
+        onDelete={handleBulkDeleteSelected}
+      />
 
       {/* Content */}
       {loading ? (
@@ -810,7 +390,10 @@ const NotesScreenContent = ({
           <NotesList
             notes={notes}
             viewMode={viewMode}
-            onNotePress={(id) => openEditor(notes.find((n) => n.id === id))}
+            onNotePress={(id) => {
+              const note = notes.find((n) => n.id === id);
+              editorModalRef.current?.openEditor(note);
+            }}
             onNoteLongPress={handleNoteLongPress}
             selectionMode={selectionMode}
             selectedNoteIds={selectedNoteIds}
@@ -839,116 +422,12 @@ const NotesScreenContent = ({
           },
         ]}
       >
-        <Pressable style={styles.fab} onPress={() => openEditor()}>
+        <Pressable style={styles.fab} onPress={() => editorModalRef.current?.openEditor()}>
           <Ionicons name="add" size={32} color="white" />
         </Pressable>
       </Animated.View>
 
-      {/* Editor Modal */}
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={modalVisible}
-        onRequestClose={closeEditor}
-      >
-        <View style={styles.modalOverlay}>
-          <Pressable style={StyleSheet.absoluteFillObject} onPress={closeEditor} />
-          <Animated.View
-            style={[
-              styles.modalContent,
-              {
-                transform: [{ translateY: editorTranslateY }],
-              },
-            ]}
-            onTouchStart={handleEditorTouchStart}
-            onTouchMove={handleEditorTouchMove}
-            onTouchEnd={handleEditorTouchEnd}
-            onTouchCancel={handleEditorTouchEnd}
-          >
-            <View style={styles.sheetHandleHitArea}>
-              <View style={styles.sheetHandle} />
-            </View>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{editingNote ? 'Edit Note' : 'New Note'}</Text>
-
-              <View style={styles.headerRight}>
-                {reminder && (
-                  <Pressable onPress={handleReminderPress}>
-                    <View style={styles.headerChip}>
-                      <Text style={styles.headerChipText}>{formatReminder(reminder, repeat)}</Text>
-                      <Pressable
-                        onPress={(e) => {
-                          e.stopPropagation();
-                          setReminder(null);
-                          setRepeat(null);
-                        }}
-                        hitSlop={8}
-                      >
-                        <Ionicons name="close-circle" size={16} color={theme.colors.text} />
-                      </Pressable>
-                    </View>
-                  </Pressable>
-                )}
-                {!reminder && (
-                  <Pressable style={styles.iconButton} onPress={handleReminderPress}>
-                    <Ionicons name={'alarm-outline'} size={24} color={theme.colors.text} />
-                  </Pressable>
-                )}
-                <Pressable style={styles.iconButton} onPress={() => setIsPinned(!isPinned)}>
-                  <Ionicons
-                    name={isPinned ? 'push' : 'push-outline'}
-                    size={24}
-                    color={isPinned ? theme.colors.primary : theme.colors.text}
-                  />
-                </Pressable>
-              </View>
-            </View>
-
-            <TextInput
-              style={styles.inputTitle}
-              placeholder="Title"
-              multiline
-              value={title}
-              onChangeText={setTitle}
-              placeholderTextColor={theme.colors.textMuted}
-            />
-            <TextInput
-              style={styles.inputContent}
-              placeholder="Description"
-              value={content}
-              onChangeText={setContent}
-              multiline
-              textAlignVertical="top"
-              placeholderTextColor={theme.colors.textMuted}
-            />
-
-            <View style={styles.modalActions}>
-              {editingNote && (
-                <Pressable style={[styles.button, styles.buttonDelete]} onPress={handleDelete}>
-                  <Ionicons name="trash-outline" size={20} color={theme.colors.error} />
-                </Pressable>
-              )}
-              <View style={{ flex: 1 }} />
-              <Pressable style={[styles.button, styles.buttonCancel]} onPress={closeEditor}>
-                <Text style={styles.buttonTextCancel}>Cancel</Text>
-              </Pressable>
-              <Pressable style={[styles.button, styles.buttonSave]} onPress={saveNote}>
-                <Text style={styles.buttonTextSave}>Save</Text>
-              </Pressable>
-            </View>
-
-            {showReminderModal && (
-              <ReminderSetupModal
-                visible={showReminderModal}
-                initialDate={reminder}
-                initialRepeat={repeat}
-                onClose={() => setShowReminderModal(false)}
-                onSave={handleReminderSave}
-              />
-            )}
-          </Animated.View>
-        </View>
-      </Modal>
+      <NoteEditorModal ref={editorModalRef} onSave={saveNote} onDelete={handleDelete} />
 
       {rescheduleTargetId && (
         <RescheduleModal
@@ -956,90 +435,23 @@ const NotesScreenContent = ({
           noteId={rescheduleTargetId}
           onClose={closeReschedule}
           onSaveStart={closeReschedule}
-          onRescheduled={(noteId, snoozedUntil) => {
-            const now = Date.now();
-
-            // 1. Optimistic Update (Immediate UI Refresh)
-            setNotes((prev) =>
-              prev.map((note) =>
-                note.id === noteId
-                  ? {
-                      ...note,
-                      done: false,
-                      snoozedUntil,
-                      triggerAt: snoozedUntil,
-                      nextTriggerAt: snoozedUntil,
-                      scheduleStatus: 'scheduled',
-                      active: true,
-                      updatedAt: now,
-                    }
-                  : note,
-              ),
-            );
-
-            if (editingNote?.id === noteId) {
-              setEditingNote({
-                ...editingNote,
-                done: false,
-                snoozedUntil,
-                triggerAt: snoozedUntil,
-                nextTriggerAt: snoozedUntil,
-                scheduleStatus: 'scheduled',
-                active: true,
-                updatedAt: now,
-              });
-              setReminder(new Date(snoozedUntil));
-            }
-
-            showToast('Rescheduled successfully', false);
-
-            // 2. Background Persistence & Sync
-            notifyActionPending();
-            void (async () => {
-              try {
-                const db = await getDb();
-                const note = await getNoteById(db, noteId);
-
-                if (note) {
-                  const updatedNote: Note = {
-                    ...note,
-                    done: false,
-                    snoozedUntil,
-                    triggerAt: snoozedUntil,
-                    nextTriggerAt: snoozedUntil,
-                    scheduleStatus: 'scheduled',
-                    active: true,
-                    updatedAt: now,
-                  };
-
-                  await saveNoteOffline(db, updatedNote, 'update');
-                  await syncNotes(db);
-                  notifyActionSuccess();
-
-                  // Reload to ensure all derived state is correct
-                  await loadNotes();
-                }
-              } catch (e) {
-                console.error(e);
-                notifyActionError('Failed to reschedule');
-                loadNotes();
-              }
-            })();
-          }}
+          onRescheduled={handleRescheduled}
           onError={() => {
             showToast('Failed to reschedule', true);
           }}
         />
       )}
 
-      {toast.show && (
-        <View style={styles.toastContainer} pointerEvents="none">
-          <View style={[styles.toast, toast.isError && styles.toastError]}>
-            <Text style={styles.toastText}>{toast.message}</Text>
-          </View>
-        </View>
-      )}
+      <Toast visible={toast.show} message={toast.message} isError={toast.isError} />
     </SafeAreaView>
+  );
+};
+
+export const NotesScreen = (props: NotesScreenProps) => {
+  return (
+    <SyncProvider>
+      <NotesScreenContent {...props} />
+    </SyncProvider>
   );
 };
 
@@ -1048,148 +460,6 @@ const createStyles = (theme: Theme) =>
     container: {
       flex: 1,
       backgroundColor: theme.colors.background,
-    },
-    header: {
-      padding: theme.spacing.md,
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      backgroundColor: theme.colors.surface,
-      borderBottomWidth: 1,
-      borderBottomColor: theme.colors.border,
-    },
-    headerLeft: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-      flex: 1,
-    },
-    headerTitle: {
-      fontSize: theme.typography.sizes.xl,
-      fontWeight: theme.typography.weights.bold as '700',
-      color: theme.colors.text,
-      fontFamily: theme.typography.fontFamily,
-    },
-    headerRight: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 4,
-    },
-    iconButton: {
-      padding: theme.spacing.xs,
-    },
-    headerHidden: {
-      opacity: 0,
-    },
-    drawerOverlay: {
-      ...StyleSheet.absoluteFillObject,
-      backgroundColor: '#000000',
-      zIndex: 1200,
-    },
-    drawer: {
-      position: 'absolute',
-      left: 0,
-      top: 0,
-      bottom: 0,
-      backgroundColor: theme.colors.surface,
-      borderRightWidth: 1,
-      borderRightColor: theme.colors.border,
-      zIndex: 1300,
-      paddingTop: theme.spacing.lg,
-    },
-    drawerContent: {
-      flex: 1,
-      paddingHorizontal: theme.spacing.lg,
-      gap: theme.spacing.lg,
-    },
-    drawerTitle: {
-      fontSize: theme.typography.sizes.lg,
-      fontWeight: theme.typography.weights.bold as '700',
-      color: theme.colors.text,
-    },
-    drawerSection: {
-      gap: theme.spacing.sm,
-    },
-    drawerSectionTitle: {
-      fontSize: theme.typography.sizes.sm,
-      color: theme.colors.textMuted,
-      fontWeight: '600',
-      textTransform: 'uppercase',
-      letterSpacing: 0.6,
-    },
-    drawerSectionSubtitle: {
-      fontSize: theme.typography.sizes.base,
-      color: theme.colors.text,
-      fontWeight: '600',
-    },
-    themeOptions: {
-      gap: theme.spacing.sm,
-    },
-    themeOption: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      padding: theme.spacing.sm,
-      borderRadius: theme.borderRadius.md,
-      borderWidth: 1,
-      borderColor: theme.colors.border,
-      backgroundColor: theme.colors.background,
-    },
-    themeOptionSelected: {
-      borderColor: theme.colors.primary,
-      backgroundColor: theme.colors.surface,
-    },
-    themeOptionLeft: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: theme.spacing.sm,
-    },
-    themeOptionLabel: {
-      fontSize: theme.typography.sizes.base,
-      color: theme.colors.text,
-      fontWeight: '600',
-    },
-    themeOptionDescription: {
-      fontSize: theme.typography.sizes.xs,
-      color: theme.colors.textMuted,
-    },
-    bottomActionBar: {
-      position: 'absolute',
-      bottom: 0,
-      left: 0,
-      right: 0,
-      height: BOTTOM_ACTION_BAR_HEIGHT,
-      backgroundColor: theme.colors.surface,
-      borderTopWidth: 1,
-      borderTopColor: theme.colors.border,
-      paddingHorizontal: theme.spacing.xl, // Increase padding for spacing
-      elevation: 20,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: -2 },
-      shadowOpacity: 0.1,
-      shadowRadius: 4,
-      justifyContent: 'center',
-      zIndex: 1000,
-    },
-    bottomActionBarContent: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      height: '100%',
-    },
-    bottomActionButton: {
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 4,
-      minWidth: 60,
-    },
-    bottomActionText: {
-      fontSize: 10,
-      color: theme.colors.text,
-      fontWeight: '500',
-    },
-    bottomActionSpacer: {
-      flex: 1,
     },
     centered: {
       flex: 1,
@@ -1214,137 +484,4 @@ const createStyles = (theme: Theme) =>
       alignItems: 'center',
       ...theme.shadows.md,
     },
-    // Modal Styles
-    modalOverlay: {
-      flex: 1,
-      backgroundColor: 'rgba(0,0,0,0.5)',
-      justifyContent: 'flex-end',
-    },
-    modalContent: {
-      backgroundColor: theme.colors.surface,
-      borderTopLeftRadius: theme.borderRadius.xl,
-      borderTopRightRadius: theme.borderRadius.xl,
-      padding: theme.spacing.lg,
-      height: '80%',
-      ...theme.shadows.md,
-    },
-    sheetHandleHitArea: {
-      alignSelf: 'stretch',
-      alignItems: 'center',
-      paddingBottom: theme.spacing.md,
-      paddingTop: theme.spacing.xs,
-    },
-    sheetHandle: {
-      width: 44,
-      height: 5,
-      borderRadius: 3,
-      backgroundColor: theme.colors.border,
-    },
-    modalHeader: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginBottom: theme.spacing.lg,
-    },
-    modalTitle: {
-      fontSize: theme.typography.sizes.lg,
-      fontWeight: theme.typography.weights.bold as '700',
-      color: theme.colors.text,
-    },
-    inputTitle: {
-      fontSize: theme.typography.sizes.xl,
-      fontWeight: theme.typography.weights.semibold as '600',
-      color: theme.colors.text,
-      marginBottom: theme.spacing.md,
-      padding: theme.spacing.sm,
-    },
-    inputContent: {
-      fontSize: theme.typography.sizes.base,
-      color: theme.colors.text,
-      flex: 1,
-      padding: theme.spacing.sm,
-    },
-    modalActions: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      marginTop: theme.spacing.md,
-      gap: theme.spacing.md,
-    },
-    button: {
-      paddingVertical: theme.spacing.sm,
-      paddingHorizontal: theme.spacing.lg,
-      borderRadius: theme.borderRadius.md,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    buttonSave: {
-      backgroundColor: theme.colors.primary,
-    },
-    buttonCancel: {
-      backgroundColor: theme.colors.surface,
-      borderWidth: 1,
-      borderColor: theme.colors.border,
-    },
-    buttonDelete: {
-      backgroundColor: '#fee2e2',
-      paddingHorizontal: theme.spacing.md,
-    },
-    buttonTextSave: {
-      color: 'white',
-      fontWeight: '600',
-    },
-    buttonTextCancel: {
-      color: theme.colors.text,
-      fontWeight: '600',
-    },
-    toastContainer: {
-      position: 'absolute',
-      bottom: 50,
-      left: 0,
-      right: 0,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    toast: {
-      backgroundColor: '#333333',
-      paddingHorizontal: 20,
-      paddingVertical: 12,
-      borderRadius: 24,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.25,
-      shadowRadius: 3.84,
-      elevation: 5,
-    },
-    toastError: {
-      backgroundColor: theme.colors.error,
-    },
-    toastText: {
-      color: '#FFFFFF',
-      fontSize: 14,
-      fontWeight: '500',
-    },
-    headerChip: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: theme.colors.border,
-      paddingHorizontal: 8,
-      paddingVertical: 4,
-      borderRadius: theme.borderRadius.sm,
-      gap: 4,
-    },
-    headerChipText: {
-      fontSize: 12,
-      color: theme.colors.textMuted,
-      fontWeight: '500',
-    },
   });
-
-// Wrapper component that provides SyncProvider context
-export const NotesScreen = (props: NotesScreenProps) => {
-  return (
-    <SyncProvider>
-      <NotesScreenContent {...props} />
-    </SyncProvider>
-  );
-};
