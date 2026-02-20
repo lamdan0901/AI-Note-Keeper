@@ -1,5 +1,16 @@
 import React, { forwardRef, useImperativeHandle, useMemo } from 'react';
-import { Modal, Pressable, StyleSheet, Text, TextInput, View, Animated } from 'react-native';
+import {
+  Modal,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+  Animated,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { ReminderSetupModal } from '../reminders/ui/ReminderSetupModal';
 import { type Note } from '../db/notesRepo';
@@ -56,6 +67,7 @@ export const NoteEditorModal = forwardRef<NoteEditorModalRef, NoteEditorModalPro
       color,
       showReminderModal,
       editorTranslateY,
+      editorHeightAnim,
       openEditor,
       closeEditor,
       handleReminderPress,
@@ -111,6 +123,16 @@ export const NoteEditorModal = forwardRef<NoteEditorModalRef, NoteEditorModalPro
     const textColor = useWhiteText ? '#ffffff' : theme.colors.text;
     const mutedTextColor = useWhiteText ? 'rgba(255, 255, 255, 0.8)' : theme.colors.textMuted;
 
+    const animatedHeight = editorHeightAnim.interpolate({
+      inputRange: [0, 1],
+      outputRange: ['80%', '100%'],
+    });
+
+    const animatedRadius = editorHeightAnim.interpolate({
+      inputRange: [0, 1],
+      outputRange: [theme.borderRadius.xl, 0],
+    });
+
     return (
       <Modal
         animationType="slide"
@@ -126,6 +148,9 @@ export const NoteEditorModal = forwardRef<NoteEditorModalRef, NoteEditorModalPro
               {
                 backgroundColor: modalBackgroundColor,
                 transform: [{ translateY: editorTranslateY }],
+                height: animatedHeight,
+                borderTopLeftRadius: animatedRadius,
+                borderTopRightRadius: animatedRadius,
               },
             ]}
             onTouchStart={handleEditorTouchStart}
@@ -176,23 +201,34 @@ export const NoteEditorModal = forwardRef<NoteEditorModalRef, NoteEditorModalPro
               </View>
             </View>
 
-            <TextInput
-              style={[styles.inputTitle, { color: textColor }]}
-              placeholder="Title"
-              multiline
-              value={title}
-              onChangeText={setTitle}
-              placeholderTextColor={mutedTextColor}
-            />
-            <TextInput
-              style={[styles.inputContent, { color: textColor }]}
-              placeholder="Description"
-              value={content}
-              onChangeText={setContent}
-              multiline
-              textAlignVertical="top"
-              placeholderTextColor={mutedTextColor}
-            />
+            <KeyboardAvoidingView
+              behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+              style={styles.keyboardAvoidingView}
+            >
+              <ScrollView
+                style={styles.inputScrollView}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+              >
+                <TextInput
+                  style={[styles.inputTitle, { color: textColor }]}
+                  placeholder="Title"
+                  multiline
+                  value={title}
+                  onChangeText={setTitle}
+                  placeholderTextColor={mutedTextColor}
+                />
+                <TextInput
+                  style={[styles.inputContent, { color: textColor }]}
+                  placeholder="Description"
+                  value={content}
+                  onChangeText={setContent}
+                  multiline
+                  textAlignVertical="top"
+                  placeholderTextColor={mutedTextColor}
+                />
+              </ScrollView>
+            </KeyboardAvoidingView>
 
             <View style={styles.colorSection}>
               <Text style={[styles.sectionLabel, { color: mutedTextColor }]}>Background Color</Text>
@@ -203,6 +239,8 @@ export const NoteEditorModal = forwardRef<NoteEditorModalRef, NoteEditorModalPro
                 isDark={resolvedMode === 'dark'}
               />
             </View>
+
+            <View style={styles.actionSeparator} />
 
             <View style={styles.modalActions}>
               {editingNote && (
@@ -244,10 +282,7 @@ const createStyles = (theme: Theme) =>
     },
     modalContent: {
       backgroundColor: theme.colors.surface,
-      borderTopLeftRadius: theme.borderRadius.xl,
-      borderTopRightRadius: theme.borderRadius.xl,
       padding: theme.spacing.lg,
-      height: '80%',
       ...theme.shadows.md,
     },
     sheetHandleHitArea: {
@@ -288,15 +323,25 @@ const createStyles = (theme: Theme) =>
       marginBottom: theme.spacing.md,
       padding: theme.spacing.sm,
     },
+    keyboardAvoidingView: {
+      flex: 1,
+    },
+    inputScrollView: {
+      flex: 1,
+    },
     inputContent: {
       fontSize: theme.typography.sizes.base,
       color: theme.colors.text,
-      flex: 1,
+      minHeight: 100,
       padding: theme.spacing.sm,
     },
     colorSection: {
-      marginTop: theme.spacing.md,
       paddingVertical: theme.spacing.sm,
+    },
+    actionSeparator: {
+      height: 1,
+      backgroundColor: theme.colors.border,
+      marginVertical: theme.spacing.xs,
     },
     sectionLabel: {
       fontSize: theme.typography.sizes.sm,

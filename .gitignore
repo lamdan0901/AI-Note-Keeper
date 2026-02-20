@@ -18,3 +18,4 @@ apps/mobile/google-services.json
 .expo 
 build
 .env.local
+google-services.json

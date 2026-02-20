@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Animated } from 'react-native';
+import { Animated, Keyboard, Platform } from 'react-native';
 import { type Note } from '../db/notesRepo';
 import { RepeatRule } from '../../../../packages/shared/types/reminder';
 
@@ -16,6 +16,7 @@ type UseNoteEditorResult = {
   color: string | null;
   showReminderModal: boolean;
   editorTranslateY: Animated.Value;
+  editorHeightAnim: Animated.Value;
   openEditor: (note?: Note) => void;
   closeEditor: () => void;
   closeEditorFromGesture: () => void;
@@ -46,6 +47,7 @@ export const useNoteEditor = (): UseNoteEditorResult => {
   const [showReminderModal, setShowReminderModal] = useState(false);
 
   const editorTranslateY = useRef(new Animated.Value(0)).current;
+  const editorHeightAnim = useRef(new Animated.Value(0)).current;
   const editorTouchStartRef = useRef<EditorTouchStart>(null);
   const editorDraggingRef = useRef(false);
 
@@ -100,8 +102,35 @@ export const useNoteEditor = (): UseNoteEditorResult => {
   useEffect(() => {
     if (modalVisible) {
       editorTranslateY.setValue(0);
+      editorHeightAnim.setValue(0);
     }
-  }, [editorTranslateY, modalVisible]);
+  }, [editorTranslateY, editorHeightAnim, modalVisible]);
+
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const showSubscription = Keyboard.addListener(showEvent, () => {
+      Animated.timing(editorHeightAnim, {
+        toValue: 1,
+        duration: 250,
+        useNativeDriver: false,
+      }).start();
+    });
+
+    const hideSubscription = Keyboard.addListener(hideEvent, () => {
+      Animated.timing(editorHeightAnim, {
+        toValue: 0,
+        duration: 250,
+        useNativeDriver: false,
+      }).start();
+    });
+
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, [editorHeightAnim]);
 
   const closeEditorFromGesture = useCallback(() => {
     Animated.timing(editorTranslateY, {
@@ -176,6 +205,7 @@ export const useNoteEditor = (): UseNoteEditorResult => {
     color,
     showReminderModal,
     editorTranslateY,
+    editorHeightAnim,
     openEditor,
     closeEditor,
     closeEditorFromGesture,

@@ -34,18 +34,27 @@ export const ReminderSetupModal: React.FC<ReminderSetupModalProps> = ({
 
   useEffect(() => {
     if (visible) {
-      setNow(new Date());
-      const start = initialDate || new Date();
-      // If passing a past date (editing), fine. If new, maybe round to next hour?
-      // For now just use what's passed or now.
-      if (start.getTime() < Date.now() && !initialDate) {
-        // Default to next hour if creating fresh?
-        const nextHour = new Date();
-        nextHour.setHours(nextHour.getHours() + 1, 0, 0, 0);
-        setTriggerDate(nextHour);
-      } else {
-        setTriggerDate(start);
+      const nowTime = new Date();
+      setNow(nowTime);
+
+      let start = initialDate || new Date();
+
+      // If the date is in the past (either new or editing an old reminder), auto-update it
+      if (start.getTime() < nowTime.getTime()) {
+        const nextHour = new Date(nowTime);
+
+        // If it's 10:00 PM (22:00) or later, default to tomorrow at 7:00 AM
+        if (nowTime.getHours() >= 22) {
+          nextHour.setDate(nextHour.getDate() + 1);
+          nextHour.setHours(7, 0, 0, 0);
+        } else {
+          // Otherwise, default to the next hour today
+          nextHour.setHours(nextHour.getHours() + 1, 0, 0, 0);
+        }
+        start = nextHour;
       }
+
+      setTriggerDate(start);
       setRepeat(initialRepeat || null);
     }
   }, [visible, initialDate, initialRepeat]);
@@ -142,6 +151,7 @@ export const ReminderSetupModal: React.FC<ReminderSetupModalProps> = ({
                     display="spinner" // or compact
                     themeVariant={resolvedMode}
                     onChange={handleDateChange}
+                    minimumDate={new Date()}
                     style={{ height: 120 }} // Constrain height
                   />
                 </View>
@@ -200,6 +210,7 @@ export const ReminderSetupModal: React.FC<ReminderSetupModalProps> = ({
           display="default"
           themeVariant={resolvedMode}
           onChange={handleDateChange}
+          minimumDate={new Date()}
         />
       )}
     </Modal>
