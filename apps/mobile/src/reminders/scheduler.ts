@@ -105,7 +105,7 @@ export const scheduleReminderNotification = async (
       // BUT `rescheduleReminderWithLedger` seems to manage state.
       // For now, schedule the ONE provided instance.
 
-      const triggerTime = reminder.snoozedUntil ?? reminder.triggerAt;
+      const triggerTime = reminder.snoozedUntil ?? reminder.nextTriggerAt ?? reminder.triggerAt;
       const now = Date.now();
 
       if (triggerTime > now) {

@@ -222,8 +222,8 @@ export const checkAndTriggerReminders = internalAction({
       console.log(`[Cron] Triggering reminder for note ${note.id}`);
 
       try {
-        // Use the same eventId format as local alarms for deduplication
-        // Local alarm uses: `${reminderId}-${triggerTime}`
+        // Use the same eventId format as local alarms for deduplication.
+        // Both sides resolve: snoozedUntil ?? nextTriggerAt ?? triggerAt
         const triggerTime = note.snoozedUntil ?? note.nextTriggerAt ?? note.triggerAt ?? now;
         const eventId = `${note.id}-${triggerTime}`;
 
