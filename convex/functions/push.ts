@@ -1,7 +1,7 @@
 'use node';
 import { internalAction } from '../_generated/server';
 import { v } from 'convex/values';
-import { api } from '../_generated/api';
+import { api, internal } from '../_generated/api';
 import { createSign } from 'crypto';
 
 interface FirebaseServiceAccount {
@@ -140,8 +140,10 @@ export const sendPush = internalAction({
       reminderId,
     });
 
-    const title = note?.title || 'Reminder';
-    const body = note?.content || note?.title || 'You have a reminder';
+    const noteTitle = (note?.title ?? '').trim();
+    const noteContent = (note?.content ?? '').trim();
+    const title = noteTitle || noteContent || 'Reminder';
+    const body = noteTitle && noteContent ? noteContent : '';
 
     console.log(`[Push] Notification: "${title}" - "${body}"`);
 

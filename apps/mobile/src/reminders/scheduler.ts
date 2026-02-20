@@ -1,13 +1,11 @@
 import * as Notifications from 'expo-notifications';
-import { NativeModules, Platform, Alert } from 'react-native';
-import NetInfo from '@react-native-community/netinfo';
+import { NativeModules, Platform } from 'react-native';
 import type { Reminder } from '../../../../packages/shared/types/reminder';
 import { logSyncEvent } from './logging';
 import { logScheduleEvent } from './logging';
 import { getScheduleState, upsertScheduleState } from './scheduleLedger';
 import { DbLike, getNoteScheduleState, upsertNoteScheduleState } from './noteScheduleLedger';
 import { computeScheduleHash } from './scheduleHash';
-import { recordNotificationSent } from './notificationLedger';
 
 type NotificationTextOverride = {
   title?: string | null;
@@ -78,7 +76,6 @@ const buildNotificationText = (
 export const scheduleReminderNotification = async (
   reminder: Reminder,
   notification?: NotificationTextOverride,
-  db?: DbLike,
 ): Promise<string[]> => {
   console.log('[Scheduler] scheduleReminderNotification called:', {
     id: reminder.id,
@@ -114,55 +111,15 @@ export const scheduleReminderNotification = async (
       if (triggerTime > now) {
         const hasPermission = await ReminderModule.hasExactAlarmPermission();
         if (!hasPermission) {
-          Alert.alert(
-            'Permission Required',
-            'Exact alarm permission is needed for reliable offine reminders. Please grant it in the following screen.',
-            [
-              {
-                text: 'Cancel',
-                style: 'cancel',
-                onPress: () => {
-                  logSyncEvent('warn', 'local_notification_skipped_user_cancelled', {
-                    reminderId: reminder.id,
-                    reason: 'user_declined_exact_alarm_permission',
-                  });
-                },
-              },
-              {
-                text: 'Open Settings',
-                onPress: () => {
-                  ReminderModule.openExactAlarmSettings();
-                  logSyncEvent('warn', 'local_notification_skipped_awaiting_permission', {
-                    reminderId: reminder.id,
-                    reason: 'opened_settings_for_permission',
-                  });
-                },
-              },
-            ],
-          );
-
-          // We return empty here because we can't schedule yet.
-          // The user needs to retry (e.g. edit/save note again) after granting.
-          return [];
+          // Permission prompt is handled at startup by checkStartupPermissions().
+          // Just log here and fall through — native module uses inexact alarm as fallback.
+          logSyncEvent('warn', 'scheduling_without_exact_alarm_permission', {
+            reminderId: reminder.id,
+          });
         }
 
         // Generate unique event ID for deduplication
         const eventId = `${reminder.id}-${triggerTime}`;
-
-        // Check network connectivity
-        const netState = await NetInfo.fetch();
-        const isOnline = netState.isConnected === true && netState.isInternetReachable === true;
-
-        if (isOnline) {
-          // When online, the server-side cron + FCM push handles
-          // notification delivery.  Don't schedule a local AlarmManager
-          // alarm – it would cause a duplicate notification.
-          logSyncEvent('info', 'local_alarm_skipped_online', {
-            reminderId: reminder.id,
-            eventId,
-          });
-          return [];
-        }
 
         const { title, body } = buildNotificationText(reminder, notification);
 
@@ -174,27 +131,6 @@ export const scheduleReminderNotification = async (
           body,
           eventId, // Pass eventId to native module
         );
-
-        // Record in notification ledger if we have db access
-        // Note: We record as 'local' because this is scheduled via AlarmManager
-        // Even if online, FCM might also send - that's why we need deduplication
-        if (db) {
-          try {
-            await recordNotificationSent(db, reminder.id, eventId, 'local', triggerTime);
-            logScheduleEvent('info', 'notification_ledger_recorded', {
-              reminderId: reminder.id,
-              eventId,
-              source: 'local',
-              isOnline,
-            });
-          } catch (error) {
-            // Don't fail scheduling if ledger recording fails
-            logScheduleEvent('warn', 'notification_ledger_record_failed', {
-              reminderId: reminder.id,
-              error: String(error),
-            });
-          }
-        }
 
         logSyncEvent('info', 'local_notification_scheduled_native', {
           reminderId: reminder.id,
@@ -272,7 +208,7 @@ export const rescheduleReminderWithLedger = async (
   }
 
   try {
-    const notificationIds = await scheduleReminderNotification(reminder, undefined, db);
+    const notificationIds = await scheduleReminderNotification(reminder);
 
     await upsertScheduleState(db, {
       reminderId: reminder.id,
@@ -348,7 +284,7 @@ export const rescheduleNoteWithLedger = async (
   }
 
   try {
-    const notificationIds = await scheduleReminderNotification(reminder, undefined, db);
+    const notificationIds = await scheduleReminderNotification(reminder);
 
     await upsertNoteScheduleState(db, {
       noteId: reminder.id,

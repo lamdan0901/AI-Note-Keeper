@@ -19,7 +19,6 @@ SplashScreen.preventAutoHideAsync();
 import { Linking } from 'react-native';
 import { rescheduleAllActiveReminders } from './src/reminders/scheduler';
 import { getDb } from './src/db/bootstrap';
-import NetInfo from '@react-native-community/netinfo';
 
 const convexUrl = process.env.EXPO_PUBLIC_CONVEX_URL;
 const convexClient = convexUrl ? new ConvexReactClient(convexUrl) : null;
@@ -39,14 +38,8 @@ export default function App(): JSX.Element | null {
         await checkStartupPermissions();
         await registerDevicePushToken();
 
-        // Only schedule local alarms when the device is offline.
-        // When online, the server cron + FCM push path handles delivery.
-        const netState = await NetInfo.fetch();
-        const isOnline = netState.isConnected === true && netState.isInternetReachable === true;
-        if (!isOnline) {
-          const db = await getDb();
-          await rescheduleAllActiveReminders(db);
-        }
+        const db = await getDb();
+        await rescheduleAllActiveReminders(db);
       } catch (e) {
         console.error('Background initialization error:', e);
       }

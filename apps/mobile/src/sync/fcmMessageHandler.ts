@@ -7,7 +7,7 @@ import { fetchReminder } from './fetchReminder';
 import { cancelNoteWithLedger } from '../reminders/scheduler';
 import { Note } from '../db/notesRepo';
 import {
-  hasLocalNotificationSent,
+  hasNotificationSent,
   recordNotificationSent,
   cleanOldRecords,
 } from '../reminders/notificationLedger';
@@ -162,7 +162,7 @@ export const handleFcmMessage = async (remoteMessage: FcmRemoteMessage): Promise
     if (eventId) {
       try {
         const db = await getDb();
-        const alreadySent = await hasLocalNotificationSent(db, reminderId, eventId);
+        const alreadySent = await hasNotificationSent(db, reminderId, eventId);
 
         if (alreadySent) {
           logSyncEvent('info', 'fcm_trigger_suppressed_duplicate', {
