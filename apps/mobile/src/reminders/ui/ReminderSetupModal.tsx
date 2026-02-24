@@ -1,11 +1,30 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { Modal, View, Text, StyleSheet, Pressable, Platform, Alert } from 'react-native';
+import {
+  Modal,
+  View,
+  Text,
+  StyleSheet,
+  Pressable,
+  Platform,
+  Alert,
+  ScrollView,
+} from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { type Theme, useTheme } from '../../theme';
 import { Ionicons } from '@expo/vector-icons';
 import { RepeatRule } from '../../../../../packages/shared/types/reminder';
 import { RecurrencePicker } from './RecurrencePicker';
 import { ReminderPresetDropdown } from './ReminderPresetDropdown';
+
+const TIME_PRESETS = [
+  { label: '6:30 AM', hours: 6, minutes: 30 },
+  { label: '9:00 AM', hours: 9, minutes: 0 },
+  { label: '11:30 AM', hours: 11, minutes: 30 },
+  { label: '3:00 PM', hours: 15, minutes: 0 },
+  { label: '5:30 PM', hours: 17, minutes: 30 },
+  { label: '7:00 PM', hours: 19, minutes: 0 },
+  { label: '9:30 PM', hours: 21, minutes: 30 },
+];
 
 interface ReminderSetupModalProps {
   visible: boolean;
@@ -27,10 +46,8 @@ export const ReminderSetupModal: React.FC<ReminderSetupModalProps> = ({
   const [triggerDate, setTriggerDate] = useState<Date>(new Date());
   const [repeat, setRepeat] = useState<RepeatRule | null>(null);
   const [now, setNow] = useState<Date>(new Date());
-
-  // Picker state for Android
-  const [showPicker, setShowPicker] = useState(false);
-  const [pickerMode, setPickerMode] = useState<'date' | 'time'>('date');
+  const [showTimePicker, setShowTimePicker] = useState(false);
+  const [calendarMonth, setCalendarMonth] = useState<Date>(new Date());
 
   useEffect(() => {
     if (visible) {
@@ -56,6 +73,7 @@ export const ReminderSetupModal: React.FC<ReminderSetupModalProps> = ({
 
       setTriggerDate(start);
       setRepeat(initialRepeat || null);
+      setCalendarMonth(new Date(start.getFullYear(), start.getMonth(), 1));
     }
   }, [visible, initialDate, initialRepeat]);
 
@@ -65,38 +83,19 @@ export const ReminderSetupModal: React.FC<ReminderSetupModalProps> = ({
     return () => clearInterval(id);
   }, [visible]);
 
-  const handleDateChange = (event: { type: string }, selectedDate?: Date) => {
+  const handleTimeChange = (event: { type: string }, selectedDate?: Date) => {
     if (Platform.OS === 'android') {
-      setShowPicker(false);
+      setShowTimePicker(false);
       if (event.type === 'dismissed') return;
-
-      const currentDate = selectedDate || triggerDate;
-
-      if (pickerMode === 'date') {
-        const newDate = new Date(triggerDate);
-        newDate.setFullYear(
-          currentDate.getFullYear(),
-          currentDate.getMonth(),
-          currentDate.getDate(),
-        );
-        newDate.setSeconds(0, 0);
-        setTriggerDate(newDate);
-
-        // Auto-open time picker
-        setPickerMode('time');
-        setTimeout(() => setShowPicker(true), 100);
-      } else {
-        const newDate = new Date(triggerDate);
-        newDate.setHours(currentDate.getHours(), currentDate.getMinutes(), 0, 0);
-        setTriggerDate(newDate);
+    }
+    if (selectedDate) {
+      const updated = new Date(triggerDate);
+      updated.setHours(selectedDate.getHours(), selectedDate.getMinutes(), 0, 0);
+      if (updated.getTime() <= Date.now()) {
+        Alert.alert('Invalid Time', 'Please select a time in the future.');
+        return;
       }
-    } else {
-      // iOS
-      if (selectedDate) {
-        const newDate = new Date(selectedDate);
-        newDate.setSeconds(0, 0);
-        setTriggerDate(newDate);
-      }
+      setTriggerDate(updated);
     }
   };
 
@@ -114,13 +113,66 @@ export const ReminderSetupModal: React.FC<ReminderSetupModalProps> = ({
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
-  const formatDate = (date: Date) => {
-    return date.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+  const todayStart = useMemo(() => {
+    const current = new Date(now);
+    current.setHours(0, 0, 0, 0);
+    return current;
+  }, [now]);
+
+  const minMonth = useMemo(() => {
+    return new Date(todayStart.getFullYear(), todayStart.getMonth(), 1);
+  }, [todayStart]);
+
+  const canGoPrev =
+    calendarMonth.getFullYear() > minMonth.getFullYear() ||
+    (calendarMonth.getFullYear() === minMonth.getFullYear() &&
+      calendarMonth.getMonth() > minMonth.getMonth());
+
+  const monthLabel = useMemo(() => {
+    return calendarMonth.toLocaleDateString([], { month: 'long', year: 'numeric' });
+  }, [calendarMonth]);
+
+  const calendarWeeks = useMemo(() => {
+    const year = calendarMonth.getFullYear();
+    const month = calendarMonth.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const startWeekday = firstDay.getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const weeks: Array<Array<Date | null>> = [];
+    let day = 1 - startWeekday;
+
+    while (day <= daysInMonth) {
+      const week: Array<Date | null> = [];
+      for (let i = 0; i < 7; i += 1) {
+        if (day < 1 || day > daysInMonth) {
+          week.push(null);
+        } else {
+          week.push(new Date(year, month, day));
+        }
+        day += 1;
+      }
+      weeks.push(week);
+    }
+    return weeks;
+  }, [calendarMonth]);
+
+  const selectDate = (date: Date) => {
+    if (date.getTime() < todayStart.getTime()) return;
+    const updated = new Date(triggerDate);
+    updated.setFullYear(date.getFullYear(), date.getMonth(), date.getDate());
+    updated.setSeconds(0, 0);
+    setTriggerDate(updated);
   };
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={styles.overlay} onPress={onClose}>
+      <Pressable
+        style={styles.overlay}
+        onPress={onClose}
+        onTouchStart={(e) => e.stopPropagation()}
+        onTouchMove={(e) => e.stopPropagation()}
+        onTouchEnd={(e) => e.stopPropagation()}
+      >
         <Pressable style={styles.container} onPress={() => {}}>
           <View style={styles.header}>
             <Text style={styles.title}>Set Reminder</Text>
@@ -129,11 +181,8 @@ export const ReminderSetupModal: React.FC<ReminderSetupModalProps> = ({
             </Pressable>
           </View>
 
-          <View style={styles.content}>
-            {/* Date/Time Selection */}
+          <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Time</Text>
-
               <ReminderPresetDropdown
                 now={now}
                 value={triggerDate}
@@ -141,54 +190,140 @@ export const ReminderSetupModal: React.FC<ReminderSetupModalProps> = ({
                 onInvalidSelection={(message) => Alert.alert('Invalid Time', message)}
               />
 
-              <View style={{ height: theme.spacing.sm }} />
+              <View style={styles.calendarCard}>
+                <View style={styles.calendarHeader}>
+                  <Pressable
+                    style={[styles.calendarNav, !canGoPrev && styles.calendarNavDisabled]}
+                    onPress={() => {
+                      if (!canGoPrev) return;
+                      setCalendarMonth(
+                        new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1, 1),
+                      );
+                    }}
+                    disabled={!canGoPrev}
+                  >
+                    <Ionicons
+                      name="chevron-back"
+                      size={22}
+                      color={canGoPrev ? theme.colors.text : theme.colors.textMuted}
+                    />
+                  </Pressable>
+                  <Text style={styles.calendarMonth}>{monthLabel}</Text>
+                  <Pressable
+                    style={styles.calendarNav}
+                    onPress={() =>
+                      setCalendarMonth(
+                        new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 1),
+                      )
+                    }
+                  >
+                    <Ionicons name="chevron-forward" size={22} color={theme.colors.text} />
+                  </Pressable>
+                </View>
 
-              {Platform.OS === 'ios' ? (
-                <View style={styles.iosPickerContainer}>
-                  <DateTimePicker
-                    value={triggerDate}
-                    mode="datetime"
-                    display="spinner" // or compact
-                    themeVariant={resolvedMode}
-                    onChange={handleDateChange}
-                    minimumDate={new Date()}
-                    style={{ height: 120 }} // Constrain height
-                  />
+                <View style={styles.weekdayRow}>
+                  {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((label) => (
+                    <Text key={label} style={styles.weekdayText}>
+                      {label}
+                    </Text>
+                  ))}
                 </View>
-              ) : (
-                <View style={styles.androidRow}>
-                  <Pressable
-                    style={styles.dateButton}
-                    onPress={() => {
-                      setPickerMode('date');
-                      setShowPicker(true);
-                    }}
-                  >
-                    <Ionicons name="calendar-outline" size={20} color={theme.colors.primary} />
-                    <Text style={styles.dateButtonText}>{formatDate(triggerDate)}</Text>
-                  </Pressable>
-                  <Pressable
-                    style={styles.dateButton}
-                    onPress={() => {
-                      setPickerMode('time');
-                      setShowPicker(true);
-                    }}
-                  >
-                    <Ionicons name="time-outline" size={20} color={theme.colors.primary} />
-                    <Text style={styles.dateButtonText}>{formatTime(triggerDate)}</Text>
-                  </Pressable>
-                </View>
-              )}
+
+                {calendarWeeks.map((week, weekIndex) => (
+                  <View key={`week-${weekIndex}`} style={styles.weekRow}>
+                    {week.map((day, dayIndex) => {
+                      if (!day) {
+                        return (
+                          <View key={`empty-${weekIndex}-${dayIndex}`} style={styles.dayCell} />
+                        );
+                      }
+
+                      const isSelected =
+                        day.getFullYear() === triggerDate.getFullYear() &&
+                        day.getMonth() === triggerDate.getMonth() &&
+                        day.getDate() === triggerDate.getDate();
+                      const isDisabled = day.getTime() < todayStart.getTime();
+
+                      return (
+                        <Pressable
+                          key={`day-${dayIndex}`}
+                          style={[
+                            styles.dayCell,
+                            isSelected && styles.dayCellSelected,
+                            isDisabled && styles.dayCellDisabled,
+                          ]}
+                          onPress={() => selectDate(day)}
+                          disabled={isDisabled}
+                        >
+                          <Text
+                            style={[
+                              styles.dayText,
+                              isSelected && styles.dayTextSelected,
+                              isDisabled && styles.dayTextDisabled,
+                            ]}
+                          >
+                            {day.getDate()}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                ))}
+              </View>
+
+              <View style={styles.presetsContainer}>
+                <Pressable style={styles.timeButton} onPress={() => setShowTimePicker(true)}>
+                  <Ionicons name="time-outline" size={16} color={theme.colors.primary} />
+                  <Text style={styles.timeButtonText}>{formatTime(triggerDate)}</Text>
+                </Pressable>
+                {TIME_PRESETS.map((preset, index) => {
+                  const isSelected =
+                    triggerDate.getHours() === preset.hours &&
+                    triggerDate.getMinutes() === preset.minutes;
+                  const isTodaySelected =
+                    triggerDate.getFullYear() === now.getFullYear() &&
+                    triggerDate.getMonth() === now.getMonth() &&
+                    triggerDate.getDate() === now.getDate();
+                  const presetTotalMinutes = preset.hours * 60 + preset.minutes;
+                  const nowTotalMinutes = now.getHours() * 60 + now.getMinutes();
+                  const isDisabled = isTodaySelected && presetTotalMinutes <= nowTotalMinutes;
+                  return (
+                    <Pressable
+                      key={index}
+                      style={[
+                        styles.presetChip,
+                        isSelected && styles.presetChipSelected,
+                        isDisabled && styles.presetChipDisabled,
+                      ]}
+                      onPress={() => {
+                        const updated = new Date(triggerDate);
+                        updated.setHours(preset.hours, preset.minutes, 0, 0);
+                        setTriggerDate(updated);
+                      }}
+                      disabled={isDisabled}
+                    >
+                      <Text
+                        style={[
+                          styles.presetText,
+                          isSelected && styles.presetTextSelected,
+                          isDisabled && styles.presetTextDisabled,
+                        ]}
+                      >
+                        {preset.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
             </View>
 
             <View style={styles.separator} />
 
-            {/* Recurrence */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Repeat</Text>
               <RecurrencePicker repeat={repeat} onChange={setRepeat} />
             </View>
-          </View>
+          </ScrollView>
 
           <View style={styles.footer}>
             <Pressable style={styles.cancelButton} onPress={onClose}>
@@ -201,15 +336,14 @@ export const ReminderSetupModal: React.FC<ReminderSetupModalProps> = ({
         </Pressable>
       </Pressable>
 
-      {/* Android Native Picker */}
-      {Platform.OS === 'android' && showPicker && (
+      {Platform.OS === 'android' && showTimePicker && (
         <DateTimePicker
           value={triggerDate}
-          mode={pickerMode}
+          mode="time"
           is24Hour={false}
           display="default"
           themeVariant={resolvedMode}
-          onChange={handleDateChange}
+          onChange={handleTimeChange}
           minimumDate={new Date()}
         />
       )}
@@ -229,7 +363,6 @@ const createStyles = (theme: Theme) =>
       backgroundColor: theme.colors.surface,
       borderRadius: theme.borderRadius.lg,
       ...theme.shadows.md,
-      maxHeight: '90%',
     },
     header: {
       flexDirection: 'row',
@@ -245,10 +378,14 @@ const createStyles = (theme: Theme) =>
       color: theme.colors.text,
     },
     content: {
-      padding: theme.spacing.md,
+      paddingHorizontal: theme.spacing.md,
+    },
+    contentContainer: {
+      paddingVertical: theme.spacing.sm,
+      gap: theme.spacing.md,
     },
     section: {
-      marginBottom: theme.spacing.md,
+      gap: theme.spacing.sm,
     },
     sectionTitle: {
       fontSize: theme.typography.sizes.sm,
@@ -261,29 +398,137 @@ const createStyles = (theme: Theme) =>
     separator: {
       height: 1,
       backgroundColor: theme.colors.border,
-      marginBottom: theme.spacing.md,
     },
-    androidRow: {
-      flexDirection: 'row',
-      gap: theme.spacing.md,
-    },
-    dateButton: {
-      flex: 1,
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-      padding: theme.spacing.sm,
+    calendarCard: {
       backgroundColor: theme.colors.background,
       borderRadius: theme.borderRadius.sm,
       borderWidth: 1,
       borderColor: theme.colors.border,
+      padding: theme.spacing.sm,
+      gap: theme.spacing.xs,
     },
-    dateButtonText: {
+    calendarHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 4,
+    },
+    calendarNav: {
+      padding: theme.spacing.sm,
+      borderRadius: theme.borderRadius.sm,
+    },
+    calendarNavDisabled: {
+      opacity: 0.5,
+    },
+    calendarMonth: {
       fontSize: theme.typography.sizes.base,
+      fontWeight: theme.typography.weights.semibold as '600',
       color: theme.colors.text,
     },
-    iosPickerContainer: {
+    weekdayRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      paddingHorizontal: theme.spacing.xs,
+    },
+    weekdayText: {
+      width: 32,
+      textAlign: 'center',
+      fontSize: theme.typography.sizes.xs,
+      color: theme.colors.textMuted,
+    },
+    weekRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      paddingHorizontal: theme.spacing.xs,
+    },
+    dayCell: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
       alignItems: 'center',
+      justifyContent: 'center',
+    },
+    dayCellSelected: {
+      backgroundColor: theme.colors.primary,
+    },
+    dayCellDisabled: {
+      opacity: 0.35,
+    },
+    dayText: {
+      fontSize: theme.typography.sizes.sm,
+      color: theme.colors.text,
+    },
+    dayTextSelected: {
+      color: 'white',
+      fontWeight: '600',
+    },
+    dayTextDisabled: {
+      color: theme.colors.textMuted,
+    },
+    presetsContainer: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 4,
+    },
+    presetChip: {
+      padding: 6,
+      borderRadius: 8,
+      backgroundColor: theme.colors.background,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    presetChipSelected: {
+      backgroundColor: theme.colors.primary,
+      borderColor: theme.colors.primary,
+    },
+    presetChipDisabled: {
+      opacity: 0.4,
+    },
+    presetText: {
+      fontSize: theme.typography.sizes.sm,
+      color: theme.colors.text,
+    },
+    presetTextSelected: {
+      color: 'white',
+    },
+    presetTextDisabled: {
+      color: theme.colors.textMuted,
+    },
+    timeRow: {
+      gap: theme.spacing.xs,
+    },
+    timeRowHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: theme.spacing.xs,
+    },
+    timeRowLabel: {
+      flex: 1,
+      fontSize: theme.typography.sizes.base,
+      color: theme.colors.text,
+      fontWeight: theme.typography.weights.semibold as '600',
+    },
+    timeRowValue: {
+      fontSize: theme.typography.sizes.base,
+      color: theme.colors.textMuted,
+    },
+    timePicker: {
+      height: 140,
+    },
+    timeButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      padding: 6,
+      borderRadius: 8,
+      backgroundColor: theme.colors.background,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    timeButtonText: {
+      fontSize: theme.typography.sizes.sm,
+      color: theme.colors.text,
     },
     footer: {
       flexDirection: 'row',

@@ -92,22 +92,19 @@ export const RecurrencePicker: React.FC<RecurrencePickerProps> = ({ repeat, onCh
 
       {/* Detail Views */}
       {currentKind === 'weekly' && repeat?.kind === 'weekly' && (
-        <View style={styles.details}>
-          <Text style={styles.label}>Repeat on</Text>
-          <View style={styles.weekdays}>
-            {WEEKDAYS.map((day, index) => {
-              const isSelected = repeat.weekdays.includes(index);
-              return (
-                <Pressable
-                  key={index}
-                  style={[styles.dayCircle, isSelected && styles.dayCircleActive]}
-                  onPress={() => toggleWeekday(index)}
-                >
-                  <Text style={[styles.dayText, isSelected && styles.dayTextActive]}>{day}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
+        <View style={styles.weekdays}>
+          {WEEKDAYS.map((day, index) => {
+            const isSelected = repeat.weekdays.includes(index);
+            return (
+              <Pressable
+                key={index}
+                style={[styles.dayCircle, isSelected && styles.dayCircleActive]}
+                onPress={() => toggleWeekday(index)}
+              >
+                <Text style={[styles.dayText, isSelected && styles.dayTextActive]}>{day}</Text>
+              </Pressable>
+            );
+          })}
         </View>
       )}
 
@@ -119,12 +116,13 @@ export const RecurrencePicker: React.FC<RecurrencePickerProps> = ({ repeat, onCh
 
       {currentKind === 'custom' && (
         <View style={styles.details}>
-          <Text style={styles.label}>Repeat every</Text>
           <View style={styles.intervalRow}>
+            <Text style={styles.label}>Repeat every</Text>
             <TextInput
               style={styles.intervalInput}
               value={customDaysText}
               keyboardType="number-pad"
+              selectTextOnFocus
               onChangeText={(text) => setCustomDaysText(text.replace(/[^0-9]/g, ''))}
               onEndEditing={(event) => commitCustomDays(event.nativeEvent.text)}
               placeholder={String(minCustomDays)}
@@ -177,7 +175,7 @@ const createStyles = (theme: Theme) =>
       fontWeight: '600',
     },
     details: {
-      marginTop: theme.spacing.xs,
+      marginBottom: theme.spacing.xs,
     },
     label: {
       fontSize: theme.typography.sizes.sm,
@@ -186,6 +184,7 @@ const createStyles = (theme: Theme) =>
       marginBottom: theme.spacing.sm,
     },
     hint: {
+      marginTop: theme.spacing.xs,
       fontSize: theme.typography.sizes.sm,
       color: theme.colors.textMuted,
       fontStyle: 'italic',
@@ -196,7 +195,7 @@ const createStyles = (theme: Theme) =>
       gap: theme.spacing.sm,
     },
     intervalInput: {
-      minWidth: 64,
+      minWidth: 40,
       paddingVertical: 6,
       paddingHorizontal: 10,
       borderRadius: theme.borderRadius.sm,
@@ -214,6 +213,7 @@ const createStyles = (theme: Theme) =>
     weekdays: {
       flexDirection: 'row',
       justifyContent: 'space-between',
+      marginBottom: theme.spacing.xs,
     },
     dayCircle: {
       width: 32,

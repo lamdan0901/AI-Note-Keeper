@@ -1,5 +1,5 @@
 import * as Notifications from 'expo-notifications';
-import { AppState, NativeModules, Platform } from 'react-native';
+import { NativeModules, Platform } from 'react-native';
 import { logSyncEvent } from '../reminders/logging';
 import { getDb } from '../db/bootstrap';
 import { upsertNote, deleteNote } from '../db/notesRepo';

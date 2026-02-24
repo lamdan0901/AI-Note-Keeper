@@ -145,6 +145,7 @@ export const useNoteEditor = (): UseNoteEditorResult => {
 
   const handleEditorTouchStart = useCallback(
     (e: { nativeEvent: { pageX: number; pageY: number } }) => {
+      if (showReminderModal) return;
       editorTouchStartRef.current = {
         x: e.nativeEvent.pageX,
         y: e.nativeEvent.pageY,
@@ -152,11 +153,12 @@ export const useNoteEditor = (): UseNoteEditorResult => {
       };
       editorDraggingRef.current = false;
     },
-    [],
+    [showReminderModal],
   );
 
   const handleEditorTouchMove = useCallback(
     (e: { nativeEvent: { pageX: number; pageY: number } }) => {
+      if (showReminderModal) return;
       const start = editorTouchStartRef.current;
       if (!start) return;
       const dx = e.nativeEvent.pageX - start.x;
@@ -171,7 +173,7 @@ export const useNoteEditor = (): UseNoteEditorResult => {
 
       editorTranslateY.setValue(dy);
     },
-    [editorTranslateY],
+    [editorTranslateY, showReminderModal],
   );
 
   const handleEditorTouchEnd = useCallback(() => {
