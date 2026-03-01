@@ -15,8 +15,8 @@ export type Note = {
   isPinned?: boolean;
 
   // Legacy fields (kept for compatibility)
-  repeatRule?: 'none' | 'daily' | 'weekly' | 'custom';
-  repeatConfig?: Record<string, unknown>;
+  repeatRule?: 'none' | 'daily' | 'weekly' | 'monthly' | 'custom';
+  repeatConfig?: Record<string, unknown> | null;
 
   // New standardized repeat rule
   repeat?: RepeatRule | null;

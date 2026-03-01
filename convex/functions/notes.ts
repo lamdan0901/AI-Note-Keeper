@@ -24,13 +24,21 @@ export const syncNotes = mutation({
         active: v.boolean(),
         done: v.optional(v.boolean()),
         isPinned: v.optional(v.boolean()),
-        // Reminder fields
+        // Reminder fields (legacy)
         triggerAt: v.optional(v.number()),
         repeatRule: v.optional(v.string()),
         repeatConfig: v.optional(v.any()),
         snoozedUntil: v.optional(v.number()),
         scheduleStatus: v.optional(v.string()),
         timezone: v.optional(v.string()),
+
+        // Canonical recurrence fields
+        repeat: v.optional(v.any()),
+        startAt: v.optional(v.union(v.number(), v.null())),
+        baseAtLocal: v.optional(v.union(v.string(), v.null())),
+        nextTriggerAt: v.optional(v.union(v.number(), v.null())),
+        lastFiredAt: v.optional(v.union(v.number(), v.null())),
+        lastAcknowledgedAt: v.optional(v.union(v.number(), v.null())),
 
         updatedAt: v.number(),
         createdAt: v.number(),
@@ -48,6 +56,10 @@ export const syncNotes = mutation({
     // Apply specific changes
     for (const change of changes) {
       const { operation, id, ...noteData } = change;
+      const hasCanonicalField = (key: string) =>
+        Object.prototype.hasOwnProperty.call(noteData, key);
+      const normalizeNullable = <T>(value: T | null | undefined): T | undefined =>
+        value === null ? undefined : value;
 
       // Log change event
       await ctx.db.insert('noteChangeEvents', {
@@ -91,6 +103,25 @@ export const syncNotes = mutation({
               snoozedUntil: noteData.snoozedUntil,
               scheduleStatus: noteData.scheduleStatus,
               timezone: noteData.timezone,
+              // Canonical recurrence — only patch when explicitly provided
+              ...(hasCanonicalField('repeat') && {
+                repeat: normalizeNullable(noteData.repeat),
+              }),
+              ...(hasCanonicalField('startAt') && {
+                startAt: normalizeNullable(noteData.startAt),
+              }),
+              ...(hasCanonicalField('baseAtLocal') && {
+                baseAtLocal: normalizeNullable(noteData.baseAtLocal),
+              }),
+              ...(hasCanonicalField('nextTriggerAt') && {
+                nextTriggerAt: normalizeNullable(noteData.nextTriggerAt),
+              }),
+              ...(hasCanonicalField('lastFiredAt') && {
+                lastFiredAt: normalizeNullable(noteData.lastFiredAt),
+              }),
+              ...(hasCanonicalField('lastAcknowledgedAt') && {
+                lastAcknowledgedAt: normalizeNullable(noteData.lastAcknowledgedAt),
+              }),
               updatedAt: noteData.updatedAt,
               version: (existing.version || 0) + 1,
             });
@@ -111,6 +142,13 @@ export const syncNotes = mutation({
             snoozedUntil: noteData.snoozedUntil,
             scheduleStatus: noteData.scheduleStatus,
             timezone: noteData.timezone,
+            // Canonical recurrence
+            repeat: normalizeNullable(noteData.repeat),
+            startAt: normalizeNullable(noteData.startAt),
+            baseAtLocal: normalizeNullable(noteData.baseAtLocal),
+            nextTriggerAt: normalizeNullable(noteData.nextTriggerAt),
+            lastFiredAt: normalizeNullable(noteData.lastFiredAt),
+            lastAcknowledgedAt: normalizeNullable(noteData.lastAcknowledgedAt),
             createdAt: noteData.createdAt,
             updatedAt: noteData.updatedAt,
             version: 1,

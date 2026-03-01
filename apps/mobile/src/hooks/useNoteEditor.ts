@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, Keyboard, Platform } from 'react-native';
 import { type Note } from '../db/notesRepo';
 import { RepeatRule } from '../../../../packages/shared/types/reminder';
+import { coerceRepeatRule } from '../../../../packages/shared/utils/repeatCodec';
 
 type EditorTouchStart = { x: number; y: number; timeMs: number } | null;
 
@@ -59,7 +60,13 @@ export const useNoteEditor = (): UseNoteEditorResult => {
       const effectiveTriggerAt = note.snoozedUntil ?? note.nextTriggerAt ?? note.triggerAt;
       if (effectiveTriggerAt) {
         setReminder(new Date(effectiveTriggerAt));
-        setRepeat(note.repeat || null);
+        // Resolve repeat from all available fields (canonical + legacy)
+        setRepeat(coerceRepeatRule({
+          repeat: note.repeat,
+          repeatRule: note.repeatRule,
+          repeatConfig: note.repeatConfig as Record<string, unknown> | undefined,
+          triggerAt: effectiveTriggerAt,
+        }));
       } else {
         setReminder(null);
         setRepeat(null);

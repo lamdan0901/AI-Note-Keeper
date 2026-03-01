@@ -134,6 +134,9 @@ const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number): Promise<T
  */
 const mapToApiPayload = (item: OutboxItem) => {
   const payload = JSON.parse(item.payloadJson) as Note;
+  const includeIfPresent = <K extends keyof Note>(key: K) =>
+    Object.prototype.hasOwnProperty.call(payload, key) ? { [key]: payload[key] } : {};
+
   return {
     id: payload.id,
     userId: item.userId,
@@ -149,6 +152,13 @@ const mapToApiPayload = (item: OutboxItem) => {
     snoozedUntil: payload.snoozedUntil ?? undefined,
     scheduleStatus: payload.scheduleStatus ?? undefined,
     timezone: payload.timezone ?? undefined,
+    // Canonical recurrence fields
+    ...includeIfPresent('repeat'),
+    ...includeIfPresent('startAt'),
+    ...includeIfPresent('baseAtLocal'),
+    ...includeIfPresent('nextTriggerAt'),
+    ...includeIfPresent('lastFiredAt'),
+    ...includeIfPresent('lastAcknowledgedAt'),
     updatedAt: payload.updatedAt,
     createdAt: payload.createdAt,
     operation: item.operation,

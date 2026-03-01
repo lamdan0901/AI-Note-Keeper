@@ -1,24 +1,40 @@
-import React from "react";
+import React, { useEffect, useState } from 'react';
+import NotesPage from './pages/NotesPage';
+import {
+  getInitialThemeMode,
+  resolveThemeMode,
+  SYSTEM_DARK_QUERY,
+  THEME_STORAGE_KEY,
+  type ThemeMode,
+} from './services/theme';
 
 export default function App(): JSX.Element {
-  return (
-    <main className="app">
-      <header className="hero">
-        <p className="tag">US1 MVP scaffold</p>
-        <h1>AI Note Keeper</h1>
-        <p className="subtitle">
-          Web + mobile reminder sync foundation is wired. Add your Convex auth
-          + reminder UI next.
-        </p>
-      </header>
-      <section className="panel">
-        <h2>Status</h2>
-        <ul>
-          <li>Web app bootstrapped (Vite + React).</li>
-          <li>Convex hooks available in services.</li>
-          <li>Mobile Expo app scaffolded.</li>
-        </ul>
-      </section>
-    </main>
-  );
+  const [themeMode, setThemeMode] = useState<ThemeMode>(getInitialThemeMode);
+
+  useEffect(() => {
+    window.localStorage.setItem(THEME_STORAGE_KEY, themeMode);
+  }, [themeMode]);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia(SYSTEM_DARK_QUERY);
+
+    const applyTheme = () => {
+      const resolvedTheme = resolveThemeMode(themeMode, mediaQuery.matches);
+      const root = document.documentElement;
+      root.dataset.theme = resolvedTheme;
+      root.style.colorScheme = resolvedTheme;
+    };
+
+    applyTheme();
+
+    if (themeMode !== 'system') {
+      return;
+    }
+
+    const handleThemeChange = () => applyTheme();
+    mediaQuery.addEventListener('change', handleThemeChange);
+    return () => mediaQuery.removeEventListener('change', handleThemeChange);
+  }, [themeMode]);
+
+  return <NotesPage themeMode={themeMode} onThemeModeChange={setThemeMode} />;
 }
