@@ -211,6 +211,24 @@ describe('buildCanonicalRecurrenceFields', () => {
     expect(result.baseAtLocal).toBe('2026-02-23T09:00:00');
   });
 
+  it('preserves anchor when existing recurrence is legacy-only but equivalent', () => {
+    const originalStart = triggerMs - 7 * 24 * 60 * 60 * 1000;
+    const result = buildCanonicalRecurrenceFields({
+      reminderAt: triggerMs,
+      repeat: { kind: 'daily', interval: 1 },
+      existing: {
+        startAt: originalStart,
+        baseAtLocal: '2026-02-23T09:00:00',
+        repeat: undefined,
+        repeatRule: 'daily',
+        repeatConfig: { interval: 1 },
+        triggerAt: originalStart,
+      },
+    });
+    expect(result.startAt).toBe(originalStart);
+    expect(result.baseAtLocal).toBe('2026-02-23T09:00:00');
+  });
+
   it('resets anchor when recurrence changes', () => {
     const originalStart = triggerMs - 7 * 24 * 60 * 60 * 1000;
     const result = buildCanonicalRecurrenceFields({

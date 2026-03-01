@@ -11,9 +11,9 @@ type ReminderSyncFields = {
   repeatRule?: 'none' | 'daily' | 'weekly' | 'monthly' | 'custom';
   repeatConfig?: Record<string, unknown> | null;
   repeat?: RepeatRule | null;
-  startAt?: number;
-  baseAtLocal?: string;
-  nextTriggerAt?: number;
+  startAt?: number | null;
+  baseAtLocal?: string | null;
+  nextTriggerAt?: number | null;
   snoozedUntil?: number;
   scheduleStatus?: 'scheduled' | 'unscheduled' | 'error';
   timezone?: string;
@@ -85,9 +85,9 @@ export function buildReminderSyncFields(
       repeatRule: 'none' as const,
       repeatConfig: null,
       repeat: null,
-      startAt: undefined,
-      baseAtLocal: undefined,
-      nextTriggerAt: undefined,
+      startAt: null,
+      baseAtLocal: null,
+      nextTriggerAt: null,
       snoozedUntil: undefined,
       scheduleStatus: undefined,
       timezone,

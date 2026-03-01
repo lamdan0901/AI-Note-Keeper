@@ -138,25 +138,25 @@ export const backfillCanonicalRecurrence = mutation({
   },
   handler: async (ctx, args) => {
     const batchSize = args.batchSize ?? 200;
+    const cursor = args.cursor ?? null;
 
-    // Fetch a page of notes that are missing the canonical `repeat` field
-    // and have a legacy repeatRule that is not 'none'.
+    // Paginate over notes so large datasets can be processed safely.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const query = ctx.db.query('notes') as any;
-
-    const page = await query.collect();
+    const pageResult = await (ctx.db.query('notes') as any).paginate({
+      cursor,
+      numItems: batchSize,
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const page = (pageResult.page as any[]) ?? [];
 
     let processed = 0;
     let skipped = 0;
     let patched = 0;
     let lastId: string | null = null;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    for (const note of page as any[]) {
+    for (const note of page) {
       processed++;
       lastId = note._id;
-
-      if (processed > batchSize) break;
 
       // Skip notes that already have canonical `repeat`
       if (
@@ -207,7 +207,8 @@ export const backfillCanonicalRecurrence = mutation({
       patched,
       skipped,
       lastId,
-      hasMore: processed > batchSize,
+      nextCursor: pageResult.continueCursor as string | null,
+      hasMore: !pageResult.isDone,
     };
   },
 });

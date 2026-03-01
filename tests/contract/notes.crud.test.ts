@@ -51,8 +51,9 @@ jest.mock(
   () => {
     const v: Record<string, jest.Mock> = {};
     const pass = () => ({});
-    ['string', 'number', 'boolean', 'any'].forEach((k) => (v[k] = jest.fn(pass)));
+    ['string', 'number', 'boolean', 'any', 'null'].forEach((k) => (v[k] = jest.fn(pass)));
     v['optional'] = jest.fn(pass);
+    v['union'] = jest.fn(pass);
     v['array'] = jest.fn(pass);
     v['object'] = jest.fn(pass);
     return { v };
@@ -289,6 +290,83 @@ describe('syncNotes Contract – update', () => {
       'notes',
       expect.objectContaining({ id: 'note-missing', version: 1 }),
     );
+  });
+
+  test('should clear canonical recurrence fields when explicit null is provided', async () => {
+    mockQuery.first.mockResolvedValue({
+      ...existingNote,
+      repeat: { kind: 'daily', interval: 1 },
+      startAt: 1111,
+      baseAtLocal: '2026-01-01T09:00:00',
+      nextTriggerAt: 2222,
+      lastFiredAt: 3333,
+      lastAcknowledgedAt: 4444,
+    });
+
+    const handler = (syncNotes as unknown as { _handler: Handler })._handler;
+    await handler(mockCtx, {
+      userId: 'user-1',
+      changes: [
+        {
+          id: 'note-1',
+          userId: 'user-1',
+          active: true,
+          updatedAt: 9999,
+          createdAt: 1000,
+          operation: 'update',
+          deviceId: 'device-1',
+          repeat: null,
+          startAt: null,
+          baseAtLocal: null,
+          nextTriggerAt: null,
+          lastFiredAt: null,
+          lastAcknowledgedAt: null,
+        },
+      ],
+      lastSyncAt: 0,
+    });
+
+    expect(mockDb.patch).toHaveBeenCalledWith(
+      'convex-id-1',
+      expect.objectContaining({
+        repeat: undefined,
+        startAt: undefined,
+        baseAtLocal: undefined,
+        nextTriggerAt: undefined,
+        lastFiredAt: undefined,
+        lastAcknowledgedAt: undefined,
+      }),
+    );
+  });
+
+  test('should preserve canonical recurrence fields when they are omitted', async () => {
+    mockQuery.first.mockResolvedValue(existingNote);
+
+    const handler = (syncNotes as unknown as { _handler: Handler })._handler;
+    await handler(mockCtx, {
+      userId: 'user-1',
+      changes: [
+        {
+          id: 'note-1',
+          userId: 'user-1',
+          title: 'No canonical touch',
+          active: true,
+          updatedAt: 9999,
+          createdAt: 1000,
+          operation: 'update',
+          deviceId: 'device-1',
+        },
+      ],
+      lastSyncAt: 0,
+    });
+
+    const patchArg = (mockDb.patch as jest.Mock).mock.calls[0][1] as Record<string, unknown>;
+    expect(Object.prototype.hasOwnProperty.call(patchArg, 'repeat')).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(patchArg, 'startAt')).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(patchArg, 'baseAtLocal')).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(patchArg, 'nextTriggerAt')).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(patchArg, 'lastFiredAt')).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(patchArg, 'lastAcknowledgedAt')).toBe(false);
   });
 });
 

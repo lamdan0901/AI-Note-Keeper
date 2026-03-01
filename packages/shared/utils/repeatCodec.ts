@@ -208,7 +208,10 @@ type BuildCanonicalInput = {
     startAt?: number | null;
     baseAtLocal?: string | null;
     nextTriggerAt?: number | null;
+    triggerAt?: number | null;
     repeat?: RepeatRule | null | unknown;
+    repeatRule?: string | null;
+    repeatConfig?: Record<string, unknown> | null | unknown;
   };
 };
 
@@ -222,8 +225,9 @@ type BuildCanonicalInput = {
 export function buildCanonicalRecurrenceFields(
   input: BuildCanonicalInput,
 ): CanonicalRecurrenceFields {
-  const { reminderAt, repeat } = input;
-  const legacy = toLegacyRepeatFields(repeat);
+  const normalizedRepeat = coerceRepeatRule({ repeat: input.repeat });
+  const { reminderAt } = input;
+  const legacy = toLegacyRepeatFields(normalizedRepeat);
 
   if (!reminderAt) {
     return {
@@ -237,9 +241,18 @@ export function buildCanonicalRecurrenceFields(
 
   // Determine if recurrence definition changed vs existing
   const existingRepeat = input.existing
-    ? coerceRepeatRule({ repeat: input.existing.repeat })
+    ? coerceRepeatRule({
+        repeat: input.existing.repeat,
+        repeatRule: input.existing.repeatRule,
+        repeatConfig: input.existing.repeatConfig,
+        triggerAt:
+          input.existing.triggerAt ??
+          input.existing.nextTriggerAt ??
+          input.existing.startAt ??
+          reminderAt,
+      })
     : null;
-  const recurrenceChanged = JSON.stringify(repeat) !== JSON.stringify(existingRepeat);
+  const recurrenceChanged = JSON.stringify(normalizedRepeat) !== JSON.stringify(existingRepeat);
 
   let startAt: number | null;
   let baseAtLocal: string | null;
@@ -255,7 +268,7 @@ export function buildCanonicalRecurrenceFields(
   }
 
   return {
-    repeat,
+    repeat: normalizedRepeat,
     startAt,
     baseAtLocal,
     nextTriggerAt: reminderAt,
