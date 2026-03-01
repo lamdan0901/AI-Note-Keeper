@@ -118,12 +118,8 @@ export async function createNote(sync: SyncFn, draft: NoteEditorDraft) {
 }
 
 /**
- * Update an existing note from a draft, mapping reminder fields to
- * the mobile-compatible persistence model.
- *
- * Fields NOT in the `syncNotes` schema (`repeat`, `baseAtLocal`, `startAt`,
- * `nextTriggerAt`, `lastFiredAt`, `lastAcknowledgedAt`) are preserved
- * server-side automatically because Convex `patch` only updates listed fields.
+ * Update an existing note from a draft, preserving series anchor when
+ * recurrence is unchanged.
  */
 export async function updateNote(sync: SyncFn, draft: NoteEditorDraft, existingNote: WebNote) {
   const now = Date.now();
@@ -132,6 +128,7 @@ export async function updateNote(sync: SyncFn, draft: NoteEditorDraft, existingN
     draft.done ? { reminder: null, repeat: null } : { reminder: draft.reminder, repeat: draft.repeat },
     new Date(now),
     getResolvedTimezone(),
+    existingNote,
   );
   return sync({
     userId: USER_ID,

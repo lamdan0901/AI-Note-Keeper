@@ -6,6 +6,7 @@ import { getNoteById, listNotes, type Note } from '../db/notesRepo';
 import { saveNoteOffline, deleteNoteOffline } from '../notes/editor';
 import { syncNotes } from '../sync/noteSync';
 import { RepeatRule } from '../../../../packages/shared/types/reminder';
+import { buildCanonicalRecurrenceFields } from '../../../../packages/shared/utils/repeatCodec';
 
 type EditorState = {
   editingNote: Note | null;
@@ -108,12 +109,16 @@ export const useNoteActions = ({
         isPinned,
 
         triggerAt: reminder ? reminder.getTime() : undefined,
-        repeatRule: reminder && repeat ? 'custom' : undefined,
-        repeatConfig: reminder && repeat ? { ...repeat } : undefined,
-        repeat: reminder ? repeat : undefined,
-        snoozedUntil: reminder ? undefined : undefined,
+        snoozedUntil: undefined,
         scheduleStatus: reminder ? 'unscheduled' : undefined,
         timezone: reminder ? timezone : undefined,
+
+        // Dual-write: canonical + proper legacy fields derived from repeat kind
+        ...buildCanonicalRecurrenceFields({
+          reminderAt: reminder ? reminder.getTime() : null,
+          repeat: reminder ? repeat : null,
+          existing: editingNote ?? undefined,
+        }),
 
         createdAt: editingNote ? editingNote.createdAt : now,
         updatedAt: now,

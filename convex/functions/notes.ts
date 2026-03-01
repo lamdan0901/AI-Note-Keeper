@@ -24,13 +24,21 @@ export const syncNotes = mutation({
         active: v.boolean(),
         done: v.optional(v.boolean()),
         isPinned: v.optional(v.boolean()),
-        // Reminder fields
+        // Reminder fields (legacy)
         triggerAt: v.optional(v.number()),
         repeatRule: v.optional(v.string()),
         repeatConfig: v.optional(v.any()),
         snoozedUntil: v.optional(v.number()),
         scheduleStatus: v.optional(v.string()),
         timezone: v.optional(v.string()),
+
+        // Canonical recurrence fields
+        repeat: v.optional(v.any()),
+        startAt: v.optional(v.number()),
+        baseAtLocal: v.optional(v.string()),
+        nextTriggerAt: v.optional(v.number()),
+        lastFiredAt: v.optional(v.number()),
+        lastAcknowledgedAt: v.optional(v.number()),
 
         updatedAt: v.number(),
         createdAt: v.number(),
@@ -91,6 +99,13 @@ export const syncNotes = mutation({
               snoozedUntil: noteData.snoozedUntil,
               scheduleStatus: noteData.scheduleStatus,
               timezone: noteData.timezone,
+              // Canonical recurrence — only patch when explicitly provided
+              ...(noteData.repeat !== undefined && { repeat: noteData.repeat }),
+              ...(noteData.startAt !== undefined && { startAt: noteData.startAt }),
+              ...(noteData.baseAtLocal !== undefined && { baseAtLocal: noteData.baseAtLocal }),
+              ...(noteData.nextTriggerAt !== undefined && { nextTriggerAt: noteData.nextTriggerAt }),
+              ...(noteData.lastFiredAt !== undefined && { lastFiredAt: noteData.lastFiredAt }),
+              ...(noteData.lastAcknowledgedAt !== undefined && { lastAcknowledgedAt: noteData.lastAcknowledgedAt }),
               updatedAt: noteData.updatedAt,
               version: (existing.version || 0) + 1,
             });
@@ -111,6 +126,13 @@ export const syncNotes = mutation({
             snoozedUntil: noteData.snoozedUntil,
             scheduleStatus: noteData.scheduleStatus,
             timezone: noteData.timezone,
+            // Canonical recurrence
+            repeat: noteData.repeat,
+            startAt: noteData.startAt,
+            baseAtLocal: noteData.baseAtLocal,
+            nextTriggerAt: noteData.nextTriggerAt,
+            lastFiredAt: noteData.lastFiredAt,
+            lastAcknowledgedAt: noteData.lastAcknowledgedAt,
             createdAt: noteData.createdAt,
             updatedAt: noteData.updatedAt,
             version: 1,

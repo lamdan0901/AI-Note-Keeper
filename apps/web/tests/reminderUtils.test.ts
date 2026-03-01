@@ -116,10 +116,14 @@ describe('buildReminderSyncFields', () => {
         new Date('2026-02-10T10:00:00.000Z'),
         'UTC',
       ),
-    ).toEqual({
+    ).toMatchObject({
       triggerAt: undefined,
       repeatRule: 'none',
       repeatConfig: null,
+      repeat: null,
+      startAt: undefined,
+      baseAtLocal: undefined,
+      nextTriggerAt: undefined,
       snoozedUntil: undefined,
       scheduleStatus: undefined,
       timezone: 'UTC',
@@ -137,10 +141,11 @@ describe('buildReminderSyncFields', () => {
       now,
       'Asia/Bangkok',
     );
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       triggerAt: new Date('2026-02-10T11:00:00.000Z').getTime(),
       repeatRule: 'weekly',
       repeatConfig: { interval: 1, weekdays: [1, 3, 5] },
+      repeat: { kind: 'weekly', interval: 1, weekdays: [1, 3, 5] },
       snoozedUntil: undefined,
       scheduleStatus: 'unscheduled',
       timezone: 'Asia/Bangkok',

@@ -149,6 +149,13 @@ const mapToApiPayload = (item: OutboxItem) => {
     snoozedUntil: payload.snoozedUntil ?? undefined,
     scheduleStatus: payload.scheduleStatus ?? undefined,
     timezone: payload.timezone ?? undefined,
+    // Canonical recurrence fields
+    repeat: payload.repeat ?? undefined,
+    startAt: payload.startAt ?? undefined,
+    baseAtLocal: payload.baseAtLocal ?? undefined,
+    nextTriggerAt: payload.nextTriggerAt ?? undefined,
+    lastFiredAt: payload.lastFiredAt ?? undefined,
+    lastAcknowledgedAt: payload.lastAcknowledgedAt ?? undefined,
     updatedAt: payload.updatedAt,
     createdAt: payload.createdAt,
     operation: item.operation,

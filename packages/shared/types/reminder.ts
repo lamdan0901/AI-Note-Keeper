@@ -7,7 +7,7 @@ export type RepeatRule =
   | { kind: 'monthly'; interval: number; mode: 'day_of_month' }
   | { kind: 'custom'; interval: number; frequency: 'minutes' | 'days' | 'weeks' | 'months' };
 
-export type ReminderRepeatRule = 'none' | 'daily' | 'weekly' | 'custom';
+export type ReminderRepeatRule = 'none' | 'daily' | 'weekly' | 'monthly' | 'custom';
 export type ReminderScheduleStatus = 'scheduled' | 'unscheduled' | 'error';
 
 export interface Reminder {

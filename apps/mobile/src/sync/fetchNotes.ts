@@ -1,6 +1,7 @@
 import { ConvexHttpClient } from 'convex/browser';
 import { api } from '../../../../convex/_generated/api';
 import { type Note } from '../db/notesRepo';
+import { coerceRepeatRule } from '../../../../packages/shared/utils/repeatCodec';
 
 export type FetchNotesResult =
   | { status: 'ok'; notes: Note[]; syncedAt: number }
@@ -39,25 +40,43 @@ export const fetchNotes = async (userId: string): Promise<FetchNotesResult> => {
     )) as Note[];
 
     // Map Convex result to local Note type if needed (mostly same)
-    const mappedNotes: Note[] = notes.map((n) => ({
-      id: n.id,
-      title: n.title ?? null,
-      content: n.content ?? null,
-      color: n.color ?? null,
-      active: n.active,
-      done: n.done ?? false,
+    const mappedNotes: Note[] = notes.map((n) => {
+      // Derive canonical repeat: prefer stored `repeat`, fall back to legacy fields
+      const repeat = coerceRepeatRule({
+        repeat: n.repeat,
+        repeatRule: n.repeatRule,
+        repeatConfig: n.repeatConfig,
+        triggerAt: n.triggerAt,
+      });
 
-      isPinned: n.isPinned ?? false,
-      triggerAt: n.triggerAt,
-      repeatRule: n.repeatRule,
-      repeatConfig: n.repeatConfig,
-      snoozedUntil: n.snoozedUntil,
-      scheduleStatus: n.scheduleStatus,
-      timezone: n.timezone,
+      return {
+        id: n.id,
+        title: n.title ?? null,
+        content: n.content ?? null,
+        color: n.color ?? null,
+        active: n.active,
+        done: n.done ?? false,
 
-      updatedAt: n.updatedAt,
-      createdAt: n.createdAt,
-    }));
+        isPinned: n.isPinned ?? false,
+        triggerAt: n.triggerAt,
+        repeatRule: n.repeatRule,
+        repeatConfig: n.repeatConfig,
+        // Always populate canonical repeat (derived if not stored)
+        repeat,
+        snoozedUntil: n.snoozedUntil,
+        scheduleStatus: n.scheduleStatus,
+        timezone: n.timezone,
+        baseAtLocal: n.baseAtLocal ?? null,
+        startAt: n.startAt ?? null,
+        nextTriggerAt: n.nextTriggerAt ?? null,
+        lastFiredAt: n.lastFiredAt ?? null,
+        lastAcknowledgedAt: n.lastAcknowledgedAt ?? null,
+        version: n.version,
+
+        updatedAt: n.updatedAt,
+        createdAt: n.createdAt,
+      };
+    });
 
     return { status: 'ok', notes: mappedNotes, syncedAt: Date.now() };
   } catch (error) {
