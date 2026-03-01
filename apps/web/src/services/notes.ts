@@ -2,12 +2,17 @@ import { useMutation, useQuery } from 'convex/react';
 import { api } from '../../../../convex/_generated/api';
 import type { NoteEditorDraft, WebNote } from './notesTypes';
 import { filterActive, sortNotes } from './notesUtils';
+import { buildReminderSyncFields } from './reminderUtils';
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
 export const USER_ID = 'local-user';
+
+export function getResolvedTimezone(): string {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+}
 
 // ---------------------------------------------------------------------------
 // Raw Convex document → WebNote mapper
@@ -84,6 +89,11 @@ type SyncFn = ReturnType<typeof useSyncNotes>;
 export async function createNote(sync: SyncFn, draft: NoteEditorDraft) {
   const now = Date.now();
   const id = draft.id ?? crypto.randomUUID();
+  const reminderFields = buildReminderSyncFields(
+    draft.done ? { reminder: null, repeat: null } : { reminder: draft.reminder, repeat: draft.repeat },
+    new Date(now),
+    getResolvedTimezone(),
+  );
   return sync({
     userId: USER_ID,
     lastSyncAt: now,
@@ -93,10 +103,11 @@ export async function createNote(sync: SyncFn, draft: NoteEditorDraft) {
         userId: USER_ID,
         title: draft.title || undefined,
         content: draft.content || undefined,
-        color: draft.color !== 'default' ? draft.color : undefined,
+        color: draft.color,
         active: true,
         done: draft.done,
         isPinned: draft.isPinned,
+        ...reminderFields,
         operation: 'create',
         deviceId: 'web',
         createdAt: now,
@@ -107,9 +118,8 @@ export async function createNote(sync: SyncFn, draft: NoteEditorDraft) {
 }
 
 /**
- * Update an existing note from a draft, preserving reminder-related fields
- * that are accepted by `syncNotes` (`triggerAt`, `repeatRule`, `repeatConfig`,
- * `snoozedUntil`, `scheduleStatus`, `timezone`) so they are not overwritten.
+ * Update an existing note from a draft, mapping reminder fields to
+ * the mobile-compatible persistence model.
  *
  * Fields NOT in the `syncNotes` schema (`repeat`, `baseAtLocal`, `startAt`,
  * `nextTriggerAt`, `lastFiredAt`, `lastAcknowledgedAt`) are preserved
@@ -118,6 +128,11 @@ export async function createNote(sync: SyncFn, draft: NoteEditorDraft) {
 export async function updateNote(sync: SyncFn, draft: NoteEditorDraft, existingNote: WebNote) {
   const now = Date.now();
   const id = draft.id ?? existingNote.id;
+  const reminderFields = buildReminderSyncFields(
+    draft.done ? { reminder: null, repeat: null } : { reminder: draft.reminder, repeat: draft.repeat },
+    new Date(now),
+    getResolvedTimezone(),
+  );
   return sync({
     userId: USER_ID,
     lastSyncAt: now,
@@ -127,19 +142,13 @@ export async function updateNote(sync: SyncFn, draft: NoteEditorDraft, existingN
         userId: USER_ID,
         title: draft.title || undefined,
         content: draft.content || undefined,
-        color: draft.color !== 'default' ? draft.color : undefined,
+        color: draft.color,
         active: true,
         done: draft.done,
         isPinned: draft.isPinned,
+        ...reminderFields,
         operation: 'update',
         deviceId: 'web',
-        // Preserve reminder fields from server so they are not cleared
-        triggerAt: existingNote.triggerAt,
-        repeatRule: existingNote.repeatRule,
-        repeatConfig: existingNote.repeatConfig as Record<string, unknown> | undefined,
-        snoozedUntil: existingNote.snoozedUntil,
-        scheduleStatus: existingNote.scheduleStatus,
-        timezone: existingNote.timezone,
         version: existingNote.version,
         createdAt: existingNote.createdAt,
         updatedAt: now,

@@ -49,7 +49,11 @@ export default function RemindersPage(): JSX.Element {
       return null;
     }
 
-    const list = dedupeReminders(reminders);
+    const normalizedReminders = reminders.map(r => ({
+      ...r,
+      title: r.title ?? null,
+    })) as Reminder[];
+    const list = dedupeReminders(normalizedReminders);
     return {
       list,
       total: reminders.length,

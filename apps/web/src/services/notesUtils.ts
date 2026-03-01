@@ -1,4 +1,5 @@
 import type { NoteColorPreset, NoteEditorDraft, WebNote } from './notesTypes';
+import { coerceRepeatRule, getEffectiveTriggerAt } from './reminderUtils';
 
 // ---------------------------------------------------------------------------
 // Colour normalisation
@@ -95,6 +96,8 @@ export function emptyDraft(): NoteEditorDraft {
     color: 'default',
     isPinned: false,
     done: false,
+    reminder: null,
+    repeat: null,
   };
 }
 
@@ -109,5 +112,7 @@ export function draftFromNote(note: WebNote): NoteEditorDraft {
     color: toPresetId(note.color),
     isPinned: note.isPinned,
     done: note.done,
+    reminder: getEffectiveTriggerAt(note),
+    repeat: coerceRepeatRule(note),
   };
 }

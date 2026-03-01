@@ -4,6 +4,7 @@
  */
 
 export type NotesViewMode = 'grid' | 'list';
+export type RepeatRule = import('../../../../packages/shared/types/reminder').RepeatRule;
 
 /** Preset IDs for note background colours, matching mobile presets. */
 export type NoteColorPreset = 'default' | 'red' | 'yellow' | 'green' | 'blue' | 'purple';
@@ -24,12 +25,12 @@ export interface WebNote {
 
   // Reminder-related fields (read-only on web; never cleared by web edits)
   triggerAt?: number;
-  repeatRule?: string;
-  repeatConfig?: Record<string, unknown>;
-  repeat?: unknown;
-  snoozedUntil?: number;
-  scheduleStatus?: string;
-  timezone?: string;
+  repeatRule?: 'none' | 'daily' | 'weekly' | 'monthly' | 'custom';
+  repeatConfig?: Record<string, unknown> | null;
+  repeat?: RepeatRule | null;
+  snoozedUntil?: number | null;
+  scheduleStatus?: 'scheduled' | 'unscheduled' | 'error';
+  timezone?: string | null;
   baseAtLocal?: string | null;
   startAt?: number | null;
   nextTriggerAt?: number | null;
@@ -52,4 +53,6 @@ export interface NoteEditorDraft {
   color: NoteColorPreset;
   isPinned: boolean;
   done: boolean;
+  reminder: Date | null;
+  repeat: RepeatRule | null;
 }
