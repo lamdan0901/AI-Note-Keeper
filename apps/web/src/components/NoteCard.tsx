@@ -16,7 +16,9 @@ interface NoteCardProps {
 
 export function NoteCard({ note, viewMode, onClick, onToggleDone, onTogglePin, onDelete }: NoteCardProps) {
   const colorPreset = toPresetId(note.color);
-  const ariaLabel = note.title && note.title.trim().length > 0 ? note.title : 'Untitled note';
+  const title = note.title?.trim() ?? '';
+  const content = note.content?.trim() ?? '';
+  const ariaLabel = title.length > 0 ? title : 'Untitled note';
   const reminderAt = getEffectiveTriggerAt(note);
   const reminderLabel = reminderAt ? formatReminder(reminderAt, coerceRepeatRule(note)) : null;
 
@@ -34,24 +36,21 @@ export function NoteCard({ note, viewMode, onClick, onToggleDone, onTogglePin, o
       tabIndex={0}
       aria-label={ariaLabel}
     >
-      <button
-        className={`note-card__icon-btn note-card__pin-btn${
-          note.isPinned ? ' note-card__pin-btn--visible note-card__icon-btn--active' : ''
-        }`}
-        onClick={(event) => {
-          event.stopPropagation();
-          event.currentTarget.blur();
-          onTogglePin();
-        }}
-        aria-pressed={note.isPinned}
-        aria-label={note.isPinned ? 'Unpin note' : 'Pin note'}
-        title={note.isPinned ? 'Unpin note' : 'Pin note'}
-        type="button"
-      >
-        <Pin size={16} />
-      </button>
-
-      <div className="note-card__actions note-card__actions--left">
+      <div className="note-card__actions">
+        <button
+          className={`note-card__icon-btn${note.isPinned ? ' note-card__icon-btn--active' : ''}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            event.currentTarget.blur();
+            onTogglePin();
+          }}
+          aria-pressed={note.isPinned}
+          aria-label={note.isPinned ? 'Unpin note' : 'Pin note'}
+          title={note.isPinned ? 'Unpin note' : 'Pin note'}
+          type="button"
+        >
+          <Pin size={16} />
+        </button>
         <button
           className={`note-card__icon-btn${note.done ? ' note-card__icon-btn--active' : ''}`}
           onClick={(event) => {
@@ -82,11 +81,11 @@ export function NoteCard({ note, viewMode, onClick, onToggleDone, onTogglePin, o
       </div>
 
       <div className="note-card__body">
-        {note.title && <p className="note-card__title">{note.title}</p>}
+        {title ? <p className="note-card__title">{title}</p> : null}
 
-        {note.content && <p className="note-card__content">{note.content}</p>}
+        {content ? <p className="note-card__content">{content}</p> : null}
 
-        {!note.title && !note.content && <p className="note-card__empty">Empty note</p>}
+        {!title && !content ? <p className="note-card__empty">Empty note</p> : null}
       </div>
 
       {reminderLabel ? (

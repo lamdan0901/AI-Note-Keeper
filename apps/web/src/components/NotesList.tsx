@@ -24,15 +24,16 @@ function NoteGroup({
   return (
     <div className={`notes-list__group notes-list__group--${viewMode}`}>
       {notes.map((note) => (
-        <NoteCard
-          key={note.id}
-          note={note}
-          viewMode={viewMode}
-          onClick={() => onCardClick(note)}
-          onToggleDone={() => onToggleDone(note)}
-          onTogglePin={() => onTogglePin(note)}
-          onDelete={() => onDelete(note)}
-        />
+        <div key={note.id} className="note-card-slot">
+          <NoteCard
+            note={note}
+            viewMode={viewMode}
+            onClick={() => onCardClick(note)}
+            onToggleDone={() => onToggleDone(note)}
+            onTogglePin={() => onTogglePin(note)}
+            onDelete={() => onDelete(note)}
+          />
+        </div>
       ))}
     </div>
   );
