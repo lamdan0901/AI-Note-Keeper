@@ -1076,6 +1076,9 @@ body {
   width: 100%;
 }
 .recurrence-picker {
+  --recurrence-picker-title-width: 46px;
+  --recurrence-picker-header-gap: 10px;
+  --recurrence-picker-subsection-offset: 2px;
   border: 1px solid var(--modal-border-soft);
   border-radius: 12px;
   padding: 10px;
@@ -1084,14 +1087,22 @@ body {
   gap: 10px;
 }
 .recurrence-picker__title {
+  flex: 0 0 var(--recurrence-picker-title-width);
   font-size: 15px;
   font-weight: 700;
   color: var(--modal-fg-primary);
+}
+.recurrence-picker__header {
+  display: flex;
+  align-items: center;
+  gap: var(--recurrence-picker-header-gap);
+  flex-wrap: wrap;
 }
 .recurrence-picker__tabs {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
+  align-items: center;
 }
 .recurrence-picker__tab {
   border: 1px solid var(--modal-border-strong);
@@ -1111,6 +1122,10 @@ body {
 }
 .recurrence-picker__weekly {
   display: flex;
+  margin-left: calc(
+    var(--recurrence-picker-title-width) + var(--recurrence-picker-header-gap) +
+      var(--recurrence-picker-subsection-offset)
+  );
 }
 .recurrence-picker__weekdays {
   display: flex;
@@ -1137,6 +1152,10 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  margin-left: calc(
+    var(--recurrence-picker-title-width) + var(--recurrence-picker-header-gap) +
+      var(--recurrence-picker-subsection-offset)
+  );
   font-size: 15px;
   font-weight: 500;
   color: var(--modal-fg-secondary);
