@@ -901,6 +901,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  overscroll-behavior: contain;
 }
 .reminder-calendar__header {
   display: flex;
