@@ -35,8 +35,9 @@
   ### Web App Screenshots
 
   <!-- Add web app screenshots below -->
-  <img width="2099" height="1625" alt="image" src="https://github.com/user-attachments/assets/2fea5270-1e10-4b0e-9d7b-6fd051ce0bd8" />
-  <img width="1454" height="851" alt="image" src="https://github.com/user-attachments/assets/347d75de-2a11-44d0-90ce-a95d5f32d12b" />
+  <img width="1407" height="974" alt="Screenshot 2026-03-02 172522" src="https://github.com/user-attachments/assets/7638e32b-80d4-446e-8d40-f8a38702b4fb" />
+  <img width="615" height="478" alt="Screenshot 2026-03-02 172531" src="https://github.com/user-attachments/assets/2277957d-8ce9-4287-ae70-d77cb3fa3e58" />
+  <img width="697" height="727" alt="Screenshot 2026-03-02 172535" src="https://github.com/user-attachments/assets/84712f0e-71da-439d-a294-c89265bf3d19" />
 
   ---
 
