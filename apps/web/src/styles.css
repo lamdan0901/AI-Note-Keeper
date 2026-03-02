@@ -407,6 +407,9 @@ body {
   overflow: hidden;
 }
 .notes-header__view-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: none;
   background: transparent;
   padding: 6px 10px;
@@ -428,6 +431,10 @@ body {
   color: #b89eff;
 }
 .notes-header__new-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   background: var(--color-accent);
   color: #fff;
   border: none;
@@ -587,6 +594,9 @@ body {
 }
 .modal-dialog__pin-btn,
 .modal-dialog__close-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: none;
   border: none;
   cursor: pointer;
@@ -712,6 +722,9 @@ body {
   max-width: 100%;
 }
 .modal-dialog__reminder-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   max-width: 280px;
   background: #7b4dff1f;
   border: 1px solid rgba(123, 77, 255, 0.35);
@@ -726,6 +739,9 @@ body {
   text-overflow: ellipsis;
 }
 .modal-dialog__reminder-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 24px;
   height: 24px;
   border: 1px solid var(--modal-border-strong);
@@ -742,6 +758,10 @@ body {
 }
 .modal-dialog__done-btn,
 .modal-dialog__delete-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   background: none;
   border: 1px solid var(--modal-border-strong);
   border-radius: 7px;
@@ -756,6 +776,10 @@ body {
     border-color 0.12s;
 }
 .modal-dialog__reminder-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   background: #7b4dff1a;
   border: 1px solid rgba(123, 77, 255, 0.35);
   border-radius: 999px;
@@ -882,6 +906,9 @@ body {
   color: var(--modal-fg-primary);
 }
 .reminder-calendar__month-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 28px;
   height: 28px;
   border: 1px solid var(--modal-border-strong);
@@ -955,6 +982,9 @@ body {
   gap: 8px;
 }
 .reminder-setup-modal__chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: 1px solid var(--modal-border-strong);
   border-radius: 999px;
   background: transparent;
@@ -990,10 +1020,26 @@ body {
   cursor: not-allowed;
 }
 .reminder-setup-modal__chip--time-input {
+  display: inline-block;
   min-width: 128px;
   cursor: pointer;
   background: transparent;
   color: var(--modal-fg-primary);
+}
+.notes-list__section-label svg,
+.notes-header__theme-btn-icon svg,
+.notes-header__view-btn svg,
+.notes-header__new-btn svg,
+.modal-dialog__pin-btn svg,
+.modal-dialog__close-btn svg,
+.modal-dialog__reminder-chip svg,
+.modal-dialog__reminder-clear svg,
+.modal-dialog__reminder-trigger svg,
+.modal-dialog__done-btn svg,
+.modal-dialog__delete-btn svg,
+.reminder-calendar__month-btn svg {
+  display: block;
+  flex-shrink: 0;
 }
 .reminder-setup-modal__chip--time-input:focus-visible {
   outline: 2px solid var(--color-accent);
