@@ -1,18 +1,20 @@
 import React from 'react';
 import { Bell, Check, Pin, Trash2 } from 'lucide-react';
 import type { WebNote } from '../services/notesTypes';
+import type { NotesViewMode } from '../services/notesTypes';
 import { toPresetId } from '../services/notesUtils';
 import { coerceRepeatRule, formatReminder, getEffectiveTriggerAt } from '../services/reminderUtils';
 
 interface NoteCardProps {
   note: WebNote;
+  viewMode: NotesViewMode;
   onClick: () => void;
   onToggleDone: () => void;
   onTogglePin: () => void;
   onDelete: () => void;
 }
 
-export function NoteCard({ note, onClick, onToggleDone, onTogglePin, onDelete }: NoteCardProps) {
+export function NoteCard({ note, viewMode, onClick, onToggleDone, onTogglePin, onDelete }: NoteCardProps) {
   const colorPreset = toPresetId(note.color);
   const ariaLabel = note.title && note.title.trim().length > 0 ? note.title : 'Untitled note';
   const reminderAt = getEffectiveTriggerAt(note);
@@ -20,7 +22,7 @@ export function NoteCard({ note, onClick, onToggleDone, onTogglePin, onDelete }:
 
   return (
     <article
-      className={`note-card note-card--${colorPreset}${note.done ? ' note-card--done' : ''}`}
+      className={`note-card note-card--${viewMode} note-card--${colorPreset}${note.done ? ' note-card--done' : ''}`}
       onClick={onClick}
       onKeyDown={(event) => {
         if (event.key === 'Enter' || event.key === ' ') {

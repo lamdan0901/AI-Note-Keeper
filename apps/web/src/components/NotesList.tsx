@@ -27,6 +27,7 @@ function NoteGroup({
         <NoteCard
           key={note.id}
           note={note}
+          viewMode={viewMode}
           onClick={() => onCardClick(note)}
           onToggleDone={() => onToggleDone(note)}
           onTogglePin={() => onTogglePin(note)}
