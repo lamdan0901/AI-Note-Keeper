@@ -85,16 +85,14 @@ type SyncFn = ReturnType<typeof useSyncNotes>;
 type SyncChange = Parameters<SyncFn>[0]['changes'][number];
 
 function toLegacySyncChange(change: SyncChange): SyncChange {
-  const {
-    repeat: _repeat,
-    startAt: _startAt,
-    baseAtLocal: _baseAtLocal,
-    nextTriggerAt: _nextTriggerAt,
-    lastFiredAt: _lastFiredAt,
-    lastAcknowledgedAt: _lastAcknowledgedAt,
-    ...legacyCompatible
-  } = change;
-  return legacyCompatible;
+  const legacyCompatible = { ...change } as Partial<SyncChange>;
+  delete legacyCompatible.repeat;
+  delete legacyCompatible.startAt;
+  delete legacyCompatible.baseAtLocal;
+  delete legacyCompatible.nextTriggerAt;
+  delete legacyCompatible.lastFiredAt;
+  delete legacyCompatible.lastAcknowledgedAt;
+  return legacyCompatible as SyncChange;
 }
 
 /**
