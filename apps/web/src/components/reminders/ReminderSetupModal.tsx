@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import type { RepeatRule } from '../../services/notesTypes';
 import { getInitialReminderDate } from '../../services/reminderUtils';
@@ -88,6 +88,7 @@ export function ReminderSetupModal({
   onSave,
   onClose,
 }: ReminderSetupModalProps): JSX.Element {
+  const calendarRef = useRef<HTMLElement>(null);
   const providedNow = useMemo(() => (now ? new Date(now) : null), [now]);
   const [liveNow, setLiveNow] = useState<Date>(() => providedNow ?? new Date());
   const [selectedDate, setSelectedDate] = useState<Date>(() =>
@@ -104,6 +105,26 @@ export function ReminderSetupModal({
     const timer = window.setInterval(() => setLiveNow(new Date()), 15_000);
     return () => window.clearInterval(timer);
   }, [providedNow]);
+
+  useEffect(() => {
+    const calendarElement = calendarRef.current;
+    if (!calendarElement) {
+      return;
+    }
+
+    const handleWheel = (event: WheelEvent) => {
+      if (event.deltaY === 0) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      setViewMonth((prev) => addMonths(prev, event.deltaY > 0 ? 1 : -1));
+    };
+
+    calendarElement.addEventListener('wheel', handleWheel, { passive: false });
+    return () => calendarElement.removeEventListener('wheel', handleWheel);
+  }, []);
 
   const todayStart = useMemo(() => startOfDay(liveNow), [liveNow]);
   const calendarDays = useMemo(() => buildCalendarDays(viewMonth), [viewMonth]);
@@ -160,12 +181,9 @@ export function ReminderSetupModal({
         />
 
         <section
+          ref={calendarRef}
           className="reminder-calendar"
           aria-label="Reminder date"
-          onWheel={(event) => {
-            event.preventDefault();
-            setViewMonth((prev) => addMonths(prev, event.deltaY > 0 ? 1 : -1));
-          }}
         >
           <div className="reminder-calendar__header">
             <button

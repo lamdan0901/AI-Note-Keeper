@@ -20,29 +20,38 @@ export function RecurrencePicker({ value, onChange, selectedDate }: RecurrencePi
     if (value?.kind !== 'weekly') return [selectedDate.getDay()];
     return value.weekdays;
   }, [selectedDate, value]);
+  const tabs = [
+    { value: 'none', label: 'None' },
+    { value: 'daily', label: 'Daily' },
+    { value: 'weekly', label: 'Weekly' },
+    { value: 'monthly', label: 'Monthly' },
+    { value: 'custom', label: 'Custom' },
+  ] as const;
 
   return (
     <section className="recurrence-picker" aria-label="Repeat">
-      <p className="recurrence-picker__title">Repeat</p>
-      <div className="recurrence-picker__tabs" role="tablist" aria-label="Repeat options">
-        {(['none', 'daily', 'weekly', 'monthly', 'custom'] as const).map((tab) => (
+      <div className="recurrence-picker__header">
+        <p className="recurrence-picker__title">Repeat</p>
+        <div className="recurrence-picker__tabs" role="tablist" aria-label="Repeat options">
+          {tabs.map((tab) => (
           <button
-            key={tab}
+            key={tab.value}
             type="button"
             role="tab"
-            className={`recurrence-picker__tab${activeTab === tab ? ' recurrence-picker__tab--active' : ''}`}
-            aria-selected={activeTab === tab}
+            className={`recurrence-picker__tab${activeTab === tab.value ? ' recurrence-picker__tab--active' : ''}`}
+            aria-selected={activeTab === tab.value}
             onClick={() => {
-              if (tab === 'none') onChange(null);
-              if (tab === 'daily') onChange({ kind: 'daily', interval: 1 });
-              if (tab === 'weekly') onChange({ kind: 'weekly', interval: 1, weekdays: [selectedDate.getDay()] });
-              if (tab === 'monthly') onChange({ kind: 'monthly', interval: 1, mode: 'day_of_month' });
-              if (tab === 'custom') onChange({ kind: 'custom', interval: 2, frequency: 'days' });
+              if (tab.value === 'none') onChange(null);
+              if (tab.value === 'daily') onChange({ kind: 'daily', interval: 1 });
+              if (tab.value === 'weekly') onChange({ kind: 'weekly', interval: 1, weekdays: [selectedDate.getDay()] });
+              if (tab.value === 'monthly') onChange({ kind: 'monthly', interval: 1, mode: 'day_of_month' });
+              if (tab.value === 'custom') onChange({ kind: 'custom', interval: 2, frequency: 'days' });
             }}
           >
-            {tab}
+            {tab.label}
           </button>
-        ))}
+          ))}
+        </div>
       </div>
 
       {value?.kind === 'weekly' && (

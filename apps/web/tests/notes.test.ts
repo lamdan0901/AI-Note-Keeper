@@ -62,6 +62,10 @@ describe('notes service payload shaping', () => {
       timezone: getResolvedTimezone(),
       done: false,
     });
+    expect(arg.changes[0]).not.toHaveProperty('repeat');
+    expect(arg.changes[0]).not.toHaveProperty('startAt');
+    expect(arg.changes[0]).not.toHaveProperty('baseAtLocal');
+    expect(arg.changes[0]).not.toHaveProperty('nextTriggerAt');
   });
 
   it('updateNote clears reminder fields when draft has no reminder', async () => {

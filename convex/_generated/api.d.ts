@@ -13,6 +13,7 @@ import type * as functions__generated_api from "../functions/_generated/api.js";
 import type * as functions__generated_server from "../functions/_generated/server.js";
 import type * as functions_deviceTokens from "../functions/deviceTokens.js";
 import type * as functions_notes from "../functions/notes.js";
+import type * as functions_notesMigration from "../functions/notesMigration.js";
 import type * as functions_push from "../functions/push.js";
 import type * as functions_reminderChangeEvents from "../functions/reminderChangeEvents.js";
 import type * as functions_reminderTriggers from "../functions/reminderTriggers.js";
@@ -31,6 +32,7 @@ declare const fullApi: ApiFromModules<{
   "functions/_generated/server": typeof functions__generated_server;
   "functions/deviceTokens": typeof functions_deviceTokens;
   "functions/notes": typeof functions_notes;
+  "functions/notesMigration": typeof functions_notesMigration;
   "functions/push": typeof functions_push;
   "functions/reminderChangeEvents": typeof functions_reminderChangeEvents;
   "functions/reminderTriggers": typeof functions_reminderTriggers;

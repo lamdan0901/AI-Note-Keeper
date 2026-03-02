@@ -82,6 +82,18 @@ export function useSyncNotes() {
 // ---------------------------------------------------------------------------
 
 type SyncFn = ReturnType<typeof useSyncNotes>;
+type SyncChange = Parameters<SyncFn>[0]['changes'][number];
+
+function toLegacySyncChange(change: SyncChange): SyncChange {
+  const legacyCompatible = { ...change } as Partial<SyncChange>;
+  delete legacyCompatible.repeat;
+  delete legacyCompatible.startAt;
+  delete legacyCompatible.baseAtLocal;
+  delete legacyCompatible.nextTriggerAt;
+  delete legacyCompatible.lastFiredAt;
+  delete legacyCompatible.lastAcknowledgedAt;
+  return legacyCompatible as SyncChange;
+}
 
 /**
  * Create a new note from a draft.
@@ -98,7 +110,7 @@ export async function createNote(sync: SyncFn, draft: NoteEditorDraft) {
     userId: USER_ID,
     lastSyncAt: now,
     changes: [
-      {
+      toLegacySyncChange({
         id,
         userId: USER_ID,
         title: draft.title || undefined,
@@ -112,7 +124,7 @@ export async function createNote(sync: SyncFn, draft: NoteEditorDraft) {
         deviceId: 'web',
         createdAt: now,
         updatedAt: now,
-      },
+      }),
     ],
   });
 }
@@ -134,7 +146,7 @@ export async function updateNote(sync: SyncFn, draft: NoteEditorDraft, existingN
     userId: USER_ID,
     lastSyncAt: now,
     changes: [
-      {
+      toLegacySyncChange({
         id,
         userId: USER_ID,
         title: draft.title || undefined,
@@ -149,7 +161,7 @@ export async function updateNote(sync: SyncFn, draft: NoteEditorDraft, existingN
         version: existingNote.version,
         createdAt: existingNote.createdAt,
         updatedAt: now,
-      },
+      }),
     ],
   });
 }
