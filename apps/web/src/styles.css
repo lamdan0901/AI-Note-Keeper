@@ -863,7 +863,7 @@ body {
   cursor: not-allowed;
 }
 .reminder-setup-modal {
-  max-width: 560px;
+  max-width: 616px;
   gap: 12px;
 }
 .reminder-setup-modal__title {
@@ -1007,7 +1007,7 @@ body {
     color 0.12s ease;
   line-height: 1.2;
   min-height: 32px;
-  min-width: 72px;
+  min-width: 48px;
 }
 .reminder-setup-modal__chip:hover {
   background: var(--modal-hover-soft);
@@ -1028,7 +1028,6 @@ body {
 }
 .reminder-setup-modal__chip--time-input {
   display: inline-block;
-  min-width: 128px;
   cursor: pointer;
   background: transparent;
   color: var(--modal-fg-primary);
