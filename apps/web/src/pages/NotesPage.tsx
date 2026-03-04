@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   useNotes,
   useSyncNotes,
@@ -7,8 +7,9 @@ import {
   deleteNote,
   getResolvedTimezone,
 } from '../services/notes';
+import { useDebouncedValue } from '../../../../packages/shared/hooks/useDebouncedValue';
 import type { NoteEditorDraft, NotesViewMode, WebNote } from '../services/notesTypes';
-import { emptyDraft, draftFromNote, sortNotes } from '../services/notesUtils';
+import { emptyDraft, draftFromNote, filterBySearchQuery, sortNotes } from '../services/notesUtils';
 import { buildReminderSyncFields } from '../services/reminderUtils';
 import { NotesHeader } from '../components/NotesHeader';
 import { NotesList } from '../components/NotesList';
@@ -32,8 +33,17 @@ export default function NotesPage({ themeMode, onThemeModeChange }: NotesPagePro
   const [editingNote, setEditingNote] = useState<WebNote | null>(null);
   const [optimisticNotes, setOptimisticNotes] = useState<WebNote[] | null>(null);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
+  const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearchQuery = useDebouncedValue(searchQuery, 250);
 
-  const displayNotes: WebNote[] = optimisticNotes ?? serverNotes ?? [];
+  const displayNotes = useMemo<WebNote[]>(
+    () => optimisticNotes ?? serverNotes ?? [],
+    [optimisticNotes, serverNotes],
+  );
+  const filteredNotes = useMemo(
+    () => filterBySearchQuery(displayNotes, debouncedSearchQuery),
+    [displayNotes, debouncedSearchQuery],
+  );
 
   const handleNewNote = useCallback(() => {
     setDraft(emptyDraft());
@@ -286,18 +296,22 @@ export default function NotesPage({ themeMode, onThemeModeChange }: NotesPagePro
         saveStatus={saveStatus}
         themeMode={themeMode}
         onThemeModeChange={onThemeModeChange}
+        searchQuery={searchQuery}
+        onSearchQueryChange={setSearchQuery}
+        onClearSearch={() => setSearchQuery('')}
       />
 
       {serverNotes === undefined ? (
         <p className="notes-page__loading">Loading…</p>
       ) : (
         <NotesList
-          notes={displayNotes}
+          notes={filteredNotes}
           viewMode={viewMode}
           onCardClick={handleCardClick}
           onToggleDone={handleToggleDone}
           onTogglePin={handleTogglePin}
           onDelete={handleDeleteFromCard}
+          searchQuery={debouncedSearchQuery}
         />
       )}
 

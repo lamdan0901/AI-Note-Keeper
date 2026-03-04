@@ -54,6 +54,21 @@ export function filterActive(notes: WebNote[]): WebNote[] {
   return notes.filter((n) => n.active === true);
 }
 
+/**
+ * Filter notes by a free-text query against title/content.
+ * Matching is case-insensitive and uses substring matching.
+ */
+export function filterBySearchQuery(notes: WebNote[], query: string): WebNote[] {
+  const normalized = query.trim().toLowerCase();
+  if (!normalized) return notes;
+
+  return notes.filter((note) => {
+    const title = (note.title ?? '').toLowerCase();
+    const content = (note.content ?? '').toLowerCase();
+    return title.includes(normalized) || content.includes(normalized);
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Sorting
 // ---------------------------------------------------------------------------

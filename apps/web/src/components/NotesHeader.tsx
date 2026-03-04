@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutGrid, List, Monitor, Moon, Plus, Sun } from 'lucide-react';
+import { LayoutGrid, List, Monitor, Moon, Plus, Sun, X } from 'lucide-react';
 import type { NotesViewMode } from '../services/notesTypes';
 import type { ThemeMode } from '../services/theme';
 
@@ -10,6 +10,9 @@ interface NotesHeaderProps {
   saveStatus: 'idle' | 'saving' | 'saved' | 'error';
   themeMode: ThemeMode;
   onThemeModeChange: (mode: ThemeMode) => void;
+  searchQuery: string;
+  onSearchQueryChange: (value: string) => void;
+  onClearSearch: () => void;
 }
 
 const SAVE_STATUS_LABELS: Record<NotesHeaderProps['saveStatus'], string | null> = {
@@ -32,12 +35,38 @@ export function NotesHeader({
   saveStatus,
   themeMode,
   onThemeModeChange,
+  searchQuery,
+  onSearchQueryChange,
+  onClearSearch,
 }: NotesHeaderProps) {
   const statusLabel = SAVE_STATUS_LABELS[saveStatus];
+  const hasSearch = searchQuery.trim().length > 0;
 
   return (
     <header className="notes-header">
       <span className="notes-header__title">Notes</span>
+
+      <div className="notes-header__search">
+        <input
+          className="notes-header__search-input"
+          type="text"
+          value={searchQuery}
+          onChange={(event) => onSearchQueryChange(event.target.value)}
+          placeholder="Search notes"
+          aria-label="Search notes"
+        />
+        {hasSearch && (
+          <button
+            className="notes-header__search-clear"
+            type="button"
+            onClick={onClearSearch}
+            aria-label="Clear search"
+            title="Clear search"
+          >
+            <X size={14} />
+          </button>
+        )}
+      </div>
 
       <div className="notes-header__actions">
         {statusLabel && (

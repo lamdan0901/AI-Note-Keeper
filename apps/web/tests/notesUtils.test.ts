@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   filterActive,
+  filterBySearchQuery,
   sortNotes,
   emptyDraft,
   draftFromNote,
@@ -61,6 +62,59 @@ describe('filterActive', () => {
 
   it('returns empty array for empty input', () => {
     expect(filterActive([])).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// filterBySearchQuery
+// ---------------------------------------------------------------------------
+
+describe('filterBySearchQuery', () => {
+  it('returns all notes when query is empty', () => {
+    const notes = [makeNote({ id: 'a' }), makeNote({ id: 'b' })];
+    expect(filterBySearchQuery(notes, '')).toEqual(notes);
+  });
+
+  it('returns all notes when query is whitespace only', () => {
+    const notes = [makeNote({ id: 'a' }), makeNote({ id: 'b' })];
+    expect(filterBySearchQuery(notes, '   ')).toEqual(notes);
+  });
+
+  it('matches by title', () => {
+    const notes = [
+      makeNote({ id: 'a', title: 'Groceries', content: 'Buy milk' }),
+      makeNote({ id: 'b', title: 'Workout', content: 'Push day' }),
+    ];
+    expect(filterBySearchQuery(notes, 'groc').map((n) => n.id)).toEqual(['a']);
+  });
+
+  it('matches by content', () => {
+    const notes = [
+      makeNote({ id: 'a', title: 'Todo', content: 'Book dentist appointment' }),
+      makeNote({ id: 'b', title: 'Travel', content: 'Passport renewal' }),
+    ];
+    expect(filterBySearchQuery(notes, 'passport').map((n) => n.id)).toEqual(['b']);
+  });
+
+  it('matches case-insensitively', () => {
+    const notes = [makeNote({ id: 'a', title: 'Project Alpha', content: 'Milestone' })];
+    expect(filterBySearchQuery(notes, 'alpha').map((n) => n.id)).toEqual(['a']);
+    expect(filterBySearchQuery(notes, 'ALPHA').map((n) => n.id)).toEqual(['a']);
+  });
+
+  it('returns no notes when there are no matches', () => {
+    const notes = [makeNote({ id: 'a', title: 'One', content: 'First' })];
+    expect(filterBySearchQuery(notes, 'xyz')).toEqual([]);
+  });
+
+  it('handles null title/content safely', () => {
+    const notes = [
+      makeNote({ id: 'a', title: null, content: null }),
+      makeNote({ id: 'b', title: 'Second', content: null }),
+      makeNote({ id: 'c', title: null, content: 'Third body' }),
+    ];
+    expect(filterBySearchQuery(notes, 'second').map((n) => n.id)).toEqual(['b']);
+    expect(filterBySearchQuery(notes, 'third').map((n) => n.id)).toEqual(['c']);
   });
 });
 

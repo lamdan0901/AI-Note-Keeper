@@ -11,6 +11,7 @@ interface NotesListProps {
   onToggleDone: (note: WebNote) => void;
   onTogglePin: (note: WebNote) => void;
   onDelete: (note: WebNote) => void;
+  searchQuery?: string;
 }
 
 function NoteGroup({
@@ -46,11 +47,16 @@ export function NotesList({
   onToggleDone,
   onTogglePin,
   onDelete,
+  searchQuery = '',
 }: NotesListProps) {
+  const hasSearchQuery = searchQuery.trim().length > 0;
+
   if (notes.length === 0) {
     return (
       <div className="notes-list notes-list--empty">
-        <p className="notes-list__empty-text">No notes yet. Create one to get started.</p>
+        <p className="notes-list__empty-text">
+          {hasSearchQuery ? 'No matching notes found.' : 'No notes yet. Create one to get started.'}
+        </p>
       </div>
     );
   }
