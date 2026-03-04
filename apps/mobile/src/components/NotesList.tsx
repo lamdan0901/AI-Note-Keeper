@@ -16,6 +16,7 @@ interface NotesListProps {
   onNoteDelete?: (noteId: string) => void;
   onRefresh?: () => void;
   refreshing?: boolean;
+  searchQuery?: string;
 }
 
 export const NotesList: React.FC<NotesListProps> = ({
@@ -30,6 +31,7 @@ export const NotesList: React.FC<NotesListProps> = ({
   onNoteDelete,
   onRefresh,
   refreshing,
+  searchQuery = '',
 }) => {
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
@@ -126,7 +128,9 @@ export const NotesList: React.FC<NotesListProps> = ({
   if (notes.length === 0) {
     return (
       <View style={styles.emptyContainer}>
-        <Text style={styles.emptyText}>No notes yet. Create one!</Text>
+        <Text style={styles.emptyText}>
+          {searchQuery.trim() ? 'No matching notes found.' : 'No notes yet. Create one!'}
+        </Text>
       </View>
     );
   }

@@ -27,6 +27,7 @@ import { useNoteActions } from '../hooks/useNoteActions';
 import { useNoteSelection } from '../hooks/useNoteSelection';
 import { useToast } from '../hooks/useToast';
 import { RepeatRule } from '../../../../packages/shared/types/reminder';
+import { useDebouncedValue } from '../../../../packages/shared/hooks/useDebouncedValue';
 
 type NotesScreenProps = {
   rescheduleNoteId?: string | null;
@@ -43,6 +44,8 @@ const NotesScreenContent = ({
 }: NotesScreenProps) => {
   const { theme } = useTheme();
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('grid'); // Default to Bento/Grid
+  const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearchQuery = useDebouncedValue(searchQuery, 250);
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [rescheduleTargetId, setRescheduleTargetId] = useState<string | null>(null);
   const [showRescheduleModal, setShowRescheduleModal] = useState(false);
@@ -352,6 +355,15 @@ const NotesScreenContent = ({
   };
 
   const styles = useMemo(() => createStyles(theme), [theme]);
+  const filteredNotes = useMemo(() => {
+    const normalizedQuery = debouncedSearchQuery.trim().toLowerCase();
+    if (!normalizedQuery) return notes;
+    return notes.filter((note) => {
+      const title = (note.title ?? '').toLowerCase();
+      const content = (note.content ?? '').toLowerCase();
+      return title.includes(normalizedQuery) || content.includes(normalizedQuery);
+    });
+  }, [debouncedSearchQuery, notes]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -360,6 +372,8 @@ const NotesScreenContent = ({
         selectionMode={selectionMode}
         onMenuPress={openDrawer}
         onViewModeToggle={() => setViewMode((prev) => (prev === 'grid' ? 'list' : 'grid'))}
+        searchQuery={searchQuery}
+        onSearchQueryChange={setSearchQuery}
       />
 
       <SettingsDrawer visible={drawerVisible} onClose={closeDrawer} drawerAnim={drawerAnim} />
@@ -385,10 +399,10 @@ const NotesScreenContent = ({
           disabled={!selectionMode}
         >
           <NotesList
-            notes={notes}
+            notes={filteredNotes}
             viewMode={viewMode}
             onNotePress={(id) => {
-              const note = notes.find((n) => n.id === id);
+              const note = filteredNotes.find((n) => n.id === id);
               editorModalRef.current?.openEditor(note);
             }}
             onNoteLongPress={handleNoteLongPress}
@@ -399,6 +413,7 @@ const NotesScreenContent = ({
             onNoteDelete={handleNoteDelete}
             onRefresh={handleRefresh}
             refreshing={refreshing}
+            searchQuery={debouncedSearchQuery}
           />
         </Pressable>
       )}
