@@ -20,6 +20,15 @@ const REMINDER_DELETE_TASK = 'ReminderDelete';
 import { RepeatRule } from '../../../../packages/shared/types/reminder';
 import { Note } from '../db/notesRepo';
 
+const isoLocalFromMs = (ms: number): string => {
+  const d = new Date(ms);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return (
+    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
+    `T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+  );
+};
+
 // Helper to convert legacy/flat Note repeat fields to rich RepeatRule object
 const getRepeatRule = (note: Note): RepeatRule | null => {
   if (!note.repeatRule || note.repeatRule === 'none') return null;
@@ -91,18 +100,18 @@ const reminderDoneTask = async (data: DoneTaskData) => {
 
     // 1. Calculate next trigger (Optimistic)
     const repeatRule = getRepeatRule(note);
-    const nextTrigger = computeNextTrigger(
-      now,
-      note.triggerAt || now, // Use triggerAt as anchor if startAt is missing (best effort)
-      note.timezone ? new Date().toISOString() : new Date().toISOString(), // TODO: Use stored baseAtLocal if available, else current local time
-      repeatRule,
-    );
+    const startAt = note.startAt ?? note.triggerAt ?? note.nextTriggerAt ?? now;
+    const baseAtLocal = note.baseAtLocal ?? isoLocalFromMs(startAt);
+    const nextTrigger = computeNextTrigger(now, startAt, baseAtLocal, repeatRule);
 
     // 2. Update Local State
     const updatedNote: Note = {
       ...note,
       done: true,
       triggerAt: nextTrigger ?? undefined,
+      startAt,
+      baseAtLocal,
+      nextTriggerAt: nextTrigger ?? undefined,
       snoozedUntil: undefined, // Clear snooze
       updatedAt: now,
       scheduleStatus: nextTrigger ? 'scheduled' : 'unscheduled',

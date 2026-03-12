@@ -15,6 +15,25 @@ export type NotificationLedgerEntry = {
 
 export type DbLike = SQLiteDatabase;
 
+const UNIQUE_CONSTRAINT_PATTERNS = [
+  'UNIQUE constraint failed',
+  'SQLITE_CONSTRAINT_UNIQUE',
+  'SQLITE_CONSTRAINT_PRIMARYKEY',
+  'constraint failed',
+] as const;
+
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
+};
+
+export const isUniqueConstraintError = (error: unknown): boolean => {
+  const message = getErrorMessage(error);
+  return UNIQUE_CONSTRAINT_PATTERNS.some((pattern) => message.includes(pattern));
+};
+
 /**
  * Record a notification delivery in the ledger
  */
@@ -33,6 +52,28 @@ export const recordNotificationSent = async (
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
     [id, reminderId, eventId, source, sentAt, 0, createdAt],
   );
+};
+
+/**
+ * Atomically claims (reminderId,eventId) for this sender.
+ * Returns false when another path has already recorded the same event.
+ */
+export const tryRecordNotificationSent = async (
+  db: DbLike,
+  reminderId: string,
+  eventId: string,
+  source: NotificationSource,
+  sentAt: number = Date.now(),
+): Promise<boolean> => {
+  try {
+    await recordNotificationSent(db, reminderId, eventId, source, sentAt);
+    return true;
+  } catch (error) {
+    if (isUniqueConstraintError(error)) {
+      return false;
+    }
+    throw error;
+  }
 };
 
 /**

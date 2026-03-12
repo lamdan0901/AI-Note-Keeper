@@ -6,11 +6,7 @@ import { upsertNote, deleteNote } from '../db/notesRepo';
 import { fetchReminder } from './fetchReminder';
 import { cancelNoteWithLedger } from '../reminders/scheduler';
 import { Note } from '../db/notesRepo';
-import {
-  hasNotificationSent,
-  recordNotificationSent,
-  cleanOldRecords,
-} from '../reminders/notificationLedger';
+import { tryRecordNotificationSent, cleanOldRecords } from '../reminders/notificationLedger';
 
 export type FcmRemoteMessage = {
   messageId?: string;
@@ -155,20 +151,22 @@ export const handleFcmMessage = async (remoteMessage: FcmRemoteMessage): Promise
     titleText && bodyText ? bodyText : titleText || bodyText ? '' : 'You have a reminder';
 
   if (remoteMessage.data?.type === 'trigger_reminder') {
-    // Deduplicate using the notification ledger.
-    // The local alarm (if it fired first) will have already recorded
-    // an entry with the same eventId – in that case we skip.
     const eventId = remoteMessage.data?.eventId;
-    if (eventId) {
+
+    // Android with native showNow can perform dedup atomically in native code.
+    // Other paths claim in JS before display.
+    const shouldClaimInJs = !(Platform.OS === 'android' && NativeModules.ReminderModule?.showNow);
+
+    if (eventId && shouldClaimInJs) {
       try {
         const db = await getDb();
-        const alreadySent = await hasNotificationSent(db, reminderId, eventId);
+        const claimed = await tryRecordNotificationSent(db, reminderId, eventId, 'fcm');
 
-        if (alreadySent) {
+        if (!claimed) {
           logSyncEvent('info', 'fcm_trigger_suppressed_duplicate', {
             reminderId,
             eventId,
-            reason: 'local_notification_already_sent',
+            reason: 'notification_already_recorded',
           });
           return;
         }
@@ -185,7 +183,7 @@ export const handleFcmMessage = async (remoteMessage: FcmRemoteMessage): Promise
           eventId,
           error: error instanceof Error ? error.message : String(error),
         });
-        // Continue with notification even if ledger check fails
+        // Continue with notification even if ledger claim fails unexpectedly
       }
     }
 
@@ -193,21 +191,6 @@ export const handleFcmMessage = async (remoteMessage: FcmRemoteMessage): Promise
     try {
       await showImmediateNotification(reminderId, title, body, eventId);
 
-      // Record delivery in the ledger so the local alarm (if it fires
-      // later) knows not to duplicate.
-      if (eventId) {
-        try {
-          const db = await getDb();
-          await recordNotificationSent(db, reminderId, eventId, 'fcm');
-          logSyncEvent('info', 'fcm_delivery_recorded', { reminderId, eventId });
-        } catch (error) {
-          logSyncEvent('warn', 'fcm_ledger_record_failed', {
-            reminderId,
-            eventId,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-      }
       return;
     } catch (error) {
       logSyncEvent('error', 'fcm_trigger_notification_failed', {
@@ -220,22 +203,31 @@ export const handleFcmMessage = async (remoteMessage: FcmRemoteMessage): Promise
 
   // Fallback: show generic notification for any remaining message type
   try {
-    await showImmediateNotification(reminderId, title, body, remoteMessage.data?.eventId);
-
     const eventId = remoteMessage.data?.eventId;
-    if (eventId) {
+    const shouldClaimInJs = !(Platform.OS === 'android' && NativeModules.ReminderModule?.showNow);
+
+    if (eventId && shouldClaimInJs) {
       try {
         const db = await getDb();
-        await recordNotificationSent(db, reminderId, eventId, 'fcm');
-        logSyncEvent('info', 'fcm_delivery_recorded', { reminderId, eventId });
+        const claimed = await tryRecordNotificationSent(db, reminderId, eventId, 'fcm');
+        if (!claimed) {
+          logSyncEvent('info', 'fcm_notification_suppressed_duplicate', {
+            reminderId,
+            eventId,
+            reason: 'notification_already_recorded',
+          });
+          return;
+        }
       } catch (error) {
-        logSyncEvent('warn', 'fcm_ledger_record_failed', {
+        logSyncEvent('warn', 'fcm_ledger_check_failed', {
           reminderId,
           eventId,
           error: error instanceof Error ? error.message : String(error),
         });
       }
     }
+
+    await showImmediateNotification(reminderId, title, body, eventId);
   } catch (error) {
     logSyncEvent('error', 'fcm_notification_failed', {
       reminderId,

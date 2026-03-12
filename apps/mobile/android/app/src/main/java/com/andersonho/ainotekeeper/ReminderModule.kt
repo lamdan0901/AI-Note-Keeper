@@ -133,17 +133,18 @@ class ReminderModule(reactContext: ReactApplicationContext) : ReactContextBaseJa
 
         val ctx = reactApplicationContext
 
-        // ── Dedup check ────────────────────────────────────────────────
-        // The JS FCM handler does its own check, but there is a small
-        // race window where the local alarm fires between the JS check
-        // and this call.  A native ledger check closes that gap.
+        // Atomically claim eventId before showing so local-alarm and FCM
+        // paths cannot both display the same occurrence.
         if (eventId.isNotEmpty()) {
-            if (NotificationLedgerHelper.hasNotificationBeenSent(ctx, id, eventId)) {
-                Log.d(TAG, "showNow: already sent for eventId=$eventId – skipping")
-                return
+            try {
+                val claimed = NotificationLedgerHelper.tryRecordFcmNotification(ctx, id, eventId)
+                if (!claimed) {
+                    Log.d(TAG, "showNow: already claimed for eventId=$eventId - skipping")
+                    return
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "showNow: ledger claim failed, continuing: ${e.message}", e)
             }
-            // Record BEFORE showing, so a concurrent ReminderReceiver sees it.
-            NotificationLedgerHelper.recordFcmNotification(ctx, id, eventId)
         }
 
         NotificationHelper.show(ctx, id, title, body, eventId)

@@ -26,27 +26,17 @@ class ReminderReceiver : BroadcastReceiver() {
         
         Log.d(TAG, "onReceive: id=$id, title=$title, body=$body, eventId=$eventId")
 
-        // ── Dedup check ────────────────────────────────────────────────
-        // If the device just came online and the FCM path already showed
-        // a notification for this eventId, skip to avoid duplicates.
+        // Atomically claim this eventId before showing. If another path
+        // already claimed it (FCM/local race), skip duplicate display.
         if (eventId.isNotEmpty()) {
             try {
-                if (NotificationLedgerHelper.hasNotificationBeenSent(context, id, eventId)) {
-                    Log.d(TAG, "Notification already sent for eventId=$eventId – skipping")
+                val claimed = NotificationLedgerHelper.tryRecordLocalNotification(context, id, eventId)
+                if (!claimed) {
+                    Log.d(TAG, "Notification already claimed for eventId=$eventId - skipping")
                     return
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Ledger dedup check failed, continuing: ${e.message}", e)
-            }
-        }
-
-        // Record notification delivery in ledger
-        if (eventId.isNotEmpty()) {
-            try {
-                NotificationLedgerHelper.recordLocalNotification(context, id, eventId)
-                Log.d(TAG, "Recorded notification in ledger")
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to record in ledger: ${e.message}", e)
+                Log.e(TAG, "Ledger claim failed, continuing: ${e.message}", e)
             }
         }
 

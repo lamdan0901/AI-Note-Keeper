@@ -20,6 +20,7 @@ import {
   NoteOperation,
 } from './noteOutbox';
 import { markNoteSynced } from '../db/syncHelpers';
+import { wasServerStateApplied } from './serverAck';
 
 // ============================================================================
 // Types
@@ -214,8 +215,29 @@ const processBatch = async (
     const serverNotesMap = new Map(result.notes.map((n: any) => [n.id, n]));
 
     for (const item of orderedItems) {
+      const payload = JSON.parse(item.payloadJson) as Note;
       const serverNote = serverNotesMap.get(item.noteId);
-      if (serverNote || item.operation === 'delete') {
+      if (item.operation === 'delete') {
+        // Deletions are represented as active=false in this stack.
+        if (serverNote && serverNote.active !== false) {
+          results.push({
+            noteId: item.noteId,
+            success: false,
+            error: 'Delete not applied on server',
+          });
+          log('warn', `Delete not yet applied on server: ${item.noteId}`);
+          continue;
+        }
+
+        results.push({
+          noteId: item.noteId,
+          success: true,
+        });
+        log('debug', `Synced delete: ${item.noteId}`);
+        continue;
+      }
+
+      if (wasServerStateApplied(payload, serverNote)) {
         // Success!
         results.push({
           noteId: item.noteId,
@@ -226,13 +248,17 @@ const processBatch = async (
           serverVersion: serverNote?.version,
         });
       } else {
-        // Note not in response but not a delete - unexpected
+        // Server responded but state does not reflect this payload.
         results.push({
           noteId: item.noteId,
           success: false,
-          error: 'Note not returned in server response',
+          error: 'Server state does not match payload',
         });
-        log('warn', `Note not in server response: ${item.noteId}`);
+        log('warn', `Server state mismatch for ${item.noteId}`, {
+          operation: item.operation,
+          localUpdatedAt: payload.updatedAt,
+          serverUpdatedAt: serverNote?.updatedAt,
+        });
       }
     }
 

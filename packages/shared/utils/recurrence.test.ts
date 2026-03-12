@@ -255,5 +255,45 @@ describe('computeNextTrigger', () => {
       const expected = makeDate('2026-07-01T09:00:00');
       expect(computeNextTrigger(now, startAt, base, rule)).toBe(expected);
     });
+
+    test('Custom Minutes exact boundary skips current slot', () => {
+      const startAt = makeDate('2026-01-01T09:00:00');
+      const rule: RepeatRule = { kind: 'custom', frequency: 'minutes', interval: 10 };
+      const base = '2026-01-01T09:00:00';
+
+      const now = makeDate('2026-01-01T09:10:00');
+      const expected = makeDate('2026-01-01T09:20:00');
+
+      expect(computeNextTrigger(now, startAt, base, rule)).toBe(expected);
+    });
+  });
+
+  describe('Boundary regression checks', () => {
+    test('Weekly: after today trigger time, schedule next valid day', () => {
+      const startAt = makeDate('2026-01-06T09:00:00'); // Tuesday
+      const rule: RepeatRule = { kind: 'weekly', interval: 1, weekdays: [2] }; // Tuesday
+      const now = makeDate('2026-01-06T10:00:00');
+
+      const expected = makeDate('2026-01-13T09:00:00');
+      expect(computeNextTrigger(now, startAt, '2026-01-06T09:00:00', rule)).toBe(expected);
+    });
+
+    test('Monthly: same day after trigger time moves to next month', () => {
+      const startAt = makeDate('2026-01-15T09:00:00');
+      const rule: RepeatRule = { kind: 'monthly', interval: 1, mode: 'day_of_month' };
+      const now = makeDate('2026-01-15T10:00:00');
+
+      const expected = makeDate('2026-02-15T09:00:00');
+      expect(computeNextTrigger(now, startAt, '2026-01-15T09:00:00', rule)).toBe(expected);
+    });
+
+    test('Custom Days: exact boundary skips to next interval', () => {
+      const startAt = makeDate('2026-01-01T09:00:00');
+      const rule: RepeatRule = { kind: 'custom', frequency: 'days', interval: 2 };
+      const now = makeDate('2026-01-03T09:00:00');
+
+      const expected = makeDate('2026-01-05T09:00:00');
+      expect(computeNextTrigger(now, startAt, '2026-01-01T09:00:00', rule)).toBe(expected);
+    });
   });
 });

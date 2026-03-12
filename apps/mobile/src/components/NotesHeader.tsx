@@ -50,7 +50,7 @@ export const NotesHeader: React.FC<NotesHeaderProps> = ({
         <Pressable style={styles.iconButton} onPress={onMenuPress}>
           <Ionicons name="menu" size={26} color={theme.colors.text} />
         </Pressable>
-        <Text style={styles.headerTitle}>My Notes</Text>
+        {!isSearchExpanded && <Text style={styles.headerTitle}>My Notes</Text>}
       </View>
       <View style={styles.headerRight}>
         <SyncStatusIndicator />
@@ -98,13 +98,15 @@ export const NotesHeader: React.FC<NotesHeaderProps> = ({
             <Ionicons name="search" size={22} color={theme.colors.text} />
           </Pressable>
         )}
-        <Pressable style={styles.iconButton} onPress={onViewModeToggle}>
-          <Ionicons
-            name={viewMode === 'grid' ? 'list' : 'grid'}
-            size={24}
-            color={theme.colors.primary}
-          />
-        </Pressable>
+        {!isSearchExpanded && (
+          <Pressable style={styles.iconButton} onPress={onViewModeToggle}>
+            <Ionicons
+              name={viewMode === 'grid' ? 'list' : 'grid'}
+              size={24}
+              color={theme.colors.primary}
+            />
+          </Pressable>
+        )}
       </View>
     </View>
   );

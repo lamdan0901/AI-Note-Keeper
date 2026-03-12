@@ -203,4 +203,19 @@ ALTER TABLE notes ADD COLUMN isPinned INTEGER DEFAULT 0;
 CREATE INDEX IF NOT EXISTS idx_notes_isPinned ON notes (isPinned);
     `.trim(),
   },
+  {
+    id: '012_enforce_notification_ledger_unique_event',
+    sql: `
+-- Keep one row per (reminderId,eventId) pair before adding uniqueness.
+DELETE FROM notification_ledger
+WHERE rowid NOT IN (
+  SELECT MIN(rowid)
+  FROM notification_ledger
+  GROUP BY reminderId, eventId
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_notification_ledger_reminder_event_unique
+ON notification_ledger (reminderId, eventId);
+    `.trim(),
+  },
 ];

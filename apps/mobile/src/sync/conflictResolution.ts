@@ -42,9 +42,18 @@ export const resolveNoteConflict = (local: Note, server: Note): ConflictResult =
   // BUT, if the text is identical, it's fine.
 
   if (contentConflict || titleConflict) {
-    // For MVP Phase 3: If CRITICAL fields (title, content) differ and versions mismatch,
-    // we assume we can't safely merge without potentially losing data.
-    return { type: 'input_required', serverNote: server, localNote: local };
+    // Data-loss-safe behavior: keep local edits, but carry forward latest
+    // server version so subsequent push can reconcile against fresh base.
+    return {
+      type: 'none',
+      mergedNote: {
+        ...server,
+        ...local,
+        updatedAt: Math.max(local.updatedAt, server.updatedAt),
+        syncStatus: 'pending',
+        serverVersion: server.version,
+      },
+    };
   }
 
   // For minor fields (color, active), we default to Local Wins in this auto-merge.
