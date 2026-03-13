@@ -212,3 +212,60 @@ export const backfillCanonicalRecurrence = mutation({
     };
   },
 });
+
+export const repairUtcDerivedBaseAtLocal = mutation({
+  args: {
+    batchSize: v.optional(v.number()),
+    cursor: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const batchSize = args.batchSize ?? 200;
+    const cursor = args.cursor ?? null;
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const pageResult = await (ctx.db.query('notes') as any).paginate({
+      cursor,
+      numItems: batchSize,
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const page = (pageResult.page as any[]) ?? [];
+
+    let processed = 0;
+    let repaired = 0;
+    let skipped = 0;
+    let lastId: string | null = null;
+
+    for (const note of page) {
+      processed++;
+      lastId = note._id;
+
+      if (!note.repeat || typeof note.startAt !== 'number') {
+        skipped++;
+        continue;
+      }
+
+      const utcDerived = new Date(note.startAt).toISOString().slice(0, 19);
+      if (note.baseAtLocal !== utcDerived) {
+        skipped++;
+        continue;
+      }
+
+      const fixedLocalBase = isoLocalFromMs(note.startAt);
+      await ctx.db.patch(note._id, {
+        baseAtLocal: fixedLocalBase,
+        version: (note.version || 0) + 1,
+      });
+
+      repaired++;
+    }
+
+    return {
+      processed,
+      repaired,
+      skipped,
+      lastId,
+      nextCursor: pageResult.continueCursor as string | null,
+      hasMore: !pageResult.isDone,
+    };
+  },
+});

@@ -460,18 +460,21 @@ export const mapNoteToReminder = (note: Note): Reminder => {
     }
   }
 
-  // Note: we are filling in gaps as best as possible for the Scheduler to work (using triggerAt/title).
+  const dueAt = note.snoozedUntil ?? note.nextTriggerAt ?? note.triggerAt ?? null;
+
+  // Note: we fill legacy gaps while preserving canonical recurrence fields.
   return {
     ...note,
     id: note.id,
     userId: note.userId || '',
     repeat: note.repeat || repeat,
-    nextTriggerAt: note.triggerAt || null,
+    triggerAt: note.triggerAt ?? undefined,
+    nextTriggerAt: note.nextTriggerAt ?? dueAt,
     lastFiredAt: null,
     lastAcknowledgedAt: null,
     version: 0,
-    baseAtLocal: null, // Scheduler doesn't use this for HASH/scheduling, Recurrence uses it
-    startAt: null,
+    baseAtLocal: note.baseAtLocal ?? null,
+    startAt: note.startAt ?? note.triggerAt ?? note.nextTriggerAt ?? null,
     repeatRule: note.repeatRule,
   } as Reminder;
 };
@@ -482,7 +485,21 @@ export const rescheduleAllActiveReminders = async (db: DbLike): Promise<number> 
     const notes = await listNotes(db, 1000); // Cast DB due to type mismatch
     let count = 0;
     for (const note of notes) {
-      if (note.active && (note.triggerAt || note.snoozedUntil)) {
+      const source = note.snoozedUntil
+        ? 'snoozedUntil'
+        : note.nextTriggerAt
+          ? 'nextTriggerAt'
+          : note.triggerAt
+            ? 'triggerAt'
+            : null;
+      const dueAt = note.snoozedUntil ?? note.nextTriggerAt ?? note.triggerAt ?? null;
+
+      if (note.active && dueAt && source) {
+        logScheduleEvent('info', 'scheduler_batch_reschedule_note', {
+          noteId: note.id,
+          source,
+          dueAt,
+        });
         const reminder = mapNoteToReminder(note);
         await rescheduleNoteWithLedger(db, reminder);
         count++;
@@ -507,7 +524,7 @@ export const cancelAllLocalAlarms = async (db: DbLike): Promise<number> => {
     const notes = await listNotes(db, 1000);
     let count = 0;
     for (const note of notes) {
-      if (note.active && (note.triggerAt || note.snoozedUntil)) {
+      if (note.active && (note.triggerAt || note.snoozedUntil || note.nextTriggerAt)) {
         await cancelNoteWithLedger(db, note.id);
         count++;
       }

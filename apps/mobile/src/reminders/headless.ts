@@ -29,6 +29,8 @@ const isoLocalFromMs = (ms: number): string => {
   );
 };
 
+const utcIsoWithoutZoneFromMs = (ms: number): string => new Date(ms).toISOString().slice(0, 19);
+
 // Helper to convert legacy/flat Note repeat fields to rich RepeatRule object
 const getRepeatRule = (note: Note): RepeatRule | null => {
   if (!note.repeatRule || note.repeatRule === 'none') return null;
@@ -101,7 +103,12 @@ const reminderDoneTask = async (data: DoneTaskData) => {
     // 1. Calculate next trigger (Optimistic)
     const repeatRule = getRepeatRule(note);
     const startAt = note.startAt ?? note.triggerAt ?? note.nextTriggerAt ?? now;
-    const baseAtLocal = note.baseAtLocal ?? isoLocalFromMs(startAt);
+    const baseAtLocalFromStart = isoLocalFromMs(startAt);
+    const utcDerivedFromStart = utcIsoWithoutZoneFromMs(startAt);
+    const baseAtLocal =
+      !note.baseAtLocal || note.baseAtLocal === utcDerivedFromStart
+        ? baseAtLocalFromStart
+        : note.baseAtLocal;
     const nextTrigger = computeNextTrigger(now, startAt, baseAtLocal, repeatRule);
 
     // 2. Update Local State

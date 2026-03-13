@@ -6,6 +6,46 @@ import { uuidv4 } from '../utils/uuid';
 import type { Reminder, RepeatRule } from '../../packages/shared/types/reminder';
 import { computeNextTrigger } from '../../packages/shared/utils/recurrence';
 
+const isoLocalFromMs = (ms: number): string => {
+  const d = new Date(ms);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return (
+    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
+    `T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+  );
+};
+
+const utcIsoWithoutZoneFromMs = (ms: number): string => new Date(ms).toISOString().slice(0, 19);
+
+const resolveRecurrenceAnchor = (note: {
+  startAt?: number;
+  triggerAt?: number;
+  nextTriggerAt?: number;
+  baseAtLocal?: string;
+}): { startAt: number | null; baseAtLocal: string | null } => {
+  const startAt =
+    typeof note.startAt === 'number'
+      ? note.startAt
+      : typeof note.triggerAt === 'number'
+        ? note.triggerAt
+        : typeof note.nextTriggerAt === 'number'
+          ? note.nextTriggerAt
+          : null;
+
+  if (!startAt) {
+    return { startAt: null, baseAtLocal: null };
+  }
+
+  const baseAtLocalFromStart = isoLocalFromMs(startAt);
+  const utcDerivedFromStart = utcIsoWithoutZoneFromMs(startAt);
+
+  if (!note.baseAtLocal || note.baseAtLocal === utcDerivedFromStart) {
+    return { startAt, baseAtLocal: baseAtLocalFromStart };
+  }
+
+  return { startAt, baseAtLocal: note.baseAtLocal };
+};
+
 const repeatValidator = v.union(
   v.object({ kind: v.literal('daily'), interval: v.number() }),
   v.object({
@@ -249,7 +289,17 @@ export const ackReminder = mutation({
 
     if (ackType === 'done') {
       updates.done = true;
-      const hasRecurrence = !!(existing.repeat && existing.startAt && existing.baseAtLocal);
+      const { startAt: recurrenceStartAt, baseAtLocal: recurrenceBaseAtLocal } =
+        resolveRecurrenceAnchor(existing);
+      const hasRecurrence = !!(existing.repeat && recurrenceStartAt && recurrenceBaseAtLocal);
+
+      if (recurrenceStartAt && existing.startAt !== recurrenceStartAt) {
+        updates.startAt = recurrenceStartAt;
+      }
+      if (recurrenceBaseAtLocal && existing.baseAtLocal !== recurrenceBaseAtLocal) {
+        updates.baseAtLocal = recurrenceBaseAtLocal;
+      }
+
       if (!hasRecurrence && existing.snoozedUntil && existing.snoozedUntil > now) {
         updates.scheduleStatus = 'scheduled';
         updates.nextTriggerAt = existing.snoozedUntil;
@@ -260,8 +310,8 @@ export const ackReminder = mutation({
         if (hasRecurrence) {
           const next = computeNextTrigger(
             now,
-            existing.startAt,
-            existing.baseAtLocal,
+            recurrenceStartAt,
+            recurrenceBaseAtLocal,
             existing.repeat as RepeatRule,
           );
 

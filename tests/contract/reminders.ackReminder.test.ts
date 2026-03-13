@@ -253,6 +253,67 @@ describe('ackReminder Contract', () => {
     expect(mockCtx.scheduler.runAfter).toHaveBeenCalled();
   });
 
+  test('should repair UTC-derived baseAtLocal before computing next trigger', async () => {
+    const now = 1700000000000;
+    const startAt = new Date('2026-03-10T07:00:00').getTime();
+    const utcDerived = new Date(startAt).toISOString().slice(0, 19);
+    const nextTrigger = 1700086400000;
+
+    const existingReminder = {
+      _id: 'mock-id',
+      id: 'reminder-daily-utc',
+      userId: 'user-1',
+      title: 'Daily reminder',
+      repeat: { kind: 'daily', interval: 1 },
+      startAt,
+      baseAtLocal: utcDerived,
+      active: true,
+      scheduleStatus: 'scheduled',
+      nextTriggerAt: startAt,
+    };
+
+    mockQuery.first.mockResolvedValue(existingReminder);
+    mockComputeNextTrigger.mockReturnValue(nextTrigger);
+
+    const handler = (ackReminder as unknown as { _handler: Handler })._handler;
+    const args = {
+      id: 'reminder-daily-utc',
+      ackType: 'done' as const,
+    };
+
+    const originalDateNow = Date.now;
+    Date.now = jest.fn(() => now);
+
+    await handler(mockCtx, args);
+
+    Date.now = originalDateNow;
+
+    const expectedLocalBase = (() => {
+      const d = new Date(startAt);
+      const pad = (n: number) => String(n).padStart(2, '0');
+      return (
+        `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
+        `T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+      );
+    })();
+
+    expect(mockComputeNextTrigger).toHaveBeenCalledWith(
+      now,
+      startAt,
+      expectedLocalBase,
+      existingReminder.repeat,
+    );
+
+    expect(mockDb.patch).toHaveBeenCalledWith(
+      'mock-id',
+      expect.objectContaining({
+        baseAtLocal: expectedLocalBase,
+        nextTriggerAt: nextTrigger,
+        scheduleStatus: 'scheduled',
+      }),
+    );
+  });
+
   test('should compute next occurrence for weekly recurring reminder', async () => {
     const now = 1700000000000;
     const nextTrigger = 1700604800000; // Next week
