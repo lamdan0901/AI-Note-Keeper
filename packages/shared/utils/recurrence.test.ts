@@ -4,7 +4,7 @@ import { RepeatRule } from '../types/reminder';
 describe('computeNextTrigger', () => {
   // Helpers
   const makeDate = (iso: string) => new Date(iso).getTime();
-  const baseIso = '2026-02-01T09:00:00'; // 9:00 AM. Note: Using a fixed baseIso might mislead if test uses different startAt time-of-day.
+  const baseIso = '2026-01-01T09:00:00'; // 9:00 AM. Must match the date used in startAt for correct offset derivation.
   // Ideally, baseIso should match the time in startAt for cleanliness, but the function uses baseIso for the time-of-day target.
 
   test('Non-repeating future', () => {
@@ -294,6 +294,81 @@ describe('computeNextTrigger', () => {
 
       const expected = makeDate('2026-01-05T09:00:00');
       expect(computeNextTrigger(now, startAt, '2026-01-01T09:00:00', rule)).toBe(expected);
+    });
+  });
+
+  describe('Timezone-agnostic (UTC+7 user data on UTC server)', () => {
+    // Simulate a UTC+7 user: baseAtLocal = "T07:00:00" means 7AM local.
+    // startAt epoch = 7AM UTC+7 = midnight UTC.
+    // These tests use Date.UTC directly so they pass regardless of the
+    // test runner's timezone.
+    const OFFSET_HOURS = 7;
+    const baseIsoTz = '2026-01-15T07:00:00';
+    // 7AM UTC+7 = 0AM UTC on same day
+    const startAtTz = Date.UTC(2026, 0, 15, 7, 0, 0) - OFFSET_HOURS * 3600_000;
+    // = Date.UTC(2026, 0, 15, 0, 0, 0) = midnight UTC Jan 15
+
+    test('Daily: next trigger is tomorrow 7AM local, not 2PM local', () => {
+      // now = 7:30AM local on Jan 15 = 0:30 UTC Jan 15
+      const now = startAtTz + 30 * 60_000;
+      const rule: RepeatRule = { kind: 'daily', interval: 1 };
+
+      const next = computeNextTrigger(now, startAtTz, baseIsoTz, rule)!;
+      // Expected: Jan 16, 7AM UTC+7 = Jan 16, 0AM UTC
+      const expected = Date.UTC(2026, 0, 16, 0, 0, 0);
+      expect(next).toBe(expected);
+    });
+
+    test('Daily interval=2: fires every other day at 7AM local', () => {
+      // now = 8AM local Jan 15 = 1AM UTC
+      const now = startAtTz + 60 * 60_000;
+      const rule: RepeatRule = { kind: 'daily', interval: 2 };
+
+      const next = computeNextTrigger(now, startAtTz, baseIsoTz, rule)!;
+      // Expected: Jan 17, 7AM UTC+7 = Jan 17, 0AM UTC
+      const expected = Date.UTC(2026, 0, 17, 0, 0, 0);
+      expect(next).toBe(expected);
+    });
+
+    test('Weekly: Thursday repeat fires at 7AM local next Thursday', () => {
+      // Jan 15, 2026 is Thursday
+      const startAtW = Date.UTC(2026, 0, 15, 0, 0, 0); // 7AM UTC+7 = 0AM UTC
+      const baseW = '2026-01-15T07:00:00';
+      const rule: RepeatRule = { kind: 'weekly', interval: 1, weekdays: [4] }; // Thursday
+
+      // now = after 7AM Thu Jan 15
+      const now = startAtW + 60 * 60_000;
+
+      const next = computeNextTrigger(now, startAtW, baseW, rule)!;
+      // Next Thursday = Jan 22, 7AM UTC+7 = Jan 22 0AM UTC
+      const expected = Date.UTC(2026, 0, 22, 0, 0, 0);
+      expect(next).toBe(expected);
+    });
+
+    test('Monthly: same day next month at 7AM local', () => {
+      const rule: RepeatRule = { kind: 'monthly', interval: 1, mode: 'day_of_month' };
+      // now = after trigger on Jan 15
+      const now = startAtTz + 60 * 60_000;
+
+      const next = computeNextTrigger(now, startAtTz, baseIsoTz, rule)!;
+      // Expected: Feb 15, 7AM UTC+7 = Feb 15, 0AM UTC
+      const expected = Date.UTC(2026, 1, 15, 0, 0, 0);
+      expect(next).toBe(expected);
+    });
+
+    test('Result is consistent regardless of where function runs', () => {
+      // The key invariant: computeNextTrigger with the SAME (now, startAt,
+      // baseAtLocal, repeat) must produce the identical epoch whether
+      // the function runs on a UTC server or a UTC+7 client.
+      const rule: RepeatRule = { kind: 'daily', interval: 1 };
+      const now = startAtTz + 30 * 60_000;
+
+      const result1 = computeNextTrigger(now, startAtTz, baseIsoTz, rule);
+      const result2 = computeNextTrigger(now, startAtTz, baseIsoTz, rule);
+
+      expect(result1).toBe(result2);
+      // And it should be tomorrow 7AM local = 0AM UTC
+      expect(result1).toBe(Date.UTC(2026, 0, 16, 0, 0, 0));
     });
   });
 });

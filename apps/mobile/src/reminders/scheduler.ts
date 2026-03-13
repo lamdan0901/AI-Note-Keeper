@@ -466,7 +466,7 @@ export const mapNoteToReminder = (note: Note): Reminder => {
     id: note.id,
     userId: note.userId || '',
     repeat: note.repeat || repeat,
-    nextTriggerAt: note.triggerAt || null,
+    nextTriggerAt: note.nextTriggerAt ?? note.triggerAt ?? null,
     lastFiredAt: null,
     lastAcknowledgedAt: null,
     version: 0,
@@ -482,7 +482,7 @@ export const rescheduleAllActiveReminders = async (db: DbLike): Promise<number> 
     const notes = await listNotes(db, 1000); // Cast DB due to type mismatch
     let count = 0;
     for (const note of notes) {
-      if (note.active && (note.triggerAt || note.snoozedUntil)) {
+      if (note.active && (note.nextTriggerAt || note.triggerAt || note.snoozedUntil)) {
         const reminder = mapNoteToReminder(note);
         await rescheduleNoteWithLedger(db, reminder);
         count++;

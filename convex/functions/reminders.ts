@@ -233,7 +233,7 @@ export const ackReminder = mutation({
     optimisticNextTrigger: v.optional(v.number()),
     deviceId: v.optional(v.string()),
   },
-  handler: async (ctx, { id, ackType, deviceId }) => {
+  handler: async (ctx, { id, ackType, deviceId, optimisticNextTrigger }) => {
     const existing = await ctx.db
       .query('notes')
       .filter((q) => q.eq(q.field('id'), id))
@@ -249,7 +249,13 @@ export const ackReminder = mutation({
 
     if (ackType === 'done') {
       updates.done = true;
-      const hasRecurrence = !!(existing.repeat && existing.startAt && existing.baseAtLocal);
+      // Clear stale triggerAt so the cron doesn't re-pick this note
+      updates.triggerAt = undefined;
+      const hasRecurrence = !!(
+        (existing.repeat || (existing.repeatRule && existing.repeatRule !== 'none')) &&
+        existing.startAt &&
+        existing.baseAtLocal
+      );
       if (!hasRecurrence && existing.snoozedUntil && existing.snoozedUntil > now) {
         updates.scheduleStatus = 'scheduled';
         updates.nextTriggerAt = existing.snoozedUntil;
@@ -258,12 +264,15 @@ export const ackReminder = mutation({
 
         // Handle Recurrence
         if (hasRecurrence) {
-          const next = computeNextTrigger(
+          // Prefer the client-computed next trigger (computed in correct timezone)
+          // and fall back to server-computed value
+          const serverNext = computeNextTrigger(
             now,
             existing.startAt,
             existing.baseAtLocal,
             existing.repeat as RepeatRule,
           );
+          const next = optimisticNextTrigger ?? serverNext;
 
           if (next) {
             updates.nextTriggerAt = next;
