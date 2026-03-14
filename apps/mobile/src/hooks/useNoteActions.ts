@@ -122,6 +122,11 @@ export const useNoteActions = ({
 
         createdAt: editingNote ? editingNote.createdAt : now,
         updatedAt: now,
+
+        // Preserve sync-tracking fields from existing note to avoid false conflicts
+        serverVersion: editingNote?.serverVersion ?? 0,
+        version: editingNote?.version ?? 0,
+        syncStatus: editingNote ? 'pending' : undefined,
       };
 
       setNotes((prev) => {
@@ -138,6 +143,7 @@ export const useNoteActions = ({
         const db = await getDb();
         await saveNoteOffline(db, noteToSave, editingNote ? 'update' : 'create');
         await syncNotes(db);
+        await loadNotes();
         notifyActionSuccess();
       } catch (e) {
         console.error(e);

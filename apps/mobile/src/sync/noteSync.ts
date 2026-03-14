@@ -1,5 +1,5 @@
 import { SQLiteDatabase } from 'expo-sqlite/next';
-import { Note, upsertNote } from '../db/notesRepo';
+import { Note, upsertNote, getNoteById } from '../db/notesRepo';
 import { markNoteConflict, markNoteSynced } from '../db/syncHelpers';
 import { resolveNoteConflict } from './conflictResolution';
 import { fetchNotes } from './fetchNotes';
@@ -144,7 +144,12 @@ export const syncNotes = async (
         }
       }
     } else {
-      // No pending local changes. Safe to update local DB with server state.
+      // No pending local changes — but guard against overwriting a conflict-marked note.
+      const localNote = await getNoteById(db, serverNote.id);
+      if (localNote?.syncStatus === 'conflict') {
+        log('debug', `Skipping overwrite of conflict-marked note ${serverNote.id}`);
+        continue;
+      }
       await upsertNote(db, serverNote);
       await markNoteSynced(db, serverNote.id, serverNote.version || 0);
     }
