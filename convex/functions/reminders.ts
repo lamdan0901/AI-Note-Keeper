@@ -97,6 +97,7 @@ export const createReminder = mutation({
         reminderArgs.startAt,
         reminderArgs.baseAtLocal,
         reminderArgs.repeat,
+        reminderArgs.timezone || 'UTC',
       );
       if (next) {
         nextTriggerAt = next;
@@ -263,6 +264,7 @@ export const ackReminder = mutation({
             existing.startAt,
             existing.baseAtLocal,
             existing.repeat as RepeatRule,
+            existing.timezone || 'UTC',
           );
 
           if (next) {

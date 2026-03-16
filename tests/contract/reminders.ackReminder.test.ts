@@ -226,6 +226,7 @@ describe('ackReminder Contract', () => {
       existingReminder.startAt,
       existingReminder.baseAtLocal,
       existingReminder.repeat,
+      'UTC',
     );
 
     // Verify next trigger was set
@@ -293,6 +294,7 @@ describe('ackReminder Contract', () => {
       existingReminder.startAt,
       existingReminder.baseAtLocal,
       existingReminder.repeat,
+      'UTC',
     );
 
     // Verify next trigger was set

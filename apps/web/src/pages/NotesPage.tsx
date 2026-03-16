@@ -1,4 +1,5 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import { ArrowUp } from 'lucide-react';
 import {
   useNotes,
   useSyncNotes,
@@ -28,6 +29,8 @@ export default function NotesPage({ themeMode, onThemeModeChange }: NotesPagePro
   const sync = useSyncNotes();
 
   const [viewMode, setViewMode] = useState<NotesViewMode>('grid');
+  const [showScrollTop, setShowScrollTop] = useState(false);
+  const scrollTopVisibleRef = useRef(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [draft, setDraft] = useState<NoteEditorDraft>(emptyDraft());
   const [editingNote, setEditingNote] = useState<WebNote | null>(null);
@@ -287,6 +290,21 @@ export default function NotesPage({ themeMode, onThemeModeChange }: NotesPagePro
     [optimisticNotes, serverNotes, sync],
   );
 
+  useEffect(() => {
+    const updateVisibility = () => {
+      const shouldShow = window.scrollY > 200;
+      if (scrollTopVisibleRef.current === shouldShow) return;
+      scrollTopVisibleRef.current = shouldShow;
+      setShowScrollTop(shouldShow);
+    };
+
+    updateVisibility();
+    window.addEventListener('scroll', updateVisibility, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', updateVisibility);
+    };
+  }, []);
+
   return (
     <main className="notes-page">
       <NotesHeader
@@ -324,6 +342,18 @@ export default function NotesPage({ themeMode, onThemeModeChange }: NotesPagePro
           onClose={handleClose}
           isNew={!editingNote}
         />
+      )}
+
+      {showScrollTop && (
+        <button
+          className="notes-scroll-top"
+          type="button"
+          onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+          aria-label="Scroll to top"
+          title="Scroll to top"
+        >
+          <ArrowUp size={22} />
+        </button>
       )}
     </main>
   );

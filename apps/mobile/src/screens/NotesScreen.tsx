@@ -8,6 +8,9 @@ import {
   View,
   ActivityIndicator,
   Alert,
+  type FlatList,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { getDb } from '../db/bootstrap';
@@ -49,8 +52,11 @@ const NotesScreenContent = ({
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [rescheduleTargetId, setRescheduleTargetId] = useState<string | null>(null);
   const [showRescheduleModal, setShowRescheduleModal] = useState(false);
+  const [showScrollTop, setShowScrollTop] = useState(false);
+  const scrollTopVisibleRef = useRef(false);
   const drawerAnim = useRef(new Animated.Value(0)).current;
   const editorModalRef = useRef<NoteEditorModalRef>(null);
+  const listRef = useRef<FlatList<Note> | null>(null);
 
   const openDrawer = useCallback(() => {
     setDrawerVisible(true);
@@ -283,6 +289,17 @@ const NotesScreenContent = ({
     setRescheduleTargetId(null);
   }, []);
 
+  const handleScroll = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const offsetY = event.nativeEvent.contentOffset.y;
+      const shouldShow = offsetY > 200;
+      if (scrollTopVisibleRef.current === shouldShow) return;
+      scrollTopVisibleRef.current = shouldShow;
+      setShowScrollTop(shouldShow);
+    },
+    [],
+  );
+
   const handleRescheduled = async (noteId: string, snoozedUntil: number) => {
     const now = Date.now();
 
@@ -414,6 +431,9 @@ const NotesScreenContent = ({
             onRefresh={handleRefresh}
             refreshing={refreshing}
             searchQuery={debouncedSearchQuery}
+            onScroll={handleScroll}
+            scrollEventThrottle={16}
+            listRef={listRef}
           />
         </Pressable>
       )}
@@ -438,6 +458,31 @@ const NotesScreenContent = ({
           <Ionicons name="add" size={32} color="white" />
         </Pressable>
       </Animated.View>
+
+      {showScrollTop && (
+        <Animated.View
+          style={[
+            styles.scrollTopContainer,
+            {
+              transform: [
+                {
+                  translateY: selectionHeaderAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0, -BOTTOM_ACTION_BAR_HEIGHT + 16],
+                  }),
+                },
+              ],
+            },
+          ]}
+        >
+          <Pressable
+            style={styles.scrollTopButton}
+            onPress={() => listRef.current?.scrollToOffset({ offset: 0, animated: true })}
+          >
+            <Ionicons name="arrow-up" size={26} color="white" />
+          </Pressable>
+        </Animated.View>
+      )}
 
       <NoteEditorModal ref={editorModalRef} onSave={saveNote} onDelete={handleDelete} />
 
@@ -488,6 +533,21 @@ const createStyles = (theme: Theme) =>
       zIndex: 900,
     },
     fab: {
+      backgroundColor: theme.colors.primary,
+      width: 56,
+      height: 56,
+      borderRadius: 28,
+      justifyContent: 'center',
+      alignItems: 'center',
+      ...theme.shadows.md,
+    },
+    scrollTopContainer: {
+      position: 'absolute',
+      bottom: theme.spacing.xl,
+      left: theme.spacing.xl,
+      zIndex: 900,
+    },
+    scrollTopButton: {
       backgroundColor: theme.colors.primary,
       width: 56,
       height: 56,

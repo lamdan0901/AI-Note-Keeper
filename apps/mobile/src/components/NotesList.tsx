@@ -1,5 +1,12 @@
 import React, { useMemo } from 'react';
-import { FlatList, StyleSheet, View, Text } from 'react-native';
+import {
+  FlatList,
+  StyleSheet,
+  View,
+  Text,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+} from 'react-native';
 import { type Note } from '../db/notesRepo';
 import { NoteCard } from './NoteCard';
 import { type Theme, useTheme } from '../theme';
@@ -17,6 +24,9 @@ interface NotesListProps {
   onRefresh?: () => void;
   refreshing?: boolean;
   searchQuery?: string;
+  onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
+  scrollEventThrottle?: number;
+  listRef?: React.RefObject<FlatList<any>>;
 }
 
 export const NotesList: React.FC<NotesListProps> = ({
@@ -32,6 +42,9 @@ export const NotesList: React.FC<NotesListProps> = ({
   onRefresh,
   refreshing,
   searchQuery = '',
+  onScroll,
+  scrollEventThrottle,
+  listRef,
 }) => {
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
@@ -151,6 +164,9 @@ export const NotesList: React.FC<NotesListProps> = ({
         contentContainerStyle={styles.listContent}
         onRefresh={onRefresh}
         refreshing={refreshing}
+        onScroll={onScroll}
+        scrollEventThrottle={scrollEventThrottle}
+        ref={listRef}
       />
     );
   }
@@ -166,6 +182,9 @@ export const NotesList: React.FC<NotesListProps> = ({
       contentContainerStyle={styles.listContent}
       onRefresh={onRefresh}
       refreshing={refreshing}
+      onScroll={onScroll}
+      scrollEventThrottle={scrollEventThrottle}
+      ref={listRef}
     />
   );
 };

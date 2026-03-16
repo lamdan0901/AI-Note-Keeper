@@ -91,12 +91,12 @@ const reminderDoneTask = async (data: DoneTaskData) => {
 
     // 1. Calculate next trigger (Optimistic)
     const repeatRule = getRepeatRule(note);
-    const nextTrigger = computeNextTrigger(
-      now,
-      note.triggerAt || now, // Use triggerAt as anchor if startAt is missing (best effort)
-      note.timezone ? new Date().toISOString() : new Date().toISOString(), // TODO: Use stored baseAtLocal if available, else current local time
-      repeatRule,
-    );
+    const deviceTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+    const baseLocal = note.baseAtLocal ?? null;
+    const anchor = note.startAt || note.triggerAt || now;
+    const nextTrigger = baseLocal
+      ? computeNextTrigger(now, anchor, baseLocal, repeatRule, note.timezone || deviceTz)
+      : null;
 
     // 2. Update Local State
     const updatedNote: Note = {

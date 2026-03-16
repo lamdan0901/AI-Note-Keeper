@@ -124,14 +124,14 @@ export const markReminderTriggered = internalMutation({
             : typeof note.nextTriggerAt === 'number'
               ? note.nextTriggerAt
               : null;
-      const baseAtLocal: string | null =
-        note.baseAtLocal ?? (startAt ? new Date(startAt).toISOString().slice(0, 19) : null);
+      const tz: string = (typeof note.timezone === 'string' && note.timezone) || 'UTC';
+      const baseAtLocal: string | null = note.baseAtLocal ?? null;
 
       let next: number | null = null;
 
       const hadSnooze = typeof note.snoozedUntil === 'number';
       if (repeat && startAt && baseAtLocal) {
-        next = computeNextTrigger(now, startAt, baseAtLocal, repeat);
+        next = computeNextTrigger(now, startAt, baseAtLocal, repeat, tz);
       }
 
       const patch: Record<string, unknown> = {
