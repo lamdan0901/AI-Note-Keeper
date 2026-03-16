@@ -9,6 +9,8 @@ export type RepeatRule = import('../../../../packages/shared/types/reminder').Re
 /** Preset IDs for note background colours, matching mobile presets. */
 export type NoteColorPreset = 'default' | 'red' | 'yellow' | 'green' | 'blue' | 'purple';
 
+export type NoteContentType = import('../../../../packages/shared/types/note').NoteContentType;
+
 /**
  * Mapped representation of a Convex note document as used in the web UI.
  * Omits Convex internals (`_id`, `_creationTime`).
@@ -18,6 +20,7 @@ export interface WebNote {
   userId: string;
   title: string | null;
   content: string | null;
+  contentType?: NoteContentType;
   color: string | null;
   active: boolean;
   done: boolean;
@@ -50,6 +53,7 @@ export interface NoteEditorDraft {
   id?: string;
   title: string;
   content: string;
+  contentType: NoteContentType;
   color: NoteColorPreset;
   isPinned: boolean;
   done: boolean;

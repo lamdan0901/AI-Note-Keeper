@@ -542,3 +542,97 @@ describe('syncNotes Contract – batch operations', () => {
     );
   });
 });
+
+// ---------------------------------------------------------------------------
+// syncNotes – checklist contentType
+// ---------------------------------------------------------------------------
+
+describe('syncNotes Contract – checklist contentType', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockDb.query.mockReturnValue(mockQuery);
+    mockQuery.filter.mockReturnThis();
+    mockQuery.collect.mockResolvedValue([]);
+  });
+
+  test('should create a note with contentType checklist and JSON content', async () => {
+    mockQuery.first.mockResolvedValue(null);
+
+    const checklistContent = JSON.stringify([
+      { id: 'c1', text: 'Buy milk', checked: false },
+      { id: 'c2', text: 'Walk dog', checked: true },
+    ]);
+
+    const handler = (syncNotes as unknown as { _handler: Handler })._handler;
+    await handler(mockCtx, {
+      userId: 'user-1',
+      changes: [
+        {
+          id: 'note-checklist',
+          userId: 'user-1',
+          title: 'Shopping List',
+          content: checklistContent,
+          contentType: 'checklist',
+          active: true,
+          done: false,
+          updatedAt: 3000,
+          createdAt: 2000,
+          operation: 'create',
+          deviceId: 'device-1',
+        },
+      ],
+      lastSyncAt: 0,
+    });
+
+    expect(mockDb.insert).toHaveBeenCalledWith(
+      'notes',
+      expect.objectContaining({
+        id: 'note-checklist',
+        content: checklistContent,
+        contentType: 'checklist',
+        version: 1,
+      }),
+    );
+  });
+
+  test('should update contentType when patching a note', async () => {
+    mockQuery.first.mockResolvedValue({
+      _id: 'cx-clist',
+      id: 'note-clist',
+      userId: 'user-1',
+      content: 'plain text',
+      contentType: undefined,
+      updatedAt: 1000,
+      version: 1,
+    });
+
+    const checklistContent = JSON.stringify([{ id: 'c1', text: 'Item 1', checked: false }]);
+
+    const handler = (syncNotes as unknown as { _handler: Handler })._handler;
+    await handler(mockCtx, {
+      userId: 'user-1',
+      changes: [
+        {
+          id: 'note-clist',
+          userId: 'user-1',
+          content: checklistContent,
+          contentType: 'checklist',
+          active: true,
+          updatedAt: 5000,
+          createdAt: 1000,
+          operation: 'update',
+          deviceId: 'device-1',
+        },
+      ],
+      lastSyncAt: 0,
+    });
+
+    expect(mockDb.patch).toHaveBeenCalledWith(
+      'cx-clist',
+      expect.objectContaining({
+        content: checklistContent,
+        contentType: 'checklist',
+      }),
+    );
+  });
+});

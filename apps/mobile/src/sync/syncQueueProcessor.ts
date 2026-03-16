@@ -142,6 +142,7 @@ const mapToApiPayload = (item: OutboxItem) => {
     userId: item.userId,
     title: payload.title ?? undefined,
     content: payload.content ?? undefined,
+    contentType: payload.contentType ?? undefined,
     color: payload.color ?? undefined,
     active: payload.active,
     done: payload.done ?? undefined,

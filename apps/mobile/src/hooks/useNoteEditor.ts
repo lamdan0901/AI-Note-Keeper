@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, Keyboard, Platform } from 'react-native';
 import { type Note } from '../db/notesRepo';
+import { type NoteContentType } from '../../../../packages/shared/types/note';
 import { RepeatRule } from '../../../../packages/shared/types/reminder';
 import { coerceRepeatRule } from '../../../../packages/shared/utils/repeatCodec';
 
@@ -11,6 +12,7 @@ type UseNoteEditorResult = {
   editingNote: Note | null;
   title: string;
   content: string;
+  contentType: NoteContentType;
   reminder: Date | null;
   repeat: RepeatRule | null;
   isPinned: boolean;
@@ -25,6 +27,7 @@ type UseNoteEditorResult = {
   handleReminderSave: (date: Date, newRepeat: RepeatRule | null) => void;
   setTitle: (value: string) => void;
   setContent: (value: string) => void;
+  setContentType: (value: NoteContentType) => void;
   setReminder: (value: Date | null) => void;
   setRepeat: (value: RepeatRule | null) => void;
   setIsPinned: (value: boolean) => void;
@@ -41,6 +44,7 @@ export const useNoteEditor = (): UseNoteEditorResult => {
   const [editingNote, setEditingNote] = useState<Note | null>(null);
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
+  const [contentType, setContentType] = useState<NoteContentType>('text');
   const [reminder, setReminder] = useState<Date | null>(null);
   const [repeat, setRepeat] = useState<RepeatRule | null>(null);
   const [isPinned, setIsPinned] = useState(false);
@@ -57,16 +61,19 @@ export const useNoteEditor = (): UseNoteEditorResult => {
       setEditingNote(note);
       setTitle(note.title || '');
       setContent(note.content || '');
+      setContentType(note.contentType ?? 'text');
       const effectiveTriggerAt = note.snoozedUntil ?? note.nextTriggerAt ?? note.triggerAt;
       if (effectiveTriggerAt) {
         setReminder(new Date(effectiveTriggerAt));
         // Resolve repeat from all available fields (canonical + legacy)
-        setRepeat(coerceRepeatRule({
-          repeat: note.repeat,
-          repeatRule: note.repeatRule,
-          repeatConfig: note.repeatConfig as Record<string, unknown> | undefined,
-          triggerAt: effectiveTriggerAt,
-        }));
+        setRepeat(
+          coerceRepeatRule({
+            repeat: note.repeat,
+            repeatRule: note.repeatRule,
+            repeatConfig: note.repeatConfig as Record<string, unknown> | undefined,
+            triggerAt: effectiveTriggerAt,
+          }),
+        );
       } else {
         setReminder(null);
         setRepeat(null);
@@ -77,6 +84,7 @@ export const useNoteEditor = (): UseNoteEditorResult => {
       setEditingNote(null);
       setTitle('');
       setContent('');
+      setContentType('text');
       setReminder(null);
       setRepeat(null);
       setIsPinned(false);
@@ -90,6 +98,7 @@ export const useNoteEditor = (): UseNoteEditorResult => {
     setEditingNote(null);
     setTitle('');
     setContent('');
+    setContentType('text');
     setReminder(null);
     setRepeat(null);
     setIsPinned(false);
@@ -208,6 +217,7 @@ export const useNoteEditor = (): UseNoteEditorResult => {
     editingNote,
     title,
     content,
+    contentType,
     reminder,
     repeat,
     isPinned,
@@ -222,6 +232,7 @@ export const useNoteEditor = (): UseNoteEditorResult => {
     handleReminderSave,
     setTitle,
     setContent,
+    setContentType,
     setReminder,
     setRepeat,
     setIsPinned,

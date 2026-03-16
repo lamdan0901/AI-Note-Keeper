@@ -6,6 +6,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { createHoldInteraction, getTapDecision, HOLD_DELAY_MS } from './noteCardInteractions';
 import { formatReminder } from '../utils/formatReminder';
 import { hasCustomColor, resolveNoteColor } from '../constants/noteColors';
+import { ChecklistDisplay } from './ChecklistDisplay';
+import { parseChecklist } from '../../../../packages/shared/utils/checklist';
 
 const SELECTION_ANIMATION_DURATION_MS = 240;
 
@@ -92,6 +94,7 @@ export const NoteCard: React.FC<NoteCardProps> = ({
 
   const title = note.title?.trim();
   const content = note.content?.trim();
+  const isChecklist = note.contentType === 'checklist';
 
   return (
     <View style={[styles.wrapper, isGrid ? styles.wrapperGrid : styles.wrapperList]}>
@@ -126,11 +129,20 @@ export const NoteCard: React.FC<NoteCardProps> = ({
                 </View>
               </View>
             )}
-            {!!content && (
+            {!!content && isChecklist ? (
+              <ChecklistDisplay
+                items={parseChecklist(note.content)}
+                maxItems={isGrid ? 6 : 4}
+                theme={theme}
+                textColor={textColor}
+                mutedTextColor={mutedTextColor}
+                isDone={isDone}
+              />
+            ) : content ? (
               <Text style={[styles.content, isDone && styles.textDone, { color: mutedTextColor }]}>
                 {content}
               </Text>
-            )}
+            ) : null}
 
             {/* Sync Status & Reminder Row */}
             <View style={styles.metaRow}>

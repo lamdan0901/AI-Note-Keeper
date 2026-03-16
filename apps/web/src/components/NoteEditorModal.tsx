@@ -1,9 +1,18 @@
 import React, { useEffect, useRef, useCallback, useState } from 'react';
-import { Bell, CheckCircle, Circle, Pin, Trash2, X } from 'lucide-react';
+import { Bell, CheckCircle, Circle, List, Pin, Trash2, Type, X } from 'lucide-react';
 import type { NoteEditorDraft, NoteColorPreset } from '../services/notesTypes';
 import { NOTE_COLOR_PRESET_IDS } from '../services/notesUtils';
 import { formatReminder } from '../services/reminderUtils';
 import { ReminderSetupModal } from './reminders/ReminderSetupModal';
+import { ChecklistEditor } from './ChecklistEditor';
+import type { ChecklistItem } from '../../../../packages/shared/types/note';
+import {
+  parseChecklist,
+  serializeChecklist,
+  newChecklistItem,
+  textToChecklist,
+  checklistToText,
+} from '../../../../packages/shared/utils/checklist';
 
 interface NoteEditorModalProps {
   draft: NoteEditorDraft;
@@ -54,6 +63,31 @@ export function NoteEditorModal({
   const dialogRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLInputElement>(null);
   const [reminderOpen, setReminderOpen] = useState(false);
+
+  // Checklist state
+  const isChecklist = draft.contentType === 'checklist';
+  const [checklistItems, setChecklistItems] = useState<ChecklistItem[]>(() =>
+    isChecklist ? parseChecklist(draft.content) : [],
+  );
+
+  // Sync checklist items back to draft.content
+  const handleChecklistChange = (items: ChecklistItem[]) => {
+    setChecklistItems(items);
+    onChange({ ...draft, content: serializeChecklist(items) });
+  };
+
+  const handleToggleContentType = () => {
+    if (isChecklist) {
+      // Switch to text
+      const text = checklistToText(checklistItems);
+      onChange({ ...draft, contentType: 'text', content: text });
+    } else {
+      // Switch to checklist
+      const items = draft.content ? textToChecklist(draft.content) : [newChecklistItem()];
+      setChecklistItems(items);
+      onChange({ ...draft, contentType: 'checklist', content: serializeChecklist(items) });
+    }
+  };
 
   // Focus title input on open
   useEffect(() => {
@@ -144,14 +178,20 @@ export function NoteEditorModal({
         />
 
         {/* Content */}
-        <textarea
-          className="modal-dialog__content-input"
-          placeholder="Take a note…"
-          value={draft.content}
-          onChange={(e) => set('content', e.target.value)}
-          rows={6}
-          aria-label="Note content"
-        />
+        <div className="modal-dialog__content-area">
+          {isChecklist ? (
+            <ChecklistEditor items={checklistItems} onChange={handleChecklistChange} />
+          ) : (
+            <textarea
+              className="modal-dialog__content-input"
+              placeholder="Take a note…"
+              value={draft.content}
+              onChange={(e) => set('content', e.target.value)}
+              rows={6}
+              aria-label="Note content"
+            />
+          )}
+        </div>
 
         {/* Footer: color picker + reminder (same row) | action buttons (bottom right) */}
         <div className="modal-dialog__footer">
@@ -209,6 +249,17 @@ export function NoteEditorModal({
 
           {/* Row 2: action buttons (right) */}
           <div className="modal-dialog__footer-actions">
+            {/* Content type toggle */}
+            <button
+              className="modal-dialog__content-type-btn"
+              onClick={handleToggleContentType}
+              title={isChecklist ? 'Switch to plain text' : 'Switch to checklist'}
+              type="button"
+            >
+              {isChecklist ? <Type size={16} /> : <List size={16} />}
+              {isChecklist ? 'Text' : 'Checklist'}
+            </button>
+
             {/* Done toggle — only in edit mode */}
             {!isNew && (
               <button

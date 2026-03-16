@@ -11,6 +11,7 @@ function makeDraft(overrides: Partial<NoteEditorDraft> = {}): NoteEditorDraft {
     id: 'draft-1',
     title: 'Title',
     content: 'Body',
+    contentType: 'text',
     color: 'default',
     isPinned: false,
     done: false,
@@ -44,7 +45,11 @@ describe('NoteEditorModal draft transitions', () => {
   it('saving a reminder forces done=false', () => {
     const reminder = new Date('2026-02-13T10:30:00.000Z');
     const repeat = { kind: 'weekly', interval: 1, weekdays: [1, 3, 5] } as const;
-    const next = applyReminderInDraft(makeDraft({ done: true, reminder: null, repeat: null }), reminder, repeat);
+    const next = applyReminderInDraft(
+      makeDraft({ done: true, reminder: null, repeat: null }),
+      reminder,
+      repeat,
+    );
     expect(next.done).toBe(false);
     expect(next.reminder).toEqual(reminder);
     expect(next.repeat).toEqual(repeat);

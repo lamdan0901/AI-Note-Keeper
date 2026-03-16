@@ -4,6 +4,8 @@ import type { WebNote } from '../services/notesTypes';
 import type { NotesViewMode } from '../services/notesTypes';
 import { toPresetId } from '../services/notesUtils';
 import { coerceRepeatRule, formatReminder, getEffectiveTriggerAt } from '../services/reminderUtils';
+import { ChecklistDisplay } from './ChecklistDisplay';
+import { parseChecklist } from '../../../../packages/shared/utils/checklist';
 
 interface NoteCardProps {
   note: WebNote;
@@ -14,10 +16,18 @@ interface NoteCardProps {
   onDelete: () => void;
 }
 
-export function NoteCard({ note, viewMode, onClick, onToggleDone, onTogglePin, onDelete }: NoteCardProps) {
+export function NoteCard({
+  note,
+  viewMode,
+  onClick,
+  onToggleDone,
+  onTogglePin,
+  onDelete,
+}: NoteCardProps) {
   const colorPreset = toPresetId(note.color);
   const title = note.title?.trim() ?? '';
   const content = note.content?.trim() ?? '';
+  const isChecklist = note.contentType === 'checklist';
   const ariaLabel = title.length > 0 ? title : 'Untitled note';
   const reminderAt = getEffectiveTriggerAt(note);
   const reminderLabel = reminderAt ? formatReminder(reminderAt, coerceRepeatRule(note)) : null;
@@ -83,7 +93,14 @@ export function NoteCard({ note, viewMode, onClick, onToggleDone, onTogglePin, o
       <div className="note-card__body">
         {title ? <p className="note-card__title">{title}</p> : null}
 
-        {content ? <p className="note-card__content">{content}</p> : null}
+        {isChecklist && content ? (
+          <ChecklistDisplay
+            items={parseChecklist(note.content)}
+            maxItems={viewMode === 'grid' ? 8 : 5}
+          />
+        ) : content ? (
+          <p className="note-card__content">{content}</p>
+        ) : null}
 
         {!title && !content ? <p className="note-card__empty">Empty note</p> : null}
       </div>

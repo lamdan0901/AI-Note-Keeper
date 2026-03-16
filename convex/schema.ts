@@ -15,6 +15,7 @@ export default defineSchema({
     userId: v.string(),
     title: v.optional(v.string()),
     content: v.optional(v.string()),
+    contentType: v.optional(v.string()),
     color: v.optional(v.string()),
     active: v.boolean(),
     done: v.optional(v.boolean()),

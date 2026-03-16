@@ -30,6 +30,7 @@ import { useNoteActions } from '../hooks/useNoteActions';
 import { useNoteSelection } from '../hooks/useNoteSelection';
 import { useToast } from '../hooks/useToast';
 import { RepeatRule } from '../../../../packages/shared/types/reminder';
+import { NoteContentType } from '../../../../packages/shared/types/note';
 import { useDebouncedValue } from '../../../../packages/shared/hooks/useDebouncedValue';
 
 type NotesScreenProps = {
@@ -117,6 +118,7 @@ const NotesScreenContent = ({
       editingNote: Note | null;
       title: string;
       content: string;
+      contentType: NoteContentType;
       reminder: Date | null;
       repeat: RepeatRule | null;
       isPinned: boolean;
@@ -289,16 +291,13 @@ const NotesScreenContent = ({
     setRescheduleTargetId(null);
   }, []);
 
-  const handleScroll = useCallback(
-    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-      const offsetY = event.nativeEvent.contentOffset.y;
-      const shouldShow = offsetY > 200;
-      if (scrollTopVisibleRef.current === shouldShow) return;
-      scrollTopVisibleRef.current = shouldShow;
-      setShowScrollTop(shouldShow);
-    },
-    [],
-  );
+  const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const offsetY = event.nativeEvent.contentOffset.y;
+    const shouldShow = offsetY > 200;
+    if (scrollTopVisibleRef.current === shouldShow) return;
+    scrollTopVisibleRef.current = shouldShow;
+    setShowScrollTop(shouldShow);
+  }, []);
 
   const handleRescheduled = async (noteId: string, snoozedUntil: number) => {
     const now = Date.now();

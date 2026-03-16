@@ -20,6 +20,7 @@ export const syncNotes = mutation({
         userId: v.string(),
         title: v.optional(v.string()),
         content: v.optional(v.string()),
+        contentType: v.optional(v.string()),
         color: v.optional(v.string()),
         active: v.boolean(),
         done: v.optional(v.boolean()),
@@ -93,6 +94,7 @@ export const syncNotes = mutation({
             await ctx.db.patch(existing._id, {
               title: noteData.title,
               content: noteData.content,
+              contentType: noteData.contentType,
               color: noteData.color,
               active: noteData.active,
               done: noteData.done,
@@ -132,6 +134,7 @@ export const syncNotes = mutation({
             userId,
             title: noteData.title,
             content: noteData.content,
+            contentType: noteData.contentType,
             color: noteData.color,
             active: noteData.active,
             done: noteData.done,

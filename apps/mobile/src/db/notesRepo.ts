@@ -6,6 +6,7 @@ export type NoteRow = {
   id: string;
   title: string | null;
   content: string | null;
+  contentType: string | null;
   color: string | null;
   active: number;
   done: number;
@@ -37,6 +38,7 @@ export const mapNoteRow = (row: NoteRow): Note => ({
   id: row.id,
   title: row.title,
   content: row.content,
+  contentType: (row.contentType as Note['contentType']) || undefined,
   color: row.color,
   active: row.active === 1,
   done: row.done === 1,
@@ -72,6 +74,7 @@ export const upsertNote = async (db: SQLiteDatabase, note: Note): Promise<void> 
         id,
         title,
         content,
+        contentType,
         color,
         active,
         done,
@@ -91,10 +94,11 @@ export const upsertNote = async (db: SQLiteDatabase, note: Note): Promise<void> 
         version,
         updatedAt,
         createdAt
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         title = excluded.title,
         content = excluded.content,
+        contentType = excluded.contentType,
         color = excluded.color,
         active = excluded.active,
         done = excluded.done,
@@ -118,6 +122,7 @@ export const upsertNote = async (db: SQLiteDatabase, note: Note): Promise<void> 
       note.id,
       note.title,
       note.content,
+      note.contentType || null,
       note.color,
       note.active ? 1 : 0,
       note.done ? 1 : 0,

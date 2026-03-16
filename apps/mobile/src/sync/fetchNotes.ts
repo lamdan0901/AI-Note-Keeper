@@ -53,6 +53,8 @@ export const fetchNotes = async (userId: string): Promise<FetchNotesResult> => {
         id: n.id,
         title: n.title ?? null,
         content: n.content ?? null,
+        contentType:
+          ((n as Record<string, unknown>).contentType as Note['contentType']) || undefined,
         color: n.color ?? null,
         active: n.active,
         done: n.done ?? false,

@@ -28,6 +28,7 @@ function mapDocToWebNote(doc: any): WebNote {
     userId: doc.userId as string,
     title: doc.title ?? null,
     content: doc.content ?? null,
+    contentType: doc.contentType ?? undefined,
     color: doc.color ?? null,
     active: doc.active as boolean,
     done: doc.done ?? false,
@@ -102,7 +103,9 @@ export async function createNote(sync: SyncFn, draft: NoteEditorDraft) {
   const now = Date.now();
   const id = draft.id ?? crypto.randomUUID();
   const reminderFields = buildReminderSyncFields(
-    draft.done ? { reminder: null, repeat: null } : { reminder: draft.reminder, repeat: draft.repeat },
+    draft.done
+      ? { reminder: null, repeat: null }
+      : { reminder: draft.reminder, repeat: draft.repeat },
     new Date(now),
     getResolvedTimezone(),
   );
@@ -115,6 +118,7 @@ export async function createNote(sync: SyncFn, draft: NoteEditorDraft) {
         userId: USER_ID,
         title: draft.title || undefined,
         content: draft.content || undefined,
+        contentType: draft.contentType === 'checklist' ? 'checklist' : undefined,
         color: draft.color,
         active: true,
         done: draft.done,
@@ -137,7 +141,9 @@ export async function updateNote(sync: SyncFn, draft: NoteEditorDraft, existingN
   const now = Date.now();
   const id = draft.id ?? existingNote.id;
   const reminderFields = buildReminderSyncFields(
-    draft.done ? { reminder: null, repeat: null } : { reminder: draft.reminder, repeat: draft.repeat },
+    draft.done
+      ? { reminder: null, repeat: null }
+      : { reminder: draft.reminder, repeat: draft.repeat },
     new Date(now),
     getResolvedTimezone(),
     existingNote,
@@ -151,6 +157,7 @@ export async function updateNote(sync: SyncFn, draft: NoteEditorDraft, existingN
         userId: USER_ID,
         title: draft.title || undefined,
         content: draft.content || undefined,
+        contentType: draft.contentType === 'checklist' ? 'checklist' : undefined,
         color: draft.color,
         active: true,
         done: draft.done,

@@ -6,12 +6,14 @@ import { getNoteById, listNotes, type Note } from '../db/notesRepo';
 import { saveNoteOffline, deleteNoteOffline } from '../notes/editor';
 import { syncNotes } from '../sync/noteSync';
 import { RepeatRule } from '../../../../packages/shared/types/reminder';
+import { NoteContentType } from '../../../../packages/shared/types/note';
 import { buildCanonicalRecurrenceFields } from '../../../../packages/shared/utils/repeatCodec';
 
 type EditorState = {
   editingNote: Note | null;
   title: string;
   content: string;
+  contentType: NoteContentType;
   reminder: Date | null;
   repeat: RepeatRule | null;
   isPinned: boolean;
@@ -89,7 +91,8 @@ export const useNoteActions = ({
 
   const saveNote = useCallback(
     async (editorState: EditorState) => {
-      const { editingNote, title, content, reminder, repeat, isPinned, color } = editorState;
+      const { editingNote, title, content, contentType, reminder, repeat, isPinned, color } =
+        editorState;
 
       if (!title.trim() && !content.trim()) {
         closeEditor();
@@ -103,6 +106,7 @@ export const useNoteActions = ({
         id: editingNote ? editingNote.id : uuid.v4().toString(),
         title: title.trim(),
         content: content.trim(),
+        contentType: contentType === 'checklist' ? 'checklist' : undefined,
         color: color || null,
         active: true,
         done: reminder ? false : (editingNote?.done ?? false),

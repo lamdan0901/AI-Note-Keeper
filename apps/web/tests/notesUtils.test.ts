@@ -236,6 +236,10 @@ describe('emptyDraft', () => {
     expect(draft.reminder).toBeNull();
     expect(draft.repeat).toBeNull();
   });
+
+  it('contentType defaults to text', () => {
+    expect(emptyDraft().contentType).toBe('text');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -265,6 +269,14 @@ describe('draftFromNote', () => {
   it('converts null content to empty string', () => {
     const note = makeNote({ content: null });
     expect(draftFromNote(note).content).toBe('');
+  });
+
+  it('maps contentType from note', () => {
+    expect(draftFromNote(makeNote({ contentType: 'checklist' })).contentType).toBe('checklist');
+  });
+
+  it('defaults contentType to text when absent', () => {
+    expect(draftFromNote(makeNote()).contentType).toBe('text');
   });
 
   it('normalises color preset ID', () => {

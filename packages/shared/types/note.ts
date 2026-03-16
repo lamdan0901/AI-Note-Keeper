@@ -1,10 +1,19 @@
 import { RepeatRule } from './reminder';
 
+export type ChecklistItem = {
+  id: string;
+  text: string;
+  checked: boolean;
+};
+
+export type NoteContentType = 'text' | 'checklist';
+
 export type Note = {
   id: string;
   userId?: string;
   title: string | null;
   content: string | null;
+  contentType?: NoteContentType;
   color: string | null;
   active: boolean;
   done?: boolean;

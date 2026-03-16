@@ -4,6 +4,7 @@ import { scheduleReminderNotification, cancelReminderNotifications } from './sch
 import { DbLike, getNoteScheduleState, upsertNoteScheduleState } from './noteScheduleLedger';
 import { computeScheduleHash } from './scheduleHash';
 import { logScheduleEvent } from './logging';
+import { parseChecklist, checklistToPlainText } from '../../../../packages/shared/utils/checklist';
 
 /**
  * Convert a Note with reminder fields to a Reminder-like object for scheduling.
@@ -104,7 +105,10 @@ export const scheduleNoteReminderNotification = async (
 
   try {
     const noteTitle = (note.title ?? '').trim();
-    const noteDescription = (note.content ?? '').trim();
+    const noteDescription =
+      note.contentType === 'checklist'
+        ? checklistToPlainText(parseChecklist(note.content))
+        : (note.content ?? '').trim();
 
     const notificationTitle =
       noteTitle.length > 0 ? noteTitle : noteDescription.length > 0 ? noteDescription : 'Reminder';

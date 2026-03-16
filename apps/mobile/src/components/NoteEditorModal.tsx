@@ -1,4 +1,4 @@
-import React, { forwardRef, useImperativeHandle, useMemo } from 'react';
+import React, { forwardRef, useImperativeHandle, useMemo, useState } from 'react';
 import {
   Modal,
   Pressable,
@@ -14,11 +14,20 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { ReminderSetupModal } from '../reminders/ui/ReminderSetupModal';
 import { type Note } from '../db/notesRepo';
+import { type NoteContentType, type ChecklistItem } from '../../../../packages/shared/types/note';
+import {
+  parseChecklist,
+  serializeChecklist,
+  newChecklistItem,
+  textToChecklist,
+  checklistToText,
+} from '../../../../packages/shared/utils/checklist';
 import { formatReminder } from '../utils/formatReminder';
 import { type Theme, useTheme } from '../theme';
 import { RepeatRule } from '../../../../packages/shared/types/reminder';
 import { useNoteEditor } from '../hooks/useNoteEditor';
 import { ColorPicker } from './ColorPicker';
+import { ChecklistEditor } from './ChecklistEditor';
 import { toPresetId, hasCustomColor, resolveNoteColor } from '../constants/noteColors';
 
 type NoteEditorModalProps = {
@@ -26,6 +35,7 @@ type NoteEditorModalProps = {
     editingNote: Note | null;
     title: string;
     content: string;
+    contentType: NoteContentType;
     reminder: Date | null;
     repeat: RepeatRule | null;
     isPinned: boolean;
@@ -42,6 +52,7 @@ export type NoteEditorModalRef = {
     editingNote: Note | null;
     title: string;
     content: string;
+    contentType: NoteContentType;
     reminder: Date | null;
     repeat: RepeatRule | null;
     isPinned: boolean;
@@ -61,6 +72,7 @@ export const NoteEditorModal = forwardRef<NoteEditorModalRef, NoteEditorModalPro
       editingNote,
       title,
       content,
+      contentType,
       reminder,
       repeat,
       isPinned,
@@ -74,6 +86,7 @@ export const NoteEditorModal = forwardRef<NoteEditorModalRef, NoteEditorModalPro
       handleReminderSave,
       setTitle,
       setContent,
+      setContentType,
       setReminder,
       setRepeat,
       setIsPinned,
@@ -85,6 +98,34 @@ export const NoteEditorModal = forwardRef<NoteEditorModalRef, NoteEditorModalPro
       handleEditorTouchEnd,
     } = useNoteEditor();
 
+    const isChecklist = contentType === 'checklist';
+    const [checklistItems, setChecklistItems] = useState<ChecklistItem[]>([]);
+
+    // Sync checklist items when editor opens or content type changes
+    React.useEffect(() => {
+      if (isChecklist) {
+        setChecklistItems(parseChecklist(content));
+      }
+    }, [isChecklist]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    const handleChecklistChange = (items: ChecklistItem[]) => {
+      setChecklistItems(items);
+      setContent(serializeChecklist(items));
+    };
+
+    const handleToggleContentType = () => {
+      if (isChecklist) {
+        const text = checklistToText(checklistItems);
+        setContent(text);
+        setContentType('text');
+      } else {
+        const items = content ? textToChecklist(content) : [newChecklistItem()];
+        setChecklistItems(items);
+        setContent(serializeChecklist(items));
+        setContentType('checklist');
+      }
+    };
+
     useImperativeHandle(ref, () => ({
       openEditor,
       closeEditor,
@@ -92,6 +133,7 @@ export const NoteEditorModal = forwardRef<NoteEditorModalRef, NoteEditorModalPro
         editingNote,
         title,
         content,
+        contentType,
         reminder,
         repeat,
         isPinned,
@@ -107,7 +149,7 @@ export const NoteEditorModal = forwardRef<NoteEditorModalRef, NoteEditorModalPro
     };
 
     const handleSave = () => {
-      onSave({ editingNote, title, content, reminder, repeat, isPinned, color });
+      onSave({ editingNote, title, content, contentType, reminder, repeat, isPinned, color });
     };
 
     const handleColorSelect = (presetId: string) => {
@@ -143,129 +185,169 @@ export const NoteEditorModal = forwardRef<NoteEditorModalRef, NoteEditorModalPro
         <View style={styles.modalOverlay}>
           <Pressable style={StyleSheet.absoluteFillObject} onPress={handleClose} />
           <Animated.View
-            style={[
-              styles.modalContent,
-              {
-                backgroundColor: modalBackgroundColor,
-                transform: [{ translateY: editorTranslateY }],
-                height: animatedHeight,
-                borderTopLeftRadius: animatedRadius,
-                borderTopRightRadius: animatedRadius,
-              },
-            ]}
-            onTouchStart={handleEditorTouchStart}
-            onTouchMove={handleEditorTouchMove}
-            onTouchEnd={handleEditorTouchEnd}
-            onTouchCancel={handleEditorTouchEnd}
+            style={{
+              width: '100%',
+              height: animatedHeight,
+            }}
           >
-            <View style={styles.sheetHandleHitArea}>
-              <View style={styles.sheetHandle} />
-            </View>
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: textColor }]}>
-                {editingNote ? 'Edit Note' : 'New Note'}
-              </Text>
-
-              <View style={styles.headerRight}>
-                {reminder && (
-                  <Pressable onPress={handleReminderPress}>
-                    <View style={styles.headerChip}>
-                      <Text style={[styles.headerChipText, { color: textColor }]}>
-                        {formatReminder(reminder, repeat)}
-                      </Text>
-                      <Pressable
-                        onPress={(e) => {
-                          e.stopPropagation();
-                          setReminder(null);
-                          setRepeat(null);
-                        }}
-                        hitSlop={8}
-                      >
-                        <Ionicons name="close-circle" size={16} color={textColor} />
-                      </Pressable>
-                    </View>
-                  </Pressable>
-                )}
-                {!reminder && (
-                  <Pressable style={styles.iconButton} onPress={handleReminderPress}>
-                    <Ionicons name={'alarm-outline'} size={24} color={textColor} />
-                  </Pressable>
-                )}
-                <Pressable style={styles.iconButton} onPress={() => setIsPinned(!isPinned)}>
-                  <Ionicons
-                    name={isPinned ? 'push' : 'push-outline'}
-                    size={24}
-                    color={isPinned ? (useWhiteText ? '#ffffff' : theme.colors.primary) : textColor}
-                  />
-                </Pressable>
-              </View>
-            </View>
-
-            <KeyboardAvoidingView
-              behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-              style={styles.keyboardAvoidingView}
+            <Animated.View
+              style={[
+                {
+                  flex: 1,
+                  transform: [{ translateY: editorTranslateY }],
+                },
+              ]}
+              onTouchStart={handleEditorTouchStart}
+              onTouchMove={handleEditorTouchMove}
+              onTouchEnd={handleEditorTouchEnd}
+              onTouchCancel={handleEditorTouchEnd}
             >
-              <ScrollView
-                style={styles.inputScrollView}
-                keyboardShouldPersistTaps="handled"
-                showsVerticalScrollIndicator={false}
+              <Animated.View
+                style={[
+                  styles.modalContent,
+                  {
+                    backgroundColor: modalBackgroundColor,
+                    flex: 1,
+                    borderTopLeftRadius: animatedRadius,
+                    borderTopRightRadius: animatedRadius,
+                  },
+                ]}
               >
-                <TextInput
-                  style={[styles.inputTitle, { color: textColor }]}
-                  placeholder="Title"
-                  multiline
-                  value={title}
-                  onChangeText={setTitle}
-                  placeholderTextColor={mutedTextColor}
-                />
-                <TextInput
-                  style={[styles.inputContent, { color: textColor }]}
-                  placeholder="Description"
-                  value={content}
-                  onChangeText={setContent}
-                  multiline
-                  textAlignVertical="top"
-                  placeholderTextColor={mutedTextColor}
-                />
-              </ScrollView>
-            </KeyboardAvoidingView>
+                <View style={styles.sheetHandleHitArea}>
+                  <View style={styles.sheetHandle} />
+                </View>
+                <View style={styles.modalHeader}>
+                  <Text style={[styles.modalTitle, { color: textColor }]}>
+                    {editingNote ? 'Edit Note' : 'New Note'}
+                  </Text>
 
-            <View style={styles.colorSection}>
-              <Text style={[styles.sectionLabel, { color: mutedTextColor }]}>Background Color</Text>
-              <ColorPicker
-                selectedColorId={currentColorId}
-                onColorSelect={handleColorSelect}
-                theme={theme}
-                isDark={resolvedMode === 'dark'}
-              />
-            </View>
+                  <View style={styles.headerRight}>
+                    {reminder && (
+                      <Pressable onPress={handleReminderPress}>
+                        <View style={styles.headerChip}>
+                          <Text style={[styles.headerChipText, { color: textColor }]}>
+                            {formatReminder(reminder, repeat)}
+                          </Text>
+                          <Pressable
+                            onPress={(e) => {
+                              e.stopPropagation();
+                              setReminder(null);
+                              setRepeat(null);
+                            }}
+                            hitSlop={8}
+                          >
+                            <Ionicons name="close-circle" size={16} color={textColor} />
+                          </Pressable>
+                        </View>
+                      </Pressable>
+                    )}
+                    {!reminder && (
+                      <Pressable style={styles.iconButton} onPress={handleReminderPress}>
+                        <Ionicons name={'alarm-outline'} size={24} color={textColor} />
+                      </Pressable>
+                    )}
+                    <Pressable style={styles.iconButton} onPress={() => setIsPinned(!isPinned)}>
+                      <Ionicons
+                        name={isPinned ? 'push' : 'push-outline'}
+                        size={24}
+                        color={
+                          isPinned ? (useWhiteText ? '#ffffff' : theme.colors.primary) : textColor
+                        }
+                      />
+                    </Pressable>
+                  </View>
+                </View>
 
-            <View style={styles.actionSeparator} />
+                <KeyboardAvoidingView
+                  behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                  style={styles.keyboardAvoidingView}
+                >
+                  <ScrollView
+                    style={styles.inputScrollView}
+                    keyboardShouldPersistTaps="handled"
+                    showsVerticalScrollIndicator={false}
+                  >
+                    <TextInput
+                      style={[styles.inputTitle, { color: textColor }]}
+                      placeholder="Title"
+                      multiline
+                      value={title}
+                      onChangeText={setTitle}
+                      placeholderTextColor={mutedTextColor}
+                    />
+                    {isChecklist ? (
+                      <ChecklistEditor
+                        items={checklistItems}
+                        onChange={handleChecklistChange}
+                        theme={theme}
+                        textColor={textColor}
+                        mutedTextColor={mutedTextColor}
+                      />
+                    ) : (
+                      <TextInput
+                        style={[styles.inputContent, { color: textColor }]}
+                        placeholder="Description"
+                        value={content}
+                        onChangeText={setContent}
+                        multiline
+                        textAlignVertical="top"
+                        placeholderTextColor={mutedTextColor}
+                      />
+                    )}
+                  </ScrollView>
+                </KeyboardAvoidingView>
 
-            <View style={styles.modalActions}>
-              {editingNote && (
-                <Pressable style={[styles.button, styles.buttonDelete]} onPress={onDelete}>
-                  <Ionicons name="trash-outline" size={20} color={theme.colors.error} />
-                </Pressable>
-              )}
-              <View style={{ flex: 1 }} />
-              <Pressable style={[styles.button, styles.buttonCancel]} onPress={handleClose}>
-                <Text style={styles.buttonTextCancel}>Cancel</Text>
-              </Pressable>
-              <Pressable style={[styles.button, styles.buttonSave]} onPress={handleSave}>
-                <Text style={styles.buttonTextSave}>Save</Text>
-              </Pressable>
-            </View>
+                <View style={styles.colorSection}>
+                  <Text style={[styles.sectionLabel, { color: mutedTextColor }]}>
+                    Background Color
+                  </Text>
+                  <ColorPicker
+                    selectedColorId={currentColorId}
+                    onColorSelect={handleColorSelect}
+                    theme={theme}
+                    isDark={resolvedMode === 'dark'}
+                  />
+                </View>
 
-            {showReminderModal && (
-              <ReminderSetupModal
-                visible={showReminderModal}
-                initialDate={reminder}
-                initialRepeat={repeat}
-                onClose={() => setShowReminderModal(false)}
-                onSave={handleReminderSave}
-              />
-            )}
+                <View style={styles.actionSeparator} />
+
+                <View style={styles.modalActions}>
+                  <Pressable
+                    style={[styles.button, styles.buttonIconAction]}
+                    onPress={handleToggleContentType}
+                    hitSlop={8}
+                  >
+                    <Ionicons
+                      name={isChecklist ? 'document-text-outline' : 'checkbox-outline'}
+                      size={20}
+                      color={mutedTextColor}
+                    />
+                  </Pressable>
+                  {editingNote && (
+                    <Pressable style={[styles.button, styles.buttonDelete]} onPress={onDelete}>
+                      <Ionicons name="trash-outline" size={20} color={theme.colors.error} />
+                    </Pressable>
+                  )}
+                  <View style={{ flex: 1 }} />
+                  <Pressable style={[styles.button, styles.buttonCancel]} onPress={handleClose}>
+                    <Text style={styles.buttonTextCancel}>Cancel</Text>
+                  </Pressable>
+                  <Pressable style={[styles.button, styles.buttonSave]} onPress={handleSave}>
+                    <Text style={styles.buttonTextSave}>Save</Text>
+                  </Pressable>
+                </View>
+
+                {showReminderModal && (
+                  <ReminderSetupModal
+                    visible={showReminderModal}
+                    initialDate={reminder}
+                    initialRepeat={repeat}
+                    onClose={() => setShowReminderModal(false)}
+                    onSave={handleReminderSave}
+                  />
+                )}
+              </Animated.View>
+            </Animated.View>
           </Animated.View>
         </View>
       </Modal>
@@ -335,6 +417,7 @@ const createStyles = (theme: Theme) =>
       minHeight: 100,
       padding: theme.spacing.sm,
     },
+
     colorSection: {
       paddingVertical: theme.spacing.sm,
     },
@@ -374,6 +457,11 @@ const createStyles = (theme: Theme) =>
     buttonDelete: {
       backgroundColor: '#fee2e2',
       paddingHorizontal: theme.spacing.md,
+    },
+    buttonIconAction: {
+      paddingHorizontal: theme.spacing.md,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
     },
     buttonTextSave: {
       color: 'white',

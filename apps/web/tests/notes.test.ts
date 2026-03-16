@@ -7,6 +7,7 @@ function makeDraft(overrides: Partial<NoteEditorDraft> = {}): NoteEditorDraft {
     id: 'draft-1',
     title: 'Title',
     content: 'Content',
+    contentType: 'text',
     color: 'default',
     isPinned: false,
     done: false,

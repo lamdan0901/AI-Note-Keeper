@@ -706,6 +706,154 @@ body {
 .modal-dialog__content-input::placeholder {
   color: var(--modal-fg-placeholder);
 }
+
+/* Content area */
+.modal-dialog__content-area {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Checklist Editor (modal) */
+.checklist-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 120px;
+  padding: 4px 0;
+}
+.checklist-editor__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  border-radius: 4px;
+}
+.checklist-editor__item--checked .checklist-editor__text {
+  text-decoration: line-through;
+  opacity: 0.5;
+}
+.checklist-editor__checkbox-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  position: relative;
+}
+.checklist-editor__checkbox {
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--modal-fg-secondary);
+  border-radius: 4px;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+  margin: 0;
+}
+.checklist-editor__checkbox:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.checklist-editor__checkmark {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+.checklist-editor__checkbox:checked + .checklist-editor__checkmark::after {
+  content: '✓';
+  font-size: 12px;
+  color: white;
+  font-weight: 700;
+}
+.checklist-editor__text {
+  flex: 1;
+  background: transparent;
+  border: none;
+  font-size: 14px;
+  color: var(--modal-fg-secondary);
+  font-family: inherit;
+  outline: none;
+  padding: 2px 0;
+  line-height: 1.5;
+}
+.checklist-editor__text::placeholder {
+  color: var(--modal-fg-placeholder);
+}
+.checklist-editor__remove {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--modal-fg-placeholder);
+  padding: 2px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.checklist-editor__item:hover .checklist-editor__remove {
+  opacity: 1;
+}
+.checklist-editor__remove:hover {
+  color: var(--danger, #ef4444);
+}
+.checklist-editor__add {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: none;
+  font-size: 13px;
+  color: var(--modal-fg-placeholder);
+  cursor: pointer;
+  padding: 6px 0;
+  transition: color 0.15s;
+}
+.checklist-editor__add:hover {
+  color: var(--accent);
+}
+
+/* Checklist Display (card) */
+.checklist-display {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.checklist-display__item {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--note-fg-secondary);
+  line-height: 1.5;
+}
+.checklist-display__item--checked {
+  text-decoration: line-through;
+  opacity: 0.5;
+}
+.checklist-display__icon {
+  flex-shrink: 0;
+  font-size: 11px;
+  width: 14px;
+  text-align: center;
+}
+.checklist-display__text {
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+.checklist-display__more {
+  font-size: 12px;
+  color: var(--note-fg-muted);
+  padding-top: 2px;
+}
+
 .modal-dialog__footer {
   display: flex;
   flex-direction: column;
@@ -814,6 +962,7 @@ body {
 .modal-dialog__reminder-chip:hover {
   background: var(--modal-hover-soft);
 }
+.modal-dialog__content-type-btn,
 .modal-dialog__done-btn,
 .modal-dialog__delete-btn {
   display: inline-flex;
@@ -1122,6 +1271,7 @@ body {
 .modal-dialog__reminder-chip svg,
 .modal-dialog__reminder-clear svg,
 .modal-dialog__reminder-trigger svg,
+.modal-dialog__content-type-btn svg,
 .modal-dialog__done-btn svg,
 .modal-dialog__delete-btn svg,
 .reminder-calendar__month-btn svg {

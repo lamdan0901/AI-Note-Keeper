@@ -203,4 +203,10 @@ ALTER TABLE notes ADD COLUMN isPinned INTEGER DEFAULT 0;
 CREATE INDEX IF NOT EXISTS idx_notes_isPinned ON notes (isPinned);
     `.trim(),
   },
+  {
+    id: '012_add_content_type_to_notes',
+    sql: `
+ALTER TABLE notes ADD COLUMN contentType TEXT DEFAULT NULL;
+    `.trim(),
+  },
 ];
