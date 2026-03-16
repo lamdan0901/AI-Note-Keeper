@@ -7,6 +7,9 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
+      "android": {
+        "applicationId": "com.andersonho.ainotekeeper.dev"
+      },
       "env": {
         "GOOGLE_SERVICES_JSON": "@GOOGLE_SERVICES_JSON",
         "EXPO_PUBLIC_CONVEX_URL": "@EXPO_PUBLIC_CONVEX_URL",
