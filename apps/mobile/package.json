@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "start": "expo start",
-    "android": "expo run:android",
+    "android": "cross-env APP_APPLICATION_ID=com.andersonho.ainotekeeper.dev expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
     "eas-prev": "npx eas build --platform android --profile preview",
@@ -17,7 +17,7 @@
     "@react-native-community/netinfo": "11.1.0",
     "@react-native-firebase/app": "^21.6.1",
     "@react-native-firebase/messaging": "^21.6.1",
-    "convex": "^1.31.6",
+    "convex": "^1.33.1",
     "expo": "~50.0.0",
     "expo-notifications": "~0.27.8",
     "expo-splash-screen": "~0.26.5",
@@ -31,6 +31,7 @@
   "devDependencies": {
     "@types/react": "~18.2.45",
     "babel-preset-expo": "~10.0.0",
+    "cross-env": "^7.0.3",
     "eas-cli": "^16.32.0",
     "typescript": "^5.4.0"
   }

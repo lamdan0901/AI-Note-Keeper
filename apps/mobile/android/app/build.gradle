@@ -85,7 +85,7 @@ android {
 
     namespace 'com.andersonho.ainotekeeper'
     defaultConfig {
-        applicationId 'com.andersonho.ainotekeeper'
+        applicationId System.getenv("APP_APPLICATION_ID") ?: 'com.andersonho.ainotekeeper'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
