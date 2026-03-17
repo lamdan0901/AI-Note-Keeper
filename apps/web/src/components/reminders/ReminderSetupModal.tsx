@@ -23,7 +23,7 @@ const QUICK_TIMES: Array<{ label: string; hour: number; minute: number }> = [
   { label: '9:30', hour: 21, minute: 30 },
 ];
 
-const WEEKDAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+const WEEKDAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 function toTimeInputValue(value: Date): string {
   const hours = `${value.getHours()}`.padStart(2, '0');
@@ -60,7 +60,7 @@ function isSameDate(a: Date, b: Date): boolean {
 
 function buildCalendarDays(monthStart: Date): Date[] {
   const calendarStart = new Date(monthStart);
-  calendarStart.setDate(monthStart.getDate() - monthStart.getDay());
+  calendarStart.setDate(monthStart.getDate() - ((monthStart.getDay() + 6) % 7));
   return Array.from({ length: 42 }, (_, index) => {
     const day = new Date(calendarStart);
     day.setDate(calendarStart.getDate() + index);
@@ -180,11 +180,7 @@ export function ReminderSetupModal({
           }}
         />
 
-        <section
-          ref={calendarRef}
-          className="reminder-calendar"
-          aria-label="Reminder date"
-        >
+        <section ref={calendarRef} className="reminder-calendar" aria-label="Reminder date">
           <div className="reminder-calendar__header">
             <button
               className="reminder-calendar__month-btn"

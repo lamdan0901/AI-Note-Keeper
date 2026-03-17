@@ -7,14 +7,28 @@ type RecurrencePickerProps = {
   selectedDate: Date;
 };
 
-const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+const WEEKDAYS = [
+  { label: 'Mon', value: 1 },
+  { label: 'Tue', value: 2 },
+  { label: 'Wed', value: 3 },
+  { label: 'Thu', value: 4 },
+  { label: 'Fri', value: 5 },
+  { label: 'Sat', value: 6 },
+  { label: 'Sun', value: 0 },
+];
 
-function getActiveTab(value: RepeatRule | null): 'none' | 'daily' | 'weekly' | 'monthly' | 'custom' {
+function getActiveTab(
+  value: RepeatRule | null,
+): 'none' | 'daily' | 'weekly' | 'monthly' | 'custom' {
   if (!value) return 'none';
   return value.kind;
 }
 
-export function RecurrencePicker({ value, onChange, selectedDate }: RecurrencePickerProps): JSX.Element {
+export function RecurrencePicker({
+  value,
+  onChange,
+  selectedDate,
+}: RecurrencePickerProps): JSX.Element {
   const activeTab = getActiveTab(value);
   const weeklyWeekdays = useMemo(() => {
     if (value?.kind !== 'weekly') return [selectedDate.getDay()];
@@ -34,22 +48,25 @@ export function RecurrencePicker({ value, onChange, selectedDate }: RecurrencePi
         <p className="recurrence-picker__title">Repeat</p>
         <div className="recurrence-picker__tabs" role="tablist" aria-label="Repeat options">
           {tabs.map((tab) => (
-          <button
-            key={tab.value}
-            type="button"
-            role="tab"
-            className={`recurrence-picker__tab${activeTab === tab.value ? ' recurrence-picker__tab--active' : ''}`}
-            aria-selected={activeTab === tab.value}
-            onClick={() => {
-              if (tab.value === 'none') onChange(null);
-              if (tab.value === 'daily') onChange({ kind: 'daily', interval: 1 });
-              if (tab.value === 'weekly') onChange({ kind: 'weekly', interval: 1, weekdays: [selectedDate.getDay()] });
-              if (tab.value === 'monthly') onChange({ kind: 'monthly', interval: 1, mode: 'day_of_month' });
-              if (tab.value === 'custom') onChange({ kind: 'custom', interval: 2, frequency: 'days' });
-            }}
-          >
-            {tab.label}
-          </button>
+            <button
+              key={tab.value}
+              type="button"
+              role="tab"
+              className={`recurrence-picker__tab${activeTab === tab.value ? ' recurrence-picker__tab--active' : ''}`}
+              aria-selected={activeTab === tab.value}
+              onClick={() => {
+                if (tab.value === 'none') onChange(null);
+                if (tab.value === 'daily') onChange({ kind: 'daily', interval: 1 });
+                if (tab.value === 'weekly')
+                  onChange({ kind: 'weekly', interval: 1, weekdays: [selectedDate.getDay()] });
+                if (tab.value === 'monthly')
+                  onChange({ kind: 'monthly', interval: 1, mode: 'day_of_month' });
+                if (tab.value === 'custom')
+                  onChange({ kind: 'custom', interval: 2, frequency: 'days' });
+              }}
+            >
+              {tab.label}
+            </button>
           ))}
         </div>
       </div>
@@ -57,18 +74,18 @@ export function RecurrencePicker({ value, onChange, selectedDate }: RecurrencePi
       {value?.kind === 'weekly' && (
         <div className="recurrence-picker__weekly">
           <div className="recurrence-picker__weekdays">
-            {WEEKDAYS.map((label, index) => {
-              const isActive = weeklyWeekdays.includes(index);
+            {WEEKDAYS.map(({ label, value: dayValue }) => {
+              const isActive = weeklyWeekdays.includes(dayValue);
               return (
                 <button
-                  key={`${label}-${index}`}
+                  key={label}
                   type="button"
                   className={`recurrence-picker__weekday${isActive ? ' recurrence-picker__weekday--active' : ''}`}
                   onClick={() => {
                     if (value.kind !== 'weekly') return;
                     const next = isActive
-                      ? value.weekdays.filter((d) => d !== index)
-                      : [...value.weekdays, index].sort((a, b) => a - b);
+                      ? value.weekdays.filter((d) => d !== dayValue)
+                      : [...value.weekdays, dayValue].sort((a, b) => a - b);
                     if (next.length === 0) return;
                     onChange({ ...value, weekdays: next });
                   }}

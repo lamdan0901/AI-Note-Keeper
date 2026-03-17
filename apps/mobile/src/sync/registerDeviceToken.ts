@@ -91,13 +91,12 @@ export const registerDevicePushToken = async (
     return;
   }
 
-  logSyncEvent('info', 'push_token_registration_start', {
-    hasOverrideUrl: !!options.convexUrl,
-    hasOverrideUser: !!options.userId,
-  });
+  console.warn('[PushToken] ===== Registration START =====');
 
   const convexUrl = resolveConvexUrl(options.convexUrl);
+  console.warn('[PushToken] Resolved Convex URL:', convexUrl ?? 'NULL');
   if (!convexUrl) {
+    console.warn('[PushToken] ABORT: No Convex URL. Env value:', String(process.env.EXPO_PUBLIC_CONVEX_URL ?? 'undefined'));
     logSyncEvent('error', 'push_token_missing_convex_url', {
       rawEnv: String(process.env.EXPO_PUBLIC_CONVEX_URL ?? 'undefined'),
     });
@@ -105,12 +104,15 @@ export const registerDevicePushToken = async (
   }
 
   const userId = resolveUserId(options.userId);
-  logSyncEvent('info', 'push_token_resolved_user', { userId });
+  console.warn('[PushToken] UserId:', userId);
 
   const permissions = await Notifications.getPermissionsAsync();
+  console.warn('[PushToken] Permission status:', permissions.status, 'granted:', permissions.granted);
   if (!permissions.granted) {
     const requested = await Notifications.requestPermissionsAsync();
+    console.warn('[PushToken] Requested permission:', requested.status, 'granted:', requested.granted);
     if (!requested.granted) {
+      console.warn('[PushToken] ABORT: Permission denied');
       logSyncEvent('warn', 'push_token_permission_denied');
       return;
     }
@@ -120,21 +122,26 @@ export const registerDevicePushToken = async (
   let fcmToken: string;
   try {
     fcmToken = await getToken(messaging);
+    console.warn('[PushToken] FCM token obtained:', fcmToken ? `${fcmToken.slice(0, 20)}...` : 'EMPTY');
   } catch (err) {
+    console.warn('[PushToken] ABORT: FCM getToken error:', err instanceof Error ? err.message : String(err));
     logSyncEvent('error', 'push_token_fcm_error', {
       error: err instanceof Error ? err.message : String(err),
     });
     return;
   }
   if (!fcmToken) {
+    console.warn('[PushToken] ABORT: FCM token is empty');
     logSyncEvent('warn', 'push_token_missing_fcm');
     return;
   }
 
   const deviceId = await getOrCreateStableDeviceId(options.deviceId);
+  console.warn('[PushToken] DeviceId:', deviceId);
 
   try {
     const client = new ConvexHttpClient(convexUrl);
+    console.warn('[PushToken] Calling upsertDevicePushToken mutation...');
     await client.mutation(api.functions.deviceTokens.upsertDevicePushToken, {
       id: deviceId,
       userId,
@@ -143,8 +150,10 @@ export const registerDevicePushToken = async (
       platform: 'android',
       updatedAt: Date.now(),
     });
+    console.warn('[PushToken] ===== Registration SUCCESS =====');
     logSyncEvent('info', 'push_token_registered', { deviceId, userId });
   } catch (err) {
+    console.warn('[PushToken] ===== Registration FAILED =====', err instanceof Error ? err.message : String(err));
     logSyncEvent('error', 'push_token_mutation_failed', {
       deviceId,
       userId,

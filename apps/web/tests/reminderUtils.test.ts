@@ -68,14 +68,14 @@ describe('coerceRepeatRule', () => {
 });
 
 describe('getInitialReminderDate', () => {
-  it('defaults to next hour when no initial date is provided before 22:00', () => {
+  it('defaults to current local time when no initial date is provided', () => {
     const now = new Date(2026, 1, 10, 20, 17, 13, 500);
     const result = getInitialReminderDate(null, now);
     expect(result.getFullYear()).toBe(2026);
     expect(result.getMonth()).toBe(1);
     expect(result.getDate()).toBe(10);
-    expect(result.getHours()).toBe(21);
-    expect(result.getMinutes()).toBe(0);
+    expect(result.getHours()).toBe(20);
+    expect(result.getMinutes()).toBe(17);
     expect(result.getSeconds()).toBe(0);
     expect(result.getMilliseconds()).toBe(0);
   });

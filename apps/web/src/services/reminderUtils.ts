@@ -68,7 +68,9 @@ export function formatReminder(date: Date, repeat: RepeatRule | null): string {
 
 export function getInitialReminderDate(initialDate: Date | null, now: Date): Date {
   if (!initialDate) {
-    return normalizeToFutureDate(now, now);
+    const normalized = new Date(now);
+    normalized.setSeconds(0, 0);
+    return normalized;
   }
   return normalizeToFutureDate(initialDate, now);
 }

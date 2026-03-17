@@ -8,7 +8,15 @@ interface RecurrencePickerProps {
   onChange: (rule: RepeatRule | null) => void;
 }
 
-const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+const WEEKDAYS = [
+  { label: 'Mon', value: 1 },
+  { label: 'Tue', value: 2 },
+  { label: 'Wed', value: 3 },
+  { label: 'Thu', value: 4 },
+  { label: 'Fri', value: 5 },
+  { label: 'Sat', value: 6 },
+  { label: 'Sun', value: 0 },
+];
 
 export const RecurrencePicker: React.FC<RecurrencePickerProps> = ({ repeat, onChange }) => {
   const { theme } = useTheme();
@@ -93,15 +101,15 @@ export const RecurrencePicker: React.FC<RecurrencePickerProps> = ({ repeat, onCh
       {/* Detail Views */}
       {currentKind === 'weekly' && repeat?.kind === 'weekly' && (
         <View style={styles.weekdays}>
-          {WEEKDAYS.map((day, index) => {
-            const isSelected = repeat.weekdays.includes(index);
+          {WEEKDAYS.map(({ label, value: dayValue }) => {
+            const isSelected = repeat.weekdays.includes(dayValue);
             return (
               <Pressable
-                key={index}
+                key={label}
                 style={[styles.dayCircle, isSelected && styles.dayCircleActive]}
-                onPress={() => toggleWeekday(index)}
+                onPress={() => toggleWeekday(dayValue)}
               >
-                <Text style={[styles.dayText, isSelected && styles.dayTextActive]}>{day}</Text>
+                <Text style={[styles.dayText, isSelected && styles.dayTextActive]}>{label}</Text>
               </Pressable>
             );
           })}

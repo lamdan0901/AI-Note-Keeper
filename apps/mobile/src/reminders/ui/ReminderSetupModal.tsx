@@ -136,7 +136,7 @@ export const ReminderSetupModal: React.FC<ReminderSetupModalProps> = ({
     const year = calendarMonth.getFullYear();
     const month = calendarMonth.getMonth();
     const firstDay = new Date(year, month, 1);
-    const startWeekday = firstDay.getDay();
+    const startWeekday = (firstDay.getDay() + 6) % 7;
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const weeks: Array<Array<Date | null>> = [];
     let day = 1 - startWeekday;
@@ -222,7 +222,7 @@ export const ReminderSetupModal: React.FC<ReminderSetupModalProps> = ({
                 </View>
 
                 <View style={styles.weekdayRow}>
-                  {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((label) => (
+                  {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((label) => (
                     <Text key={label} style={styles.weekdayText}>
                       {label}
                     </Text>
