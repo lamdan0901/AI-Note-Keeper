@@ -3,6 +3,7 @@ import { internalAction } from '../_generated/server';
 import { v } from 'convex/values';
 import { api, internal } from '../_generated/api';
 import { createSign } from 'crypto';
+import { parseChecklist, checklistToPlainText } from '../../packages/shared/utils/checklist';
 
 interface FirebaseServiceAccount {
   project_id: string;
@@ -141,7 +142,11 @@ export const sendPush = internalAction({
     });
 
     const noteTitle = (note?.title ?? '').trim();
-    const noteContent = (note?.content ?? '').trim();
+    const rawContent = note?.content ?? '';
+    const noteContent =
+      note?.contentType === 'checklist'
+        ? checklistToPlainText(parseChecklist(rawContent))
+        : rawContent.trim();
     const title = noteTitle || noteContent || 'Reminder';
     const body = noteTitle && noteContent ? noteContent : '';
 

@@ -13,7 +13,7 @@
     "dev:backend": "convex dev",
     "dev:web": "npm --workspace apps/web run dev",
     "build:web": "npm --workspace apps/web run build",
-    "build:mobile": "npm --workspace apps/mobile run build",
+    "build:mobile": "npm --workspace apps/mobile run android",
     "dev:mobile": "npm --workspace apps/mobile run start",
     "dev:clients": "concurrently -k -n web,mobile -c green,cyan \"npm run dev:web\" \"npm run dev:mobile\""
   },

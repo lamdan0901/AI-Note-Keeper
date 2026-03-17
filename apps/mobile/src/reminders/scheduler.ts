@@ -1,6 +1,7 @@
 import * as Notifications from 'expo-notifications';
 import { NativeModules, Platform } from 'react-native';
 import type { Reminder } from '../../../../packages/shared/types/reminder';
+import { parseChecklist, checklistToPlainText } from '../../../../packages/shared/utils/checklist';
 import { logSyncEvent } from './logging';
 import { logScheduleEvent } from './logging';
 import { getScheduleState, upsertScheduleState } from './scheduleLedger';
@@ -19,9 +20,12 @@ const buildNotificationText = (
   override?: NotificationTextOverride,
 ): { title: string; body: string } => {
   const titleText = trimOrEmpty(override?.title ?? reminder.title);
-  const descriptionText = trimOrEmpty(
-    override?.body ?? (reminder as unknown as { content?: unknown }).content,
-  );
+  const rawContent = override?.body ?? (reminder as unknown as { content?: unknown }).content;
+  const contentType = (reminder as unknown as { contentType?: string }).contentType;
+  const descriptionText =
+    contentType === 'checklist' && typeof rawContent === 'string'
+      ? checklistToPlainText(parseChecklist(rawContent))
+      : trimOrEmpty(rawContent);
 
   if (titleText && descriptionText) {
     return { title: titleText, body: descriptionText };
