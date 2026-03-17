@@ -144,26 +144,25 @@ export const NoteCard: React.FC<NoteCardProps> = ({
               </Text>
             ) : null}
 
-            {/* Sync Status & Reminder Row */}
-            <View style={styles.metaRow}>
-              {/* Sync Status Icon */}
-              {note.syncStatus === 'pending' && (
-                <View style={styles.syncStatusBadge}>
-                  <Ionicons
-                    name="cloud-upload-outline"
-                    size={14}
-                    color={useWhiteText ? mutedTextColor : theme.colors.textMuted}
-                  />
-                </View>
-              )}
-              {note.syncStatus === 'conflict' && (
-                <View style={[styles.syncStatusBadge, styles.conflictBadge]}>
-                  <Ionicons name="warning-outline" size={14} color={theme.colors.error} />
-                </View>
-              )}
+            {/* Floating Sync Status Icon */}
+            {note.syncStatus === 'pending' && (
+              <View style={styles.syncStatusFloat}>
+                <Ionicons
+                  name="cloud-upload-outline"
+                  size={14}
+                  color={useWhiteText ? mutedTextColor : theme.colors.textMuted}
+                />
+              </View>
+            )}
+            {note.syncStatus === 'conflict' && (
+              <View style={[styles.syncStatusFloat, styles.conflictFloat]}>
+                <Ionicons name="warning-outline" size={14} color={theme.colors.error} />
+              </View>
+            )}
 
-              {/* Reminder Badge */}
-              {effectiveTriggerAt && (
+            {/* Reminder Row */}
+            {!!effectiveTriggerAt && (
+              <View style={styles.metaRow}>
                 <View style={styles.reminderContainer}>
                   <Ionicons
                     name="alarm-outline"
@@ -180,8 +179,8 @@ export const NoteCard: React.FC<NoteCardProps> = ({
                     {formatReminder(new Date(effectiveTriggerAt), note.repeat ?? null)}
                   </Text>
                 </View>
-              )}
-            </View>
+              </View>
+            )}
           </Animated.View>
         )}
       </Pressable>
@@ -258,12 +257,15 @@ const createStyles = (theme: Theme) =>
       gap: 8,
       flexWrap: 'wrap',
     },
-    syncStatusBadge: {
-      padding: 4,
+    syncStatusFloat: {
+      position: 'absolute',
+      top: 4,
+      right: 4,
+      padding: 2,
       borderRadius: theme.borderRadius.sm,
-      backgroundColor: 'rgba(0,0,0,0.05)',
+      backgroundColor: 'rgba(0,0,0,0.06)',
     },
-    conflictBadge: {
+    conflictFloat: {
       backgroundColor: 'rgba(239,68,68,0.1)',
     },
     reminderContainer: {
