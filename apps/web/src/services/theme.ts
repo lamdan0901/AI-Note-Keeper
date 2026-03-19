@@ -1,11 +1,11 @@
-export type ThemeMode = 'light' | 'dark' | 'system';
+export type ThemeMode = 'light' | 'dark' | 'auto';
 export type ResolvedTheme = 'light' | 'dark';
 
-export const THEME_STORAGE_KEY = 'ai-note-keeper:theme-mode';
-export const DEFAULT_THEME_MODE: ThemeMode = 'system';
+export const THEME_STORAGE_KEY = 'theme-mode';
+export const DEFAULT_THEME_MODE: ThemeMode = 'auto';
 export const SYSTEM_DARK_QUERY = '(prefers-color-scheme: dark)';
 
-const THEME_MODES: ThemeMode[] = ['light', 'dark', 'system'];
+const THEME_MODES: ThemeMode[] = ['light', 'dark', 'auto'];
 
 export function isThemeMode(value: unknown): value is ThemeMode {
   return typeof value === 'string' && THEME_MODES.includes(value as ThemeMode);
@@ -21,7 +21,7 @@ export function getInitialThemeMode(): ThemeMode {
 }
 
 export function resolveThemeMode(mode: ThemeMode, prefersDark: boolean): ResolvedTheme {
-  if (mode === 'system') {
+  if (mode === 'auto') {
     return prefersDark ? 'dark' : 'light';
   }
   return mode;

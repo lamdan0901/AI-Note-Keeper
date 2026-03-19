@@ -27,7 +27,7 @@ export default function App(): JSX.Element {
 
     applyTheme();
 
-    if (themeMode !== 'system') {
+    if (themeMode !== 'auto') {
       return;
     }
 

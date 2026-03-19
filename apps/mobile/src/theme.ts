@@ -1,6 +1,13 @@
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Appearance, Animated, StyleSheet, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  lightColors,
+  darkColors,
+  typography,
+  spacing,
+  borderRadius,
+} from '../../../packages/shared/tokens';
 
 export type ThemeMode = 'light' | 'dark' | 'auto';
 
@@ -8,37 +15,18 @@ const storageKey = 'theme-mode';
 
 const baseTokens = {
   typography: {
-    fontFamily: 'Plus Jakarta Sans',
-    sizes: {
-      xs: 12,
-      sm: 14,
-      base: 16,
-      lg: 20,
-      xl: 24,
-      xxl: 32,
-    },
+    ...typography,
+    // React Native requires string weights
     weights: {
-      light: '300',
-      regular: '400',
-      medium: '500',
-      semibold: '600',
-      bold: '700',
+      light: String(typography.weights.light),
+      regular: String(typography.weights.regular),
+      medium: String(typography.weights.medium),
+      semibold: String(typography.weights.semibold),
+      bold: String(typography.weights.bold),
     },
   },
-  spacing: {
-    xs: 4,
-    sm: 8,
-    md: 16,
-    lg: 24,
-    xl: 32,
-    xxl: 48,
-  },
-  borderRadius: {
-    sm: 8,
-    md: 12,
-    lg: 16,
-    xl: 24,
-  },
+  spacing,
+  borderRadius,
   shadows: {
     sm: {
       shadowColor: '#000',
@@ -55,32 +43,6 @@ const baseTokens = {
       elevation: 5,
     },
   },
-};
-
-const lightColors = {
-  primary: '#3B82F6',
-  secondary: '#60A5FA',
-  cta: '#F97316',
-  background: '#F8FAFC',
-  text: '#1E293B',
-  textMuted: '#475569',
-  border: '#E2E8F0',
-  surface: '#FFFFFF',
-  success: '#22c55e',
-  error: '#ef4444',
-};
-
-const darkColors = {
-  primary: '#60A5FA',
-  secondary: '#3B82F6',
-  cta: '#F97316',
-  background: '#0F172A',
-  text: '#F8FAFC',
-  textMuted: '#ccd0d7ff',
-  border: '#334155',
-  surface: '#1E293B',
-  success: '#4ADE80',
-  error: '#F87171',
 };
 
 const buildTheme = (colors: typeof lightColors) => ({

@@ -25,7 +25,7 @@ const SAVE_STATUS_LABELS: Record<NotesHeaderProps['saveStatus'], string | null> 
 const THEME_OPTIONS: Array<{ mode: ThemeMode; icon: React.ReactNode; label: string }> = [
   { mode: 'light', icon: <Sun size={16} />, label: 'Light' },
   { mode: 'dark', icon: <Moon size={16} />, label: 'Dark' },
-  { mode: 'system', icon: <Monitor size={16} />, label: 'System' },
+  { mode: 'auto', icon: <Monitor size={16} />, label: 'Auto' },
 ];
 
 export function NotesHeader({
