@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutGrid, List, Monitor, Moon, Plus, Sun, X } from 'lucide-react';
+import { LayoutGrid, List, Monitor, Moon, Plus, Sun, Trash2, X } from 'lucide-react';
 import type { NotesViewMode } from '../services/notesTypes';
 import type { ThemeMode } from '../services/theme';
 
@@ -13,6 +13,9 @@ interface NotesHeaderProps {
   searchQuery: string;
   onSearchQueryChange: (value: string) => void;
   onClearSearch: () => void;
+  viewingTrash: boolean;
+  onToggleTrash: () => void;
+  trashCount: number;
 }
 
 const SAVE_STATUS_LABELS: Record<NotesHeaderProps['saveStatus'], string | null> = {
@@ -38,6 +41,9 @@ export function NotesHeader({
   searchQuery,
   onSearchQueryChange,
   onClearSearch,
+  viewingTrash,
+  onToggleTrash,
+  trashCount,
 }: NotesHeaderProps) {
   const statusLabel = SAVE_STATUS_LABELS[saveStatus];
   const hasSearch = searchQuery.trim().length > 0;
@@ -115,6 +121,18 @@ export function NotesHeader({
 
         <button className="notes-header__new-btn" onClick={onNewNote}>
           <Plus size={16} /> New note
+        </button>
+
+        <button
+          className={`notes-header__trash-btn${viewingTrash ? ' notes-header__trash-btn--active' : ''}`}
+          onClick={onToggleTrash}
+          title={viewingTrash ? 'Back to notes' : 'View trash'}
+          aria-pressed={viewingTrash}
+        >
+          <Trash2 size={16} />
+          {!viewingTrash && trashCount > 0 && (
+            <span className="notes-header__trash-badge">{trashCount}</span>
+          )}
         </button>
       </div>
     </header>

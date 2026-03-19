@@ -12,6 +12,7 @@ import { registerDevicePushToken } from './src/sync/registerDeviceToken';
 import { handleFcmMessage, handleNotificationResponse } from './src/sync/fcmMessageHandler';
 import { checkStartupPermissions } from './src/reminders/permissions';
 import { NotesScreen } from './src/screens/NotesScreen';
+import { TrashScreen } from './src/screens/TrashScreen';
 import { ThemeProvider, useTheme } from './src/theme';
 
 SplashScreen.preventAutoHideAsync();
@@ -170,6 +171,8 @@ const AppContent = ({
   onEditHandled: () => void;
 }) => {
   const { theme, resolvedMode } = useTheme();
+  const [currentScreen, setCurrentScreen] = useState<'notes' | 'trash'>('notes');
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>('grid');
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -178,12 +181,19 @@ const AppContent = ({
         backgroundColor={theme.colors.background}
         translucent={false}
       />
-      <NotesScreen
-        rescheduleNoteId={rescheduleNoteId}
-        onRescheduleHandled={onRescheduleHandled}
-        editNoteId={editNoteId}
-        onEditHandled={onEditHandled}
-      />
+      {currentScreen === 'trash' ? (
+        <TrashScreen onBack={() => setCurrentScreen('notes')} viewMode={viewMode} />
+      ) : (
+        <NotesScreen
+          rescheduleNoteId={rescheduleNoteId}
+          onRescheduleHandled={onRescheduleHandled}
+          editNoteId={editNoteId}
+          onEditHandled={onEditHandled}
+          onNavigateToTrash={() => setCurrentScreen('trash')}
+          viewMode={viewMode}
+          onViewModeChange={setViewMode}
+        />
+      )}
     </View>
   );
 };

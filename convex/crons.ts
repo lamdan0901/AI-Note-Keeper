@@ -10,4 +10,7 @@ crons.cron(
   internal.functions.reminderTriggers.checkAndTriggerReminders,
 );
 
+// Purge soft-deleted notes older than 14 days, daily at 3 AM UTC
+crons.cron('purge-expired-trash', '0 3 * * *', internal.functions.notes.purgeExpiredTrash);
+
 export default crons;

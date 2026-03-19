@@ -41,6 +41,7 @@ export interface WebNote {
   lastAcknowledgedAt?: number | null;
 
   version?: number;
+  deletedAt?: number;
   updatedAt: number;
   createdAt: number;
 }

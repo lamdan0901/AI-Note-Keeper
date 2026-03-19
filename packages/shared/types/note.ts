@@ -42,6 +42,9 @@ export type Note = {
   lastAcknowledgedAt?: number | null;
   version?: number;
 
+  // Trash
+  deletedAt?: number;
+
   // Sync tracking fields
   syncStatus?: 'synced' | 'pending' | 'conflict';
   serverVersion?: number;

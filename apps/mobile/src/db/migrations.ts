@@ -209,4 +209,11 @@ CREATE INDEX IF NOT EXISTS idx_notes_isPinned ON notes (isPinned);
 ALTER TABLE notes ADD COLUMN contentType TEXT DEFAULT NULL;
     `.trim(),
   },
+  {
+    id: '013_add_deleted_at_to_notes',
+    sql: `
+ALTER TABLE notes ADD COLUMN deletedAt INTEGER DEFAULT NULL;
+CREATE INDEX IF NOT EXISTS idx_notes_deletedAt ON notes (deletedAt);
+    `.trim(),
+  },
 ];

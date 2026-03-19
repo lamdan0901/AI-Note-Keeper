@@ -212,3 +212,55 @@ export const backfillCanonicalRecurrence = mutation({
     };
   },
 });
+
+/**
+ * Backfill `deletedAt` for existing soft-deleted notes that lack the field.
+ * Sets `deletedAt` to the note's `updatedAt` so they enter the 14-day purge pipeline.
+ *
+ * Run via the Convex dashboard:
+ *   await client.mutation(api.functions.notesMigration.backfillDeletedAt, {});
+ */
+export const backfillDeletedAt = mutation({
+  args: {
+    batchSize: v.optional(v.number()),
+    cursor: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const batchSize = args.batchSize ?? 200;
+    const cursor = args.cursor ?? null;
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const pageResult = await (ctx.db.query('notes') as any).paginate({
+      cursor,
+      numItems: batchSize,
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const page = (pageResult.page as any[]) ?? [];
+
+    let processed = 0;
+    let patched = 0;
+    let skipped = 0;
+
+    for (const note of page) {
+      processed++;
+      if (note.active !== false) {
+        skipped++;
+        continue;
+      }
+      if (note.deletedAt !== undefined && note.deletedAt !== null) {
+        skipped++;
+        continue;
+      }
+      await ctx.db.patch(note._id, { deletedAt: note.updatedAt });
+      patched++;
+    }
+
+    return {
+      processed,
+      patched,
+      skipped,
+      nextCursor: pageResult.continueCursor as string | null,
+      hasMore: !pageResult.isDone,
+    };
+  },
+});

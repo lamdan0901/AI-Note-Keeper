@@ -74,6 +74,7 @@ export const fetchNotes = async (userId: string): Promise<FetchNotesResult> => {
         lastFiredAt: n.lastFiredAt ?? null,
         lastAcknowledgedAt: n.lastAcknowledgedAt ?? null,
         version: n.version,
+        deletedAt: n.deletedAt ?? undefined,
 
         updatedAt: n.updatedAt,
         createdAt: n.createdAt,

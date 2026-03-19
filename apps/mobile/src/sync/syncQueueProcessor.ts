@@ -160,6 +160,7 @@ const mapToApiPayload = (item: OutboxItem) => {
     ...includeIfPresent('nextTriggerAt'),
     ...includeIfPresent('lastFiredAt'),
     ...includeIfPresent('lastAcknowledgedAt'),
+    ...includeIfPresent('deletedAt'),
     updatedAt: payload.updatedAt,
     createdAt: payload.createdAt,
     operation: item.operation,

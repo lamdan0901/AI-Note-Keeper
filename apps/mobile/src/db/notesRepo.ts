@@ -26,6 +26,7 @@ export type NoteRow = {
   lastFiredAt: number | null;
   lastAcknowledgedAt: number | null;
   version: number;
+  deletedAt: number | null;
 
   syncStatus: string | null;
   serverVersion: number;
@@ -60,6 +61,7 @@ export const mapNoteRow = (row: NoteRow): Note => ({
   lastFiredAt: row.lastFiredAt || undefined,
   lastAcknowledgedAt: row.lastAcknowledgedAt || undefined,
   version: row.version || 0,
+  deletedAt: row.deletedAt || undefined,
 
   syncStatus: (row.syncStatus as Note['syncStatus']) || 'synced',
   serverVersion: row.serverVersion || 0,
@@ -92,9 +94,10 @@ export const upsertNote = async (db: SQLiteDatabase, note: Note): Promise<void> 
         lastFiredAt,
         lastAcknowledgedAt,
         version,
+        deletedAt,
         updatedAt,
         createdAt
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         title = excluded.title,
         content = excluded.content,
@@ -116,6 +119,7 @@ export const upsertNote = async (db: SQLiteDatabase, note: Note): Promise<void> 
         lastFiredAt = excluded.lastFiredAt,
         lastAcknowledgedAt = excluded.lastAcknowledgedAt,
         version = excluded.version,
+        deletedAt = excluded.deletedAt,
         updatedAt = excluded.updatedAt,
         createdAt = excluded.createdAt`,
     [
@@ -140,6 +144,7 @@ export const upsertNote = async (db: SQLiteDatabase, note: Note): Promise<void> 
       note.lastFiredAt || null,
       note.lastAcknowledgedAt || null,
       note.version || 0,
+      note.deletedAt || null,
       note.updatedAt,
       note.createdAt,
     ],
@@ -166,4 +171,19 @@ export const deleteNote = async (db: SQLiteDatabase, noteId: string): Promise<No
   const updated = { ...note, active: false, updatedAt: Date.now() };
   await upsertNote(db, updated);
   return updated;
+};
+
+export const listDeletedNotes = async (db: SQLiteDatabase): Promise<Note[]> => {
+  const rows = await db.getAllAsync<NoteRow>(
+    `SELECT * FROM notes WHERE active = 0 ORDER BY deletedAt DESC, updatedAt DESC`,
+  );
+  return rows.map(mapNoteRow);
+};
+
+export const hardDeleteNote = async (db: SQLiteDatabase, noteId: string): Promise<void> => {
+  await db.runAsync(`DELETE FROM notes WHERE id = ?`, [noteId]);
+};
+
+export const hardDeleteAllInactive = async (db: SQLiteDatabase): Promise<void> => {
+  await db.runAsync(`DELETE FROM notes WHERE active = 0`);
 };

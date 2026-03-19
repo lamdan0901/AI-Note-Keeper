@@ -3,14 +3,24 @@ import { ArrowUp } from 'lucide-react';
 import {
   useNotes,
   useSyncNotes,
+  usePermanentlyDeleteNote,
+  useEmptyTrash,
   createNote,
   updateNote,
   deleteNote,
+  restoreNote,
   getResolvedTimezone,
+  USER_ID,
 } from '../services/notes';
 import { useDebouncedValue } from '../../../../packages/shared/hooks/useDebouncedValue';
 import type { NoteEditorDraft, NotesViewMode, WebNote } from '../services/notesTypes';
-import { emptyDraft, draftFromNote, filterBySearchQuery, sortNotes } from '../services/notesUtils';
+import {
+  emptyDraft,
+  draftFromNote,
+  filterActive,
+  filterBySearchQuery,
+  sortNotes,
+} from '../services/notesUtils';
 import { buildReminderSyncFields } from '../services/reminderUtils';
 import { NotesHeader } from '../components/NotesHeader';
 import { NotesList } from '../components/NotesList';
@@ -25,8 +35,10 @@ interface NotesPageProps {
 }
 
 export default function NotesPage({ themeMode, onThemeModeChange }: NotesPageProps): JSX.Element {
-  const serverNotes = useNotes();
+  const allNotes = useNotes();
   const sync = useSyncNotes();
+  const permanentlyDeleteNoteMutation = usePermanentlyDeleteNote();
+  const emptyTrashMutation = useEmptyTrash();
 
   const [viewMode, setViewMode] = useState<NotesViewMode>('grid');
   const [showScrollTop, setShowScrollTop] = useState(false);
@@ -38,6 +50,21 @@ export default function NotesPage({ themeMode, onThemeModeChange }: NotesPagePro
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
   const [searchQuery, setSearchQuery] = useState('');
   const debouncedSearchQuery = useDebouncedValue(searchQuery, 250);
+  const [viewingTrash, setViewingTrash] = useState(false);
+
+  // Active notes (for main view)
+  const serverNotes = useMemo<WebNote[] | undefined>(() => {
+    if (allNotes === undefined) return undefined;
+    return sortNotes(filterActive(allNotes));
+  }, [allNotes]);
+
+  // Trash notes
+  const trashNotes = useMemo<WebNote[]>(() => {
+    if (allNotes === undefined) return [];
+    return allNotes
+      .filter((n) => n.active === false)
+      .sort((a, b) => (b.deletedAt ?? b.updatedAt) - (a.deletedAt ?? a.updatedAt));
+  }, [allNotes]);
 
   const displayNotes = useMemo<WebNote[]>(
     () => optimisticNotes ?? serverNotes ?? [],
@@ -305,6 +332,54 @@ export default function NotesPage({ themeMode, onThemeModeChange }: NotesPagePro
     };
   }, []);
 
+  // ---------------------------------------------------------------------------
+  // Trash actions
+  // ---------------------------------------------------------------------------
+
+  const handleRestoreNote = useCallback(
+    async (note: WebNote) => {
+      setSaveStatus('saving');
+      try {
+        await restoreNote(sync, note);
+        setSaveStatus('saved');
+        setTimeout(() => setSaveStatus('idle'), 2000);
+      } catch {
+        setSaveStatus('error');
+        setTimeout(() => setSaveStatus('idle'), 3000);
+      }
+    },
+    [sync],
+  );
+
+  const handlePermanentDelete = useCallback(
+    async (note: WebNote) => {
+      setSaveStatus('saving');
+      try {
+        await permanentlyDeleteNoteMutation({ userId: USER_ID, noteId: note.id });
+        setSaveStatus('saved');
+        setTimeout(() => setSaveStatus('idle'), 2000);
+      } catch {
+        setSaveStatus('error');
+        setTimeout(() => setSaveStatus('idle'), 3000);
+      }
+    },
+    [permanentlyDeleteNoteMutation],
+  );
+
+  const handleEmptyTrash = useCallback(async () => {
+    if (!window.confirm(`Permanently delete ${trashNotes.length} note(s)? This cannot be undone.`))
+      return;
+    setSaveStatus('saving');
+    try {
+      await emptyTrashMutation({ userId: USER_ID });
+      setSaveStatus('saved');
+      setTimeout(() => setSaveStatus('idle'), 2000);
+    } catch {
+      setSaveStatus('error');
+      setTimeout(() => setSaveStatus('idle'), 3000);
+    }
+  }, [emptyTrashMutation, trashNotes.length]);
+
   return (
     <main className="notes-page">
       <NotesHeader
@@ -317,31 +392,46 @@ export default function NotesPage({ themeMode, onThemeModeChange }: NotesPagePro
         searchQuery={searchQuery}
         onSearchQueryChange={setSearchQuery}
         onClearSearch={() => setSearchQuery('')}
+        viewingTrash={viewingTrash}
+        onToggleTrash={() => setViewingTrash((v) => !v)}
+        trashCount={trashNotes.length}
       />
 
-      {serverNotes === undefined ? (
-        <p className="notes-page__loading">Loading…</p>
-      ) : (
-        <NotesList
-          notes={filteredNotes}
+      {viewingTrash ? (
+        <TrashView
+          notes={trashNotes}
           viewMode={viewMode}
-          onCardClick={handleCardClick}
-          onToggleDone={handleToggleDone}
-          onTogglePin={handleTogglePin}
-          onDelete={handleDeleteFromCard}
-          searchQuery={debouncedSearchQuery}
+          onRestore={handleRestoreNote}
+          onDeleteForever={handlePermanentDelete}
+          onEmptyTrash={handleEmptyTrash}
         />
-      )}
+      ) : (
+        <>
+          {serverNotes === undefined ? (
+            <p className="notes-page__loading">Loading…</p>
+          ) : (
+            <NotesList
+              notes={filteredNotes}
+              viewMode={viewMode}
+              onCardClick={handleCardClick}
+              onToggleDone={handleToggleDone}
+              onTogglePin={handleTogglePin}
+              onDelete={handleDeleteFromCard}
+              searchQuery={debouncedSearchQuery}
+            />
+          )}
 
-      {modalOpen && (
-        <NoteEditorModal
-          draft={draft}
-          onChange={setDraft}
-          onSave={handleSave}
-          onDelete={handleDelete}
-          onClose={handleClose}
-          isNew={!editingNote}
-        />
+          {modalOpen && (
+            <NoteEditorModal
+              draft={draft}
+              onChange={setDraft}
+              onSave={handleSave}
+              onDelete={handleDelete}
+              onClose={handleClose}
+              isNew={!editingNote}
+            />
+          )}
+        </>
       )}
 
       {showScrollTop && (
@@ -356,5 +446,87 @@ export default function NotesPage({ themeMode, onThemeModeChange }: NotesPagePro
         </button>
       )}
     </main>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Trash View component (inline)
+// ---------------------------------------------------------------------------
+
+const FOURTEEN_DAYS_MS = 14 * 24 * 60 * 60 * 1000;
+
+function getDaysRemaining(deletedAt: number | undefined, updatedAt: number): number {
+  const ref = deletedAt ?? updatedAt;
+  const elapsed = Date.now() - ref;
+  return Math.max(0, Math.ceil((FOURTEEN_DAYS_MS - elapsed) / (24 * 60 * 60 * 1000)));
+}
+
+function TrashView({
+  notes,
+  viewMode,
+  onRestore,
+  onDeleteForever,
+  onEmptyTrash,
+}: {
+  notes: WebNote[];
+  viewMode: NotesViewMode;
+  onRestore: (note: WebNote) => void;
+  onDeleteForever: (note: WebNote) => void;
+  onEmptyTrash: () => void;
+}) {
+  if (notes.length === 0) {
+    return (
+      <div className="trash-empty">
+        <p className="trash-empty__text">Trash is empty</p>
+        <p className="trash-empty__subtext">
+          Deleted notes will appear here for 14 days before being permanently removed.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="trash-view">
+      <div className="trash-view__toolbar">
+        <span className="trash-view__count">
+          {notes.length} deleted note{notes.length !== 1 ? 's' : ''}
+        </span>
+        <button className="trash-view__empty-btn" onClick={onEmptyTrash}>
+          Empty Trash
+        </button>
+      </div>
+      <div className={`trash-view__list trash-view__list--${viewMode}`}>
+        {notes.map((note) => {
+          const daysLeft = getDaysRemaining(note.deletedAt, note.updatedAt);
+          return (
+            <div key={note.id} className="trash-card-slot">
+              <div className="trash-card">
+                <div className="trash-card__content">
+                  {note.title && <div className="trash-card__title">{note.title}</div>}
+                  {note.content && (
+                    <div className="trash-card__body">
+                      {note.content.length > 120 ? note.content.slice(0, 120) + '…' : note.content}
+                    </div>
+                  )}
+                  <div className="trash-card__meta">
+                    {daysLeft === 0
+                      ? 'Expiring today'
+                      : `${daysLeft} day${daysLeft !== 1 ? 's' : ''} left`}
+                  </div>
+                </div>
+                <div className="trash-card__actions">
+                  <button className="trash-card__restore-btn" onClick={() => onRestore(note)}>
+                    Restore
+                  </button>
+                  <button className="trash-card__delete-btn" onClick={() => onDeleteForever(note)}>
+                    Delete Forever
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }

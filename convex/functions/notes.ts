@@ -1,4 +1,4 @@
-import { mutation, query } from '../_generated/server';
+import { mutation, query, internalMutation } from '../_generated/server';
 import { v } from 'convex/values';
 
 export const getNotes = query({
@@ -47,6 +47,7 @@ export const syncNotes = mutation({
         deviceId: v.string(),
         version: v.optional(v.number()),
         baseVersion: v.optional(v.number()),
+        deletedAt: v.optional(v.number()),
       }),
     ),
     lastSyncAt: v.number(),
@@ -84,6 +85,7 @@ export const syncNotes = mutation({
           // Soft delete
           await ctx.db.patch(existing._id, {
             active: false,
+            deletedAt: noteData.deletedAt ?? Date.now(),
             updatedAt: noteData.updatedAt,
             version: (existing.version || 0) + 1,
           });
@@ -123,6 +125,10 @@ export const syncNotes = mutation({
               }),
               ...(hasCanonicalField('lastAcknowledgedAt') && {
                 lastAcknowledgedAt: normalizeNullable(noteData.lastAcknowledgedAt),
+              }),
+              // Trash support
+              ...(hasCanonicalField('deletedAt') && {
+                deletedAt: normalizeNullable(noteData.deletedAt),
               }),
               updatedAt: noteData.updatedAt,
               version: (existing.version || 0) + 1,
@@ -170,5 +176,53 @@ export const syncNotes = mutation({
       notes: allNotes,
       syncedAt: Date.now(),
     };
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Trash mutations
+// ---------------------------------------------------------------------------
+
+const FOURTEEN_DAYS_MS = 14 * 24 * 60 * 60 * 1000;
+
+export const permanentlyDeleteNote = mutation({
+  args: { userId: v.string(), noteId: v.string() },
+  handler: async (ctx, { userId, noteId }) => {
+    const existing = await ctx.db
+      .query('notes')
+      .filter((q) => q.and(q.eq(q.field('id'), noteId), q.eq(q.field('userId'), userId)))
+      .first();
+    if (!existing || existing.active !== false) return { deleted: false };
+    await ctx.db.delete(existing._id);
+    return { deleted: true };
+  },
+});
+
+export const emptyTrash = mutation({
+  args: { userId: v.string() },
+  handler: async (ctx, { userId }) => {
+    const trashed = await ctx.db
+      .query('notes')
+      .filter((q) => q.and(q.eq(q.field('userId'), userId), q.eq(q.field('active'), false)))
+      .collect();
+    for (const note of trashed) {
+      await ctx.db.delete(note._id);
+    }
+    return { deleted: trashed.length };
+  },
+});
+
+export const purgeExpiredTrash = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const cutoff = Date.now() - FOURTEEN_DAYS_MS;
+    const expired = await ctx.db
+      .query('notes')
+      .filter((q) => q.and(q.eq(q.field('active'), false), q.lt(q.field('deletedAt'), cutoff)))
+      .collect();
+    for (const note of expired) {
+      await ctx.db.delete(note._id);
+    }
+    return { purged: expired.length };
   },
 });

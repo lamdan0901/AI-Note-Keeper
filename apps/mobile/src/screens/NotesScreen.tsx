@@ -38,6 +38,9 @@ type NotesScreenProps = {
   onRescheduleHandled?: () => void;
   editNoteId?: string | null;
   onEditHandled?: () => void;
+  onNavigateToTrash?: () => void;
+  viewMode: 'list' | 'grid';
+  onViewModeChange: (mode: 'list' | 'grid') => void;
 };
 
 const NotesScreenContent = ({
@@ -45,9 +48,11 @@ const NotesScreenContent = ({
   onRescheduleHandled,
   editNoteId,
   onEditHandled,
+  onNavigateToTrash,
+  viewMode,
+  onViewModeChange,
 }: NotesScreenProps) => {
   const { theme } = useTheme();
-  const [viewMode, setViewMode] = useState<'list' | 'grid'>('grid'); // Default to Bento/Grid
   const [searchQuery, setSearchQuery] = useState('');
   const debouncedSearchQuery = useDebouncedValue(searchQuery, 250);
   const [drawerVisible, setDrawerVisible] = useState(false);
@@ -387,12 +392,20 @@ const NotesScreenContent = ({
         viewMode={viewMode}
         selectionMode={selectionMode}
         onMenuPress={openDrawer}
-        onViewModeToggle={() => setViewMode((prev) => (prev === 'grid' ? 'list' : 'grid'))}
+        onViewModeToggle={() => onViewModeChange(viewMode === 'grid' ? 'list' : 'grid')}
         searchQuery={searchQuery}
         onSearchQueryChange={setSearchQuery}
       />
 
-      <SettingsDrawer visible={drawerVisible} onClose={closeDrawer} drawerAnim={drawerAnim} />
+      <SettingsDrawer
+        visible={drawerVisible}
+        onClose={closeDrawer}
+        drawerAnim={drawerAnim}
+        onTrashPress={() => {
+          closeDrawer();
+          onNavigateToTrash?.();
+        }}
+      />
 
       <SelectionActionBar
         selectionHeaderAnim={selectionHeaderAnim}

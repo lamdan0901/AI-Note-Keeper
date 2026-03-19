@@ -18,9 +18,10 @@ type SettingsDrawerProps = {
   visible: boolean;
   onClose: () => void;
   drawerAnim: Animated.Value;
+  onTrashPress?: () => void;
 };
 
-export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ visible, onClose, drawerAnim }) => {
+export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ visible, onClose, drawerAnim, onTrashPress }) => {
   const { theme, mode, setMode } = useTheme();
   const { width } = useWindowDimensions();
   const styles = useMemo(() => createStyles(theme), [theme]);
@@ -89,6 +90,11 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ visible, onClose
               })}
             </View>
           </View>
+          <View style={styles.drawerDivider} />
+          <Pressable style={styles.drawerMenuItem} onPress={onTrashPress}>
+            <Ionicons name="trash-outline" size={20} color={theme.colors.textMuted} />
+            <Text style={styles.drawerMenuLabel}>Trash</Text>
+          </Pressable>
         </View>
       </Animated.View>
     </>
@@ -168,5 +174,22 @@ const createStyles = (theme: Theme) =>
     themeOptionDescription: {
       fontSize: theme.typography.sizes.xs,
       color: theme.colors.textMuted,
+    },
+    drawerDivider: {
+      height: 1,
+      backgroundColor: theme.colors.border,
+      marginVertical: theme.spacing.sm,
+    },
+    drawerMenuItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: theme.spacing.sm,
+      padding: theme.spacing.sm,
+      borderRadius: theme.borderRadius.md,
+    },
+    drawerMenuLabel: {
+      fontSize: theme.typography.sizes.base,
+      color: theme.colors.text,
+      fontWeight: '500',
     },
   });

@@ -39,6 +39,7 @@ export default defineSchema({
     lastFiredAt: v.optional(v.number()),
     lastAcknowledgedAt: v.optional(v.number()),
     version: v.optional(v.number()), // Optimistic concurrency control
+    deletedAt: v.optional(v.number()), // Epoch ms when soft-deleted (for 14-day purge)
 
     updatedAt: v.number(),
     createdAt: v.number(),

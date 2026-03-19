@@ -38,7 +38,7 @@ export const deleteNoteOffline = async (
   userId: string = 'local-user',
 ): Promise<void> => {
   const now = nowMs();
-  const deletedNote = { ...note, active: false, updatedAt: now };
+  const deletedNote = { ...note, active: false, deletedAt: now, updatedAt: now };
 
   // 1. Write to local DB (Soft Delete)
   await upsertNote(db, deletedNote);
@@ -54,4 +54,37 @@ export const deleteNoteOffline = async (
     // Log but don't fail the delete - notification is non-critical
     console.warn('[editor] Failed to cancel notification:', e);
   }
+};
+
+export const restoreNoteOffline = async (
+  db: SQLiteDatabase,
+  note: Note,
+  userId: string = 'local-user',
+): Promise<void> => {
+  const now = nowMs();
+  const restoredNote: Note = {
+    ...note,
+    active: true,
+    deletedAt: undefined,
+    // Clear all reminder/recurrence fields (stale reminders shouldn't fire)
+    triggerAt: undefined,
+    repeatRule: undefined,
+    repeatConfig: undefined,
+    snoozedUntil: undefined,
+    scheduleStatus: undefined,
+    timezone: undefined,
+    repeat: undefined,
+    baseAtLocal: undefined,
+    startAt: undefined,
+    nextTriggerAt: undefined,
+    lastFiredAt: undefined,
+    lastAcknowledgedAt: undefined,
+    updatedAt: now,
+  };
+
+  // 1. Write to local DB
+  await upsertNote(db, restoredNote);
+
+  // 2. Enqueue to Outbox as update
+  await enqueueNoteOperation(db, restoredNote, 'update', userId, now);
 };

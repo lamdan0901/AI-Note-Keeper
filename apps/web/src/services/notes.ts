@@ -1,7 +1,6 @@
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '../../../../convex/_generated/api';
 import type { NoteEditorDraft, WebNote } from './notesTypes';
-import { filterActive, sortNotes } from './notesUtils';
 import { buildReminderSyncFields } from './reminderUtils';
 
 // ---------------------------------------------------------------------------
@@ -49,6 +48,7 @@ function mapDocToWebNote(doc: any): WebNote {
     lastAcknowledgedAt: doc.lastAcknowledgedAt ?? null,
 
     version: doc.version,
+    deletedAt: doc.deletedAt ?? undefined,
     updatedAt: doc.updatedAt as number,
     createdAt: doc.createdAt as number,
   };
@@ -65,8 +65,7 @@ function mapDocToWebNote(doc: any): WebNote {
 export function useNotes(): WebNote[] | undefined {
   const raw = useQuery(api.functions.notes.getNotes, { userId: USER_ID });
   if (raw === undefined) return undefined;
-  const webNotes = raw.map(mapDocToWebNote);
-  return sortNotes(filterActive(webNotes));
+  return raw.map(mapDocToWebNote);
 }
 
 /**
@@ -186,11 +185,72 @@ export async function deleteNote(sync: SyncFn, id: string) {
         id,
         userId: USER_ID,
         active: false,
+        deletedAt: now,
         operation: 'delete',
         deviceId: 'web',
         createdAt: now,
         updatedAt: now,
       },
+    ],
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Trash helpers
+// ---------------------------------------------------------------------------
+
+export function useAllNotes(): WebNote[] | undefined {
+  const raw = useQuery(api.functions.notes.getNotes, { userId: USER_ID });
+  if (raw === undefined) return undefined;
+  return raw.map(mapDocToWebNote);
+}
+
+export function usePermanentlyDeleteNote() {
+  return useMutation(api.functions.notes.permanentlyDeleteNote);
+}
+
+export function useEmptyTrash() {
+  return useMutation(api.functions.notes.emptyTrash);
+}
+
+/**
+ * Restore a soft-deleted note (sets active: true, clears reminder fields).
+ */
+export async function restoreNote(sync: SyncFn, note: WebNote) {
+  const now = Date.now();
+  return sync({
+    userId: USER_ID,
+    lastSyncAt: now,
+    changes: [
+      toLegacySyncChange({
+        id: note.id,
+        userId: USER_ID,
+        title: note.title || undefined,
+        content: note.content || undefined,
+        contentType: note.contentType === 'checklist' ? 'checklist' : undefined,
+        color: note.color ?? undefined,
+        active: true,
+        done: note.done,
+        isPinned: note.isPinned,
+        // Clear all reminder fields
+        triggerAt: undefined,
+        repeatRule: undefined,
+        repeatConfig: undefined,
+        snoozedUntil: undefined,
+        scheduleStatus: undefined,
+        timezone: undefined,
+        repeat: null,
+        startAt: null,
+        baseAtLocal: null,
+        nextTriggerAt: null,
+        lastFiredAt: null,
+        lastAcknowledgedAt: null,
+        operation: 'update',
+        deviceId: 'web',
+        version: note.version,
+        createdAt: note.createdAt,
+        updatedAt: now,
+      }),
     ],
   });
 }

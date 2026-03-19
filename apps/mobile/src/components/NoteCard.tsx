@@ -11,6 +11,13 @@ import { parseChecklist } from '../../../../packages/shared/utils/checklist';
 
 const SELECTION_ANIMATION_DURATION_MS = 240;
 
+interface TrashInfo {
+  daysRemaining: number;
+  onRestore: () => void;
+  onDeleteForever: () => void;
+  actionPending: boolean;
+}
+
 interface NoteCardProps {
   note: Note;
   variant: 'list' | 'grid';
@@ -22,6 +29,7 @@ interface NoteCardProps {
   onDonePress?: (noteId: string) => void;
   onReschedulePress?: (noteId: string) => void;
   onDeletePress?: (noteId: string) => void;
+  trashInfo?: TrashInfo;
 }
 
 export const NoteCard: React.FC<NoteCardProps> = ({
@@ -31,6 +39,7 @@ export const NoteCard: React.FC<NoteCardProps> = ({
   onLongPress,
   selectionMode = false,
   isSelected = false,
+  trashInfo,
 }) => {
   const { theme, resolvedMode } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
@@ -161,7 +170,7 @@ export const NoteCard: React.FC<NoteCardProps> = ({
             )}
 
             {/* Reminder Row */}
-            {!!effectiveTriggerAt && (
+            {!trashInfo && !!effectiveTriggerAt && (
               <View style={styles.metaRow}>
                 <View style={styles.reminderContainer}>
                   <Ionicons
@@ -178,6 +187,33 @@ export const NoteCard: React.FC<NoteCardProps> = ({
                   >
                     {formatReminder(new Date(effectiveTriggerAt), note.repeat ?? null)}
                   </Text>
+                </View>
+              </View>
+            )}
+
+            {/* Trash footer */}
+            {!!trashInfo && (
+              <View style={styles.trashFooter}>
+                <Text style={[styles.trashDaysLabel, { color: mutedTextColor }]}>
+                  {trashInfo.daysRemaining === 0
+                    ? 'Expiring today'
+                    : `${trashInfo.daysRemaining}d left`}
+                </Text>
+                <View style={styles.trashFooterButtons}>
+                  <Pressable
+                    onPress={trashInfo.onRestore}
+                    disabled={trashInfo.actionPending}
+                    hitSlop={8}
+                  >
+                    <Ionicons name="arrow-undo-outline" size={18} color={theme.colors.primary} />
+                  </Pressable>
+                  <Pressable
+                    onPress={trashInfo.onDeleteForever}
+                    disabled={trashInfo.actionPending}
+                    hitSlop={8}
+                  >
+                    <Ionicons name="trash-outline" size={18} color={theme.colors.error} />
+                  </Pressable>
                 </View>
               </View>
             )}
@@ -281,5 +317,20 @@ const createStyles = (theme: Theme) =>
       fontSize: 11,
       color: theme.colors.textMuted,
       fontWeight: '500',
+    },
+    trashFooter: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginTop: theme.spacing.sm,
+    },
+    trashDaysLabel: {
+      fontSize: theme.typography.sizes.xs,
+      color: theme.colors.textMuted,
+    },
+    trashFooterButtons: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: theme.spacing.md,
     },
   });

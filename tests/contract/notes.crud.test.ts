@@ -37,11 +37,17 @@ const mockQueryFunction = jest.fn((config: HandlerConfig) => ({
   _handler: config.handler,
 }));
 
+const mockInternalMutation = jest.fn((config: HandlerConfig) => ({
+  ...config,
+  _handler: config.handler,
+}));
+
 jest.mock(
   '../../convex/_generated/server',
   () => ({
     mutation: mockMutation,
     query: mockQueryFunction,
+    internalMutation: mockInternalMutation,
   }),
   { virtual: true },
 );
