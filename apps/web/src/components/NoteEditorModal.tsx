@@ -61,6 +61,7 @@ export function NoteEditorModal({
   isNew,
 }: NoteEditorModalProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
+  const mouseDownInsideDialog = useRef(false);
   const titleRef = useRef<HTMLInputElement>(null);
   const [reminderOpen, setReminderOpen] = useState(false);
 
@@ -119,9 +120,13 @@ export function NoteEditorModal({
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [handleKeyDown]);
 
-  // Close on backdrop click
+  // Close on backdrop click — but not when the drag started inside the dialog
+  const handleOverlayMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    mouseDownInsideDialog.current = dialogRef.current?.contains(e.target as Node) ?? false;
+  };
+
   const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (e.target === e.currentTarget) {
+    if (e.target === e.currentTarget && !mouseDownInsideDialog.current) {
       onClose();
     }
   };
@@ -142,6 +147,7 @@ export function NoteEditorModal({
       role="dialog"
       aria-modal="true"
       aria-label={isNew ? 'New note' : 'Edit note'}
+      onMouseDown={handleOverlayMouseDown}
       onClick={handleBackdropClick}
     >
       <div
