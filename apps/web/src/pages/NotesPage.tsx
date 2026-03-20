@@ -25,16 +25,10 @@ import { buildReminderSyncFields } from '../services/reminderUtils';
 import { NotesHeader } from '../components/NotesHeader';
 import { NotesList } from '../components/NotesList';
 import { NoteEditorModal } from '../components/NoteEditorModal';
-import type { ThemeMode } from '../services/theme';
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
-interface NotesPageProps {
-  themeMode: ThemeMode;
-  onThemeModeChange: (mode: ThemeMode) => void;
-}
-
-export default function NotesPage({ themeMode, onThemeModeChange }: NotesPageProps): JSX.Element {
+export default function NotesPage(): JSX.Element {
   const allNotes = useNotes();
   const sync = useSyncNotes();
   const permanentlyDeleteNoteMutation = usePermanentlyDeleteNote();
@@ -387,8 +381,6 @@ export default function NotesPage({ themeMode, onThemeModeChange }: NotesPagePro
         onToggleView={setViewMode}
         onNewNote={handleNewNote}
         saveStatus={saveStatus}
-        themeMode={themeMode}
-        onThemeModeChange={onThemeModeChange}
         searchQuery={searchQuery}
         onSearchQueryChange={setSearchQuery}
         onClearSearch={() => setSearchQuery('')}

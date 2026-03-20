@@ -9,6 +9,15 @@
       rel="stylesheet"
     />
     <title>AI Note Keeper</title>
+    <script>
+      try {
+        var mode = localStorage.getItem('theme-mode') || 'auto';
+        var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var resolved = mode === 'dark' || (mode === 'auto' && prefersDark) ? 'dark' : 'light';
+        document.documentElement.dataset.theme = resolved;
+        document.documentElement.style.colorScheme = resolved;
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

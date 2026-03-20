@@ -249,3 +249,93 @@ export const sendPush = internalAction({
     console.log(`[Push] Complete. Results:`, results);
   },
 });
+
+/**
+ * Send a push notification for a subscription billing reminder.
+ * Accepts notification content directly instead of fetching from the notes table.
+ */
+export const sendSubscriptionPush = internalAction({
+  args: {
+    userId: v.string(),
+    subscriptionId: v.id('subscriptions'),
+    title: v.string(),
+    body: v.string(),
+  },
+  handler: async (ctx, { userId, subscriptionId, title, body }) => {
+    console.log(`[Push] Subscription push for ${subscriptionId}, user ${userId}`);
+
+    const tokens = await ctx.runQuery(api.functions.deviceTokens.getTokensByUser, { userId });
+    if (!tokens || tokens.length === 0) {
+      console.warn(`[Push] No tokens found for user ${userId}`);
+      return;
+    }
+
+    const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT;
+    const projectId = process.env.FIREBASE_PROJECT_ID;
+    if (!serviceAccountJson || !projectId) {
+      console.error('[Push] FIREBASE_SERVICE_ACCOUNT or FIREBASE_PROJECT_ID not set');
+      return;
+    }
+
+    const serviceAccount = JSON.parse(serviceAccountJson) as FirebaseServiceAccount;
+    let accessToken: string;
+    try {
+      accessToken = await getAccessToken(serviceAccount);
+    } catch (error) {
+      console.error('[Push] Failed to get access token:', error);
+      return;
+    }
+
+    const results = await Promise.all(
+      tokens.map(async (token) => {
+        try {
+          const res = await fetch(
+            `https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${accessToken}`,
+              },
+              body: JSON.stringify({
+                message: {
+                  token: token.fcmToken,
+                  data: {
+                    type: 'subscription_reminder',
+                    id: subscriptionId,
+                    title,
+                    body,
+                  },
+                  android: { priority: 'high' },
+                },
+              }),
+            },
+          );
+
+          const responseBody = await res.text();
+          if (!res.ok) {
+            console.error(`[Push] FCM failed for ${token.deviceId}:`, {
+              status: res.status,
+              body: responseBody,
+            });
+            if (isUnregisteredResponse(res.status, responseBody)) {
+              await ctx.runMutation(api.functions.deviceTokens.deleteDevicePushToken, {
+                deviceId: token.deviceId,
+              });
+              console.warn(`[Push] Removed unregistered token for ${token.deviceId}`);
+            }
+            return { deviceId: token.deviceId, success: false };
+          }
+
+          console.log(`[Push] FCM success for ${token.deviceId}:`, responseBody);
+          return { deviceId: token.deviceId, success: true };
+        } catch (error) {
+          console.error(`[Push] Error for ${token.deviceId}:`, error);
+          return { deviceId: token.deviceId, success: false, error: String(error) };
+        }
+      }),
+    );
+
+    console.log(`[Push] Subscription push complete. Results:`, results);
+  },
+});

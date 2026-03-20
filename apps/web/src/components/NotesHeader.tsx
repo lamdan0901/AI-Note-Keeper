@@ -1,15 +1,12 @@
 import React from 'react';
-import { LayoutGrid, List, Monitor, Moon, Plus, Sun, Trash2, X } from 'lucide-react';
+import { LayoutGrid, List, Plus, Trash2, X } from 'lucide-react';
 import type { NotesViewMode } from '../services/notesTypes';
-import type { ThemeMode } from '../services/theme';
 
 interface NotesHeaderProps {
   viewMode: NotesViewMode;
   onToggleView: (mode: NotesViewMode) => void;
   onNewNote: () => void;
   saveStatus: 'idle' | 'saving' | 'saved' | 'error';
-  themeMode: ThemeMode;
-  onThemeModeChange: (mode: ThemeMode) => void;
   searchQuery: string;
   onSearchQueryChange: (value: string) => void;
   onClearSearch: () => void;
@@ -25,19 +22,11 @@ const SAVE_STATUS_LABELS: Record<NotesHeaderProps['saveStatus'], string | null> 
   error: 'Error saving',
 };
 
-const THEME_OPTIONS: Array<{ mode: ThemeMode; icon: React.ReactNode; label: string }> = [
-  { mode: 'light', icon: <Sun size={16} />, label: 'Light' },
-  { mode: 'dark', icon: <Moon size={16} />, label: 'Dark' },
-  { mode: 'auto', icon: <Monitor size={16} />, label: 'Auto' },
-];
-
 export function NotesHeader({
   viewMode,
   onToggleView,
   onNewNote,
   saveStatus,
-  themeMode,
-  onThemeModeChange,
   searchQuery,
   onSearchQueryChange,
   onClearSearch,
@@ -50,8 +39,6 @@ export function NotesHeader({
 
   return (
     <header className="notes-header">
-      <span className="notes-header__title">Notes</span>
-
       <div className="notes-header__search">
         <input
           className="notes-header__search-input"
@@ -80,26 +67,6 @@ export function NotesHeader({
             {statusLabel}
           </span>
         )}
-        <div className="notes-header__theme" role="radiogroup" aria-label="Theme mode">
-          {THEME_OPTIONS.map((option) => (
-            <button
-              key={option.mode}
-              className={`notes-header__theme-btn${
-                themeMode === option.mode ? ' notes-header__theme-btn--active' : ''
-              }`}
-              onClick={() => onThemeModeChange(option.mode)}
-              role="radio"
-              aria-checked={themeMode === option.mode}
-              title={option.label}
-            >
-              <span className="notes-header__theme-btn-icon" aria-hidden="true">
-                {option.icon}
-              </span>
-              <span className="notes-header__theme-btn-text">{option.label}</span>
-            </button>
-          ))}
-        </div>
-
         <div className="notes-header__view-toggle" role="group" aria-label="View mode">
           <button
             className={`notes-header__view-btn${viewMode === 'grid' ? ' notes-header__view-btn--active' : ''}`}

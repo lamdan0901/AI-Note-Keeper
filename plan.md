@@ -1,182 +1,188 @@
-# Repeat Display Consistency + Canonical Recurrence Migration (Web + Mobile + Convex)
+# Plan: Subscription Tracking & Reminder Feature (Web Only)
 
 ## Summary
 
-Implement a full dual-write migration so repeat metadata is consistent across web, mobile, and backend sync, while fixing both reported issues:
+Add a dedicated Subscriptions screen to the web app that lets users track third-party service subscriptions (Netflix, Spotify, custom, etc.) with billing reminders. New Convex `subscriptions` table; nav tab switcher in App.tsx; reminders fire both as in-app banners AND through the existing Convex push pipeline.
 
-1. Web repeat label misrendering from legacy/mobile-shaped repeat payloads.
-2. Mobile repeat label disappearing after first fire/sync because canonical `repeat` is dropped and UI falls back to `none`.
+---
 
-This plan keeps backward compatibility (`repeat` + `repeatRule/repeatConfig`) and includes lazy normalization plus an explicit bulk backfill path.
+## Decisions
 
-## Skills Applied
+- Web only; mobile deferred
+- Storage: new Convex `subscriptions` table (not reusing notes table)
+- Reminders: in-app banner + Convex cron → push notifications via existing push.ts pipeline
+- Reminder timing: [1, 3, 7] days before, configurable per subscription
+- Navigation: simple top-level tab switcher (no React Router added)
+- Preset catalog (static list in `servicePresets.ts`) + free-form custom entry
+- Fields: name, price, billingCycle, nextBillingDate, category, notes, trialEndDate, status
+- Total summary: monthly-equivalent cost for active subscriptions shown in header
+- Auto-advance nextBillingDate via Convex cron after billing date passes
+- userId hardcoded to 'local-user' (same as notes)
 
-Use `vercel-react-best-practices` and `vercel-react-native-skills` to keep state derivation, render paths, and cross-platform formatting deterministic.
+---
 
-## Implementation Plan
+## Phase 1 — Convex Backend
 
-### 1. Introduce Shared Repeat Codec + Label Formatter
+### Step 1: Schema — `convex/schema.ts`
 
-Files:
+Add `subscriptions` table:
 
-- [packages/shared/utils/repeatCodec.ts](/c:/prj/ai-note-keeper/packages/shared/utils/repeatCodec.ts)
-- [packages/shared/utils/repeatLabel.ts](/c:/prj/ai-note-keeper/packages/shared/utils/repeatLabel.ts)
-- [packages/shared/types/note.ts](/c:/prj/ai-note-keeper/packages/shared/types/note.ts)
-- [packages/shared/types/reminder.ts](/c:/prj/ai-note-keeper/packages/shared/types/reminder.ts)
+```
+id, userId, serviceName, category, price, currency, billingCycle,
+billingCycleCustomDays?, nextBillingDate, notes?, trialEndDate?,
+status ('active'|'cancelled'|'paused'), reminderDaysBefore (number[]),
+nextReminderAt?, lastNotifiedBillingDate?, active (soft delete), createdAt, updatedAt
+```
 
-Changes:
+### Step 2: Convex functions — `convex/functions/subscriptions.ts`
 
-- Add `coerceRepeatRule(input)` with precedence: canonical `repeat` first, then legacy fields.
-- Support legacy mobile-shaped config (`repeatRule: 'custom'` + `repeatConfig.kind`) exactly like backend trigger parsing.
-- Normalize intervals (`>=1`), weekday arrays (0-6, unique, sorted), and safe fallbacks.
-- Add `toLegacyRepeatFields(repeat)` for dual-write output.
-- Add `buildCanonicalRecurrenceFields({ reminderAt, repeat, existing })` returning `repeat`, `startAt`, `baseAtLocal`, `nextTriggerAt`.
-- Add shared display formatter for readable grammar:
-  - `Daily`, `Weekly (Mon, Wed)`, `Monthly`, `Every N days/weeks/months/minutes`
-  - Proper singular/plural handling.
-- Expand legacy union to include `'monthly'` where applicable for consistency.
+Queries:
 
-### 2. Web: Use Shared Codec for Read/Write + Label Rendering
+- `listSubscriptions(userId)` — all active subscriptions for user
+- `getSubscription(id)` — single record
 
-Files:
+Mutations:
 
-- [apps/web/src/services/reminderUtils.ts](/c:/prj/ai-note-keeper/apps/web/src/services/reminderUtils.ts)
-- [apps/web/src/services/notes.ts](/c:/prj/ai-note-keeper/apps/web/src/services/notes.ts)
-- [apps/web/src/pages/NotesPage.tsx](/c:/prj/ai-note-keeper/apps/web/src/pages/NotesPage.tsx)
+- `createSubscription(args)` — create + compute nextReminderAt
+- `updateSubscription(id, patch)` — update + recompute nextReminderAt
+- `deleteSubscription(id)` — soft delete (active: false)
 
-Changes:
+Internal helpers:
 
-- Replace local repeat coercion/label logic with shared codec + formatter.
-- Update `buildReminderSyncFields` to dual-write canonical + legacy fields.
-- Preserve existing anchor (`startAt/baseAtLocal`) when editing unchanged series; reset anchor when recurrence definition changes.
-- Ensure optimistic note updates include canonical recurrence fields so UI remains stable immediately after save.
-- Fix web display bug by correctly interpreting custom+kind legacy payloads.
+- `computeNextReminderAt(nextBillingDate, reminderDaysBefore[])` — returns earliest future reminder timestamp
+- `advanceBillingDate(nextBillingDate, billingCycle, customDays?)` — adds 1 period
 
-### 3. Mobile: Stop Losing Repeat on Sync and Editor Open
+### Step 3: Cron — `convex/crons.ts`
 
-Files:
+Add `check-subscription-reminders` cron (every hour, same as existing reminder cron):
 
-- [apps/mobile/src/sync/fetchNotes.ts](/c:/prj/ai-note-keeper/apps/mobile/src/sync/fetchNotes.ts)
-- [apps/mobile/src/sync/syncQueueProcessor.ts](/c:/prj/ai-note-keeper/apps/mobile/src/sync/syncQueueProcessor.ts)
-- [apps/mobile/src/hooks/useNoteEditor.ts](/c:/prj/ai-note-keeper/apps/mobile/src/hooks/useNoteEditor.ts)
-- [apps/mobile/src/hooks/useNoteActions.ts](/c:/prj/ai-note-keeper/apps/mobile/src/hooks/useNoteActions.ts)
-- [apps/mobile/src/components/NoteCard.tsx](/c:/prj/ai-note-keeper/apps/mobile/src/components/NoteCard.tsx)
-- [apps/mobile/src/components/NoteEditorModal.tsx](/c:/prj/ai-note-keeper/apps/mobile/src/components/NoteEditorModal.tsx)
-- [apps/mobile/src/utils/formatReminder.ts](/c:/prj/ai-note-keeper/apps/mobile/src/utils/formatReminder.ts)
+- Query subscriptions where `nextReminderAt <= now`
+- For each: call `push.ts` pipeline to send notification
+- Recompute `nextReminderAt` (next reminder in the array, or next billing cycle's reminder)
+- Auto-advance `nextBillingDate` when `nextBillingDate <= now` (after billing date passes)
 
-Changes:
+---
 
-- Map canonical fields from server in `fetchNotes` (`repeat`, `startAt`, `baseAtLocal`, `nextTriggerAt`, `lastFiredAt`, `lastAcknowledgedAt`).
-- Send canonical fields through outbox sync payload in `syncQueueProcessor`.
-- In editor open flow, resolve repeat via shared codec (not `note.repeat` only).
-- In note card and editor chip, render repeat via shared formatter and effective repeat resolution.
-- In save flow, dual-write canonical + legacy (derive correct `repeatRule` by kind; stop forcing `'custom'` for all repeats).
-- Keep “mark done” behavior clearing both legacy and canonical recurrence fields as already intended.
+## Phase 2 — Shared Types
 
-### 4. Convex `syncNotes`: Extend API and Preserve Canonical Fields
+### Step 4: `packages/shared/types/subscription.ts`
 
-Files:
+Define `Subscription`, `SubscriptionCreate`, `SubscriptionUpdate` types.
+Define `BillingCycle`, `SubscriptionCategory`, `SubscriptionStatus` enums.
 
-- [convex/functions/notes.ts](/c:/prj/ai-note-keeper/convex/functions/notes.ts)
+---
 
-Changes:
+## Phase 3 — Web Service Layer
 
-- Extend `changes[]` validator to accept canonical recurrence fields:
-  - `repeat`, `startAt`, `baseAtLocal`, `nextTriggerAt`, `lastFiredAt`, `lastAcknowledgedAt`.
-- Patch/insert these fields server-side (dual-write remains).
-- Use “presence-aware” patch assembly so omitted fields are preserved, while explicit `null`/`undefined` clears are intentional.
-- Keep existing last-write-wins rule.
+### Step 5: `apps/web/src/services/subscriptions.ts`
 
-### 5. Backfill Strategy (Lazy + On-Demand)
+Hooks mirroring `services/notes.ts` pattern:
 
-Files:
+- `useSubscriptions()` — `useQuery(api.functions.subscriptions.listSubscriptions, { userId })`
+- `useCreateSubscription()`, `useUpdateSubscription()`, `useDeleteSubscription()` — useMutation wrappers
+- `mapDocToWebSubscription()` converter
 
-- [convex/functions/notesMigration.ts](/c:/prj/ai-note-keeper/convex/functions/notesMigration.ts) (new)
+### Step 6: `apps/web/src/services/subscriptionUtils.ts`
 
-Changes:
+Pure utilities:
 
-- Add mutation(s) to backfill notes missing canonical recurrence fields.
-- Derivation rules:
-  - `repeat` from legacy via shared-equivalent parser.
-  - `startAt` from existing `startAt ?? triggerAt ?? nextTriggerAt`.
-  - `baseAtLocal` from existing or computed local ISO at `startAt`.
-  - `nextTriggerAt` from `snoozedUntil ?? nextTriggerAt ?? triggerAt` when recurring.
-- Add pagination support for safe batch runs.
-- Keep legacy fields untouched.
+- `computeMonthlyCost(price, billingCycle)` — normalizes to monthly
+- `computeTotalMonthlyCost(subscriptions[])` — sums active only
+- `getDaysUntilBilling(nextBillingDate)` — days remaining
+- `isReminderDue(subscription)` — checks if billing is within reminderDaysBefore window
+- `formatBillingCycle(billingCycle)` — display string
 
-Rollout:
+### Step 7: `apps/web/src/constants/servicePresets.ts`
 
-- Backend deploy first (`syncNotes` extended + migration mutation).
-- Run on-demand backfill in batches.
-- Deploy web and mobile clients after backend is live.
-- Continue lazy normalization on new writes.
+Static array of ~20 preset services:
+`{ name, category, defaultColor }` — e.g. Netflix/streaming, Spotify/music, GitHub/tools, etc.
 
-## Public APIs / Interfaces / Types Changed
+---
 
-- `convex/functions/notes.syncNotes` input `changes[]` now accepts canonical recurrence fields.
-- Shared type unions include monthly in legacy repeat rule where needed for consistency.
-- New shared utilities exposed:
-  - `coerceRepeatRule`
-  - `toLegacyRepeatFields`
-  - `buildCanonicalRecurrenceFields`
-  - `formatRepeatLabel` / shared reminder formatting helper
+## Phase 4 — Web UI
 
-## Test Cases and Scenarios
+### Step 8: `apps/web/src/pages/SubscriptionsPage.tsx`
 
-### Shared Unit Tests
+Main page component:
 
-Files:
+- Fetches subscriptions via `useSubscriptions()`
+- Local state: searchQuery, editorOpen, editingSubscription, viewMode (grid/list)
+- Renders: `<SubscriptionReminderBanner>`, `<SubscriptionsHeader>`, `<SubscriptionsList>`
+- Passes CRUD handlers down
 
-- [packages/shared/utils/repeatCodec.test.ts](/c:/prj/ai-note-keeper/packages/shared/utils/repeatCodec.test.ts) (new)
-- [packages/shared/utils/repeatLabel.test.ts](/c:/prj/ai-note-keeper/packages/shared/utils/repeatLabel.test.ts) (new)
+### Step 9: `apps/web/src/components/subscriptions/SubscriptionCard.tsx`
 
-Scenarios:
+Card showing:
 
-- Parse canonical repeat directly.
-- Parse legacy `daily/weekly/monthly/custom`.
-- Parse legacy custom+kind payload from older mobile clients.
-- Interval and weekday normalization.
-- Grammar correctness for singular/plural labels.
+- Service name + category badge + status indicator
+- Price + billing cycle
+- "Next billing: X days" countdown (color: green/yellow/red)
+- Trial end badge (if applicable)
+- Edit / Delete action buttons
+- CSS styling reusing existing card patterns
 
-### Backend Contract Tests
+### Step 10: `apps/web/src/components/subscriptions/SubscriptionEditorModal.tsx`
 
-Files:
+Create/edit modal:
 
-- [tests/contract/notes.crud.test.ts](/c:/prj/ai-note-keeper/tests/contract/notes.crud.test.ts)
+- Service name input with preset autocomplete dropdown (servicePresets.ts)
+- Category select
+- Price + billing cycle select
+- Next billing date input (date picker)
+- Status select (active/cancelled/paused)
+- Trial end date input (optional)
+- Reminder settings: checkboxes for [1, 3, 7] days
+- Notes textarea
+- Save / Cancel buttons
+- Reuses modal overlay pattern from NoteEditorModal
 
-Scenarios:
+### Step 11: `apps/web/src/components/subscriptions/SubscriptionReminderBanner.tsx`
 
-- `syncNotes` create/update persists canonical recurrence fields.
-- Omitted fields are preserved (no accidental clears).
-- Explicit clear behavior works for done/non-recurring transitions.
+Top-of-page alert banner:
 
-### Mobile/Web Regression Tests
+- Computes which subscriptions have upcoming billing (within reminderDaysBefore window)
+- Shows dismissible banner per subscription or grouped summary
+- Uses `isReminderDue()` from subscriptionUtils
 
-Files:
+### Step 12: Update `apps/web/src/App.tsx`
 
-- [apps/mobile/src/hooks/useNoteEditor.test.ts](/c:/prj/ai-note-keeper/apps/mobile/src/hooks/useNoteEditor.test.ts) (new)
-- [apps/mobile/src/utils/formatReminder.test.ts](/c:/prj/ai-note-keeper/apps/mobile/src/utils/formatReminder.test.ts) (new)
-- [apps/web/src/services/reminderUtils.test.ts](/c:/prj/ai-note-keeper/apps/web/src/services/reminderUtils.test.ts) (new)
+- Add `activeTab: 'notes' | 'subscriptions'` state
+- Render `<NavTabs>` at top (two buttons: Notes | Subscriptions)
+- Conditionally render `<NotesPage>` or `<SubscriptionsPage>`
 
-Scenarios:
+---
 
-- Mobile: after sync payload without canonical `repeat` but with legacy repeat fields, card/editor still shows correct repeat.
-- Mobile: after first trigger and sync update, repeat display remains.
-- Web: displays correct repeat for legacy custom+kind payload.
-- Cross-client: weekly/monthly/custom rules display identically.
+## Relevant Files
 
-## Acceptance Criteria
+- `apps/web/src/App.tsx` — add tab state + NavTabs
+- `apps/web/src/pages/NotesPage.tsx` — reference for page structure pattern
+- `apps/web/src/services/notes.ts` — reference for Convex hook pattern
+- `apps/web/src/services/reminderUtils.ts` — reference for utility pattern
+- `apps/web/src/components/NoteEditorModal.tsx` — reference for modal pattern
+- `apps/web/src/components/NoteCard.tsx` — reference for card pattern
+- `convex/schema.ts` — add subscriptions table
+- `convex/crons.ts` — add subscription reminder cron
+- `convex/functions/reminders.ts` — reference for Convex function patterns
+- `convex/_generated/` — regenerated after schema changes (automatic)
+- `packages/shared/types/note.ts` — reference for type structure
 
-- Web displays correct repeat labels for all existing recurrence data shapes.
-- Mobile repeat label does not disappear after first notification fire/sync.
-- Editing a recurring note after sync does not silently downgrade repeat to none/default.
-- Legacy clients remain compatible through dual-read/dual-write behavior.
-- Existing data can be backfilled without downtime.
+---
 
-## Assumptions and Defaults
+## Verification
 
-- Use dual-write/read compatibility as the default migration mode.
-- Use lazy normalization on writes plus explicit on-demand bulk backfill mutation.
-- Keep legacy fields for compatibility; no hard removal in this phase.
-- Use local timezone-derived `baseAtLocal` when reconstructing anchors.
-- Ignore unrelated working tree deletions (`design_system.md`, `plan2.md`) per your instruction.
+1. Run `npx convex dev` — verify schema deploys without errors
+2. Create a subscription via the editor modal → confirm it appears in the list
+3. Set nextBillingDate = today+2 days → confirm ReminderBanner shows it
+4. Set nextBillingDate = past → confirm cron advances it on next tick (test via Convex dashboard)
+5. Run `npm test` in root → existing tests still pass
+6. Run `npm run lint` in `apps/web/` → no new TS errors
+
+---
+
+## Excluded Scope
+
+- Mobile (deferred)
+- Currency conversion (price stored as-is, user selects currency label)
+- Import/export (CSV, etc.)
+- Shared subscriptions between users
+- Webhook integrations to detect actual billing events

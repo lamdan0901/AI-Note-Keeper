@@ -57,4 +57,23 @@ export default defineSchema({
     key: v.string(), // e.g. 'check-reminders'
     lastCheckedAt: v.number(), // epoch ms watermark
   }),
+  subscriptions: defineTable({
+    userId: v.string(),
+    serviceName: v.string(),
+    category: v.string(), // 'streaming'|'music'|'tools'|'productivity'|'gaming'|'news'|'fitness'|'cloud'|'other'
+    price: v.number(),
+    currency: v.string(), // e.g. 'USD', 'EUR'
+    billingCycle: v.string(), // 'weekly'|'monthly'|'yearly'|'custom'
+    billingCycleCustomDays: v.optional(v.number()),
+    nextBillingDate: v.number(), // epoch ms
+    notes: v.optional(v.string()),
+    trialEndDate: v.optional(v.number()), // epoch ms
+    status: v.string(), // 'active'|'cancelled'|'paused'
+    reminderDaysBefore: v.array(v.number()),
+    nextReminderAt: v.optional(v.number()), // epoch ms of earliest upcoming reminder
+    lastNotifiedBillingDate: v.optional(v.number()), // billing date epoch ms we last notified for
+    active: v.boolean(), // soft delete flag
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }),
 });
