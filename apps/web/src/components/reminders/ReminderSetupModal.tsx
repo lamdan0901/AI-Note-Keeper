@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import type { RepeatRule } from '../../services/notesTypes';
 import { getInitialReminderDate } from '../../services/reminderUtils';
@@ -135,6 +135,26 @@ export function ReminderSetupModal({
     month: 'long',
     year: 'numeric',
   }).format(viewMonth);
+
+  const handleSaveReminder = useCallback(() => {
+    const comparisonNow = providedNow ?? new Date();
+    if (!providedNow) {
+      setLiveNow(comparisonNow);
+    }
+    if (selectedDate.getTime() <= comparisonNow.getTime()) return;
+    onSave({ reminder: selectedDate, repeat });
+  }, [onSave, providedNow, repeat, selectedDate]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Enter' && e.ctrlKey && !error) {
+        e.preventDefault();
+        handleSaveReminder();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [error, handleSaveReminder]);
 
   const handleSelectDay = (day: Date) => {
     if (day.getTime() < todayStart.getTime()) {
@@ -277,14 +297,7 @@ export function ReminderSetupModal({
             className="modal-dialog__save-btn"
             type="button"
             disabled={Boolean(error)}
-            onClick={() => {
-              const comparisonNow = providedNow ?? new Date();
-              if (!providedNow) {
-                setLiveNow(comparisonNow);
-              }
-              if (selectedDate.getTime() <= comparisonNow.getTime()) return;
-              onSave({ reminder: selectedDate, repeat });
-            }}
+            onClick={handleSaveReminder}
           >
             Save reminder
           </button>

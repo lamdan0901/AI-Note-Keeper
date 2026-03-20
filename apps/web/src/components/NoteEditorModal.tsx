@@ -94,7 +94,7 @@ export function NoteEditorModal({
     titleRef.current?.focus();
   }, []);
 
-  // Close on Escape
+  // Close on Escape, save on Ctrl+Enter
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -104,9 +104,14 @@ export function NoteEditorModal({
           return;
         }
         onClose();
+      } else if (e.key === 'Enter' && e.ctrlKey) {
+        if (!reminderOpen) {
+          e.preventDefault();
+          onSave();
+        }
       }
     },
-    [onClose, reminderOpen],
+    [onClose, onSave, reminderOpen],
   );
 
   useEffect(() => {
