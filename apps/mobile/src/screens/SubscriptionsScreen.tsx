@@ -24,11 +24,18 @@ import { SettingsDrawer } from '../components/SettingsDrawer';
 import { SubscriptionEditorModal } from '../components/subscriptions/SubscriptionEditorModal';
 import {
   createSubscription,
+  deleteSubscription,
   updateSubscription,
   useCreateSubscription,
+  useDeleteSubscription,
   useSubscriptions,
   useUpdateSubscription,
 } from '../subscriptions/service';
+import {
+  SUBSCRIPTION_SELECTION_ACTION_BAR_HEIGHT,
+  SubscriptionSelectionActionBar,
+} from '../components/subscriptions/SubscriptionSelectionActionBar';
+import { useSubscriptionSelection } from '../hooks/useSubscriptionSelection';
 import {
   computeTotalMonthlyCost,
   formatBillingCycle,
@@ -79,6 +86,7 @@ const SubscriptionsScreenContent: React.FC<SubscriptionsScreenProps> = ({
   const subscriptions = useSubscriptions();
   const createMutate = useCreateSubscription();
   const updateMutate = useUpdateSubscription();
+  const deleteMutate = useDeleteSubscription();
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
@@ -170,6 +178,13 @@ const SubscriptionsScreenContent: React.FC<SubscriptionsScreenProps> = ({
   );
 
   const list = useMemo(() => subscriptions ?? [], [subscriptions]);
+  const {
+    selectedSubscriptionIds,
+    selectionMode,
+    selectionHeaderAnim,
+    clearSelection,
+    handleSubscriptionLongPress,
+  } = useSubscriptionSelection(list);
   const existingCategories = useMemo(
     () =>
       Array.from(
@@ -187,6 +202,35 @@ const SubscriptionsScreenContent: React.FC<SubscriptionsScreenProps> = ({
 
   const totalMonthly = computeTotalMonthlyCost(list);
   const primaryCurrency = list[0]?.currency ?? 'USD';
+
+  const handleSelectionAwareDelete = useCallback(
+    async (ids: string[]) => {
+      if (ids.length === 0) return;
+      if (selectionMode && ids.some((id) => selectedSubscriptionIds.has(id))) clearSelection();
+
+      try {
+        await Promise.all(ids.map((id) => deleteSubscription(deleteMutate, id)));
+      } catch {
+        Alert.alert('Delete failed', 'Unable to delete selected subscriptions. Please try again.');
+      }
+    },
+    [clearSelection, deleteMutate, selectedSubscriptionIds, selectionMode],
+  );
+
+  const handleBulkDeleteSelected = useCallback(() => {
+    void handleSelectionAwareDelete(Array.from(selectedSubscriptionIds));
+  }, [handleSelectionAwareDelete, selectedSubscriptionIds]);
+
+  const handleCardPress = useCallback(
+    (subscription: Subscription) => {
+      if (selectionMode) {
+        handleSubscriptionLongPress(subscription.id);
+        return;
+      }
+      handleOpenEdit(subscription);
+    },
+    [handleOpenEdit, handleSubscriptionLongPress, selectionMode],
+  );
 
   return (
     <SafeAreaView style={styles.container}>
@@ -274,6 +318,13 @@ const SubscriptionsScreenContent: React.FC<SubscriptionsScreenProps> = ({
         showDueSubscriptionsIndicator={false}
       />
 
+      <SubscriptionSelectionActionBar
+        selectionHeaderAnim={selectionHeaderAnim}
+        selectedCount={selectedSubscriptionIds.size}
+        onCancel={clearSelection}
+        onDelete={handleBulkDeleteSelected}
+      />
+
       {list.length > 0 && (
         <View style={styles.totalRow}>
           <Text style={styles.totalText}>
@@ -296,105 +347,136 @@ const SubscriptionsScreenContent: React.FC<SubscriptionsScreenProps> = ({
           </Text>
         </View>
       ) : (
-        <FlatList
-          key={viewMode}
-          data={filtered}
-          keyExtractor={(item) => item.id}
-          numColumns={viewMode === 'grid' ? 2 : 1}
-          contentContainerStyle={styles.listContent}
-          columnWrapperStyle={viewMode === 'grid' ? styles.gridColumns : undefined}
-          renderItem={({ item }) => {
-            const daysUntil = getDaysUntilBilling(item.nextBillingDate);
-            const nextBillingLabel =
-              daysUntil < 0 ? 'Overdue' : daysUntil === 0 ? 'Today' : `${daysUntil}d left`;
-            const countdownTone =
-              daysUntil < 0
-                ? 'overdue'
-                : daysUntil <= 3
-                  ? 'urgent'
-                  : daysUntil <= 7
-                    ? 'warning'
-                    : 'ok';
-            const isDarkMode = resolvedMode === 'dark';
+        <Pressable
+          style={styles.contentPressable}
+          onPress={clearSelection}
+          disabled={!selectionMode}
+        >
+          <FlatList
+            key={viewMode}
+            data={filtered}
+            keyExtractor={(item) => item.id}
+            numColumns={viewMode === 'grid' ? 2 : 1}
+            contentContainerStyle={styles.listContent}
+            columnWrapperStyle={viewMode === 'grid' ? styles.gridColumns : undefined}
+            renderItem={({ item }) => {
+              const daysUntil = getDaysUntilBilling(item.nextBillingDate);
+              const nextBillingLabel =
+                daysUntil < 0 ? 'Overdue' : daysUntil === 0 ? 'Today' : `${daysUntil}d left`;
+              const countdownTone =
+                daysUntil < 0
+                  ? 'overdue'
+                  : daysUntil <= 3
+                    ? 'urgent'
+                    : daysUntil <= 7
+                      ? 'warning'
+                      : 'ok';
+              const isDarkMode = resolvedMode === 'dark';
+              const isSelected = selectedSubscriptionIds.has(item.id);
 
-            return (
-              <Pressable
-                style={[styles.card, viewMode === 'grid' && styles.cardGrid]}
-                onPress={() => handleOpenEdit(item)}
-              >
-                <View style={styles.cardTop}>
-                  <Text style={styles.cardTitle} numberOfLines={1}>
-                    {item.serviceName}
-                  </Text>
-                  <View
-                    style={[
-                      styles.statusDot,
-                      item.status === 'active'
-                        ? styles.statusActive
-                        : item.status === 'paused'
-                          ? styles.statusPaused
-                          : styles.statusCancelled,
-                    ]}
-                  />
-                </View>
-                <Text style={[styles.cardCategory, styles.cardCountdownChip]} numberOfLines={1}>
-                  {formatSubCategory(item.category)}
-                </Text>
-                <Text style={styles.cardPricingLine}>
-                  <Text style={styles.cardPrice}>{formatPrice(item.price, item.currency)}</Text>
-                  <Text style={styles.cardCycle}>
-                    {' '}
-                    / {formatBillingCycle(item.billingCycle, item.billingCycleCustomDays)}
-                  </Text>
-                </Text>
-                {item.status === 'active' && (
-                  <View
-                    style={[
-                      styles.cardCountdownChip,
-                      countdownTone === 'ok' &&
-                        (isDarkMode ? styles.cardCountdownOkDark : styles.cardCountdownOk),
-                      countdownTone === 'warning' &&
-                        (isDarkMode
-                          ? styles.cardCountdownWarningDark
-                          : styles.cardCountdownWarning),
-                      (countdownTone === 'urgent' || countdownTone === 'overdue') &&
-                        (isDarkMode ? styles.cardCountdownUrgentDark : styles.cardCountdownUrgent),
-                    ]}
-                  >
-                    <Text
+              return (
+                <Pressable
+                  style={[
+                    styles.card,
+                    viewMode === 'grid' && styles.cardGrid,
+                    isSelected && styles.cardSelected,
+                  ]}
+                  onPress={() => handleCardPress(item)}
+                  onLongPress={() => handleSubscriptionLongPress(item.id)}
+                  delayLongPress={250}
+                >
+                  <View style={styles.cardTop}>
+                    <Text style={styles.cardTitle} numberOfLines={1}>
+                      {item.serviceName}
+                    </Text>
+                    <View
                       style={[
-                        styles.cardCountdownText,
+                        styles.statusDot,
+                        item.status === 'active'
+                          ? styles.statusActive
+                          : item.status === 'paused'
+                            ? styles.statusPaused
+                            : styles.statusCancelled,
+                      ]}
+                    />
+                  </View>
+                  <Text style={[styles.cardCategory, styles.cardCountdownChip]} numberOfLines={1}>
+                    {formatSubCategory(item.category)}
+                  </Text>
+                  <Text style={styles.cardPricingLine}>
+                    <Text style={styles.cardPrice}>{formatPrice(item.price, item.currency)}</Text>
+                    <Text style={styles.cardCycle}>
+                      {' '}
+                      / {formatBillingCycle(item.billingCycle, item.billingCycleCustomDays)}
+                    </Text>
+                  </Text>
+                  {item.status === 'active' && (
+                    <View
+                      style={[
+                        styles.cardCountdownChip,
                         countdownTone === 'ok' &&
-                          (isDarkMode
-                            ? styles.cardCountdownTextOkDark
-                            : styles.cardCountdownTextOk),
+                          (isDarkMode ? styles.cardCountdownOkDark : styles.cardCountdownOk),
                         countdownTone === 'warning' &&
                           (isDarkMode
-                            ? styles.cardCountdownTextWarningDark
-                            : styles.cardCountdownTextWarning),
+                            ? styles.cardCountdownWarningDark
+                            : styles.cardCountdownWarning),
                         (countdownTone === 'urgent' || countdownTone === 'overdue') &&
                           (isDarkMode
-                            ? styles.cardCountdownTextUrgentDark
-                            : styles.cardCountdownTextUrgent),
+                            ? styles.cardCountdownUrgentDark
+                            : styles.cardCountdownUrgent),
                       ]}
                     >
-                      Next billing: {nextBillingLabel}
-                    </Text>
-                  </View>
-                )}
-              </Pressable>
-            );
-          }}
-        />
+                      <Text
+                        style={[
+                          styles.cardCountdownText,
+                          countdownTone === 'ok' &&
+                            (isDarkMode
+                              ? styles.cardCountdownTextOkDark
+                              : styles.cardCountdownTextOk),
+                          countdownTone === 'warning' &&
+                            (isDarkMode
+                              ? styles.cardCountdownTextWarningDark
+                              : styles.cardCountdownTextWarning),
+                          (countdownTone === 'urgent' || countdownTone === 'overdue') &&
+                            (isDarkMode
+                              ? styles.cardCountdownTextUrgentDark
+                              : styles.cardCountdownTextUrgent),
+                        ]}
+                      >
+                        Next billing: {nextBillingLabel}
+                      </Text>
+                    </View>
+                  )}
+                </Pressable>
+              );
+            }}
+          />
+        </Pressable>
       )}
 
-      <Pressable
-        style={styles.fab}
-        onPress={handleOpenNew}
-        accessibilityLabel="Create subscription"
+      <Animated.View
+        style={[
+          styles.fabContainer,
+          {
+            transform: [
+              {
+                translateY: selectionHeaderAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0, -SUBSCRIPTION_SELECTION_ACTION_BAR_HEIGHT + 16],
+                }),
+              },
+            ],
+          },
+        ]}
       >
-        <Ionicons name="add" size={32} color="white" />
-      </Pressable>
+        <Pressable
+          style={styles.fab}
+          onPress={handleOpenNew}
+          accessibilityLabel="Create subscription"
+        >
+          <Ionicons name="add" size={32} color="white" />
+        </Pressable>
+      </Animated.View>
 
       <SubscriptionEditorModal
         visible={editorVisible}
@@ -510,7 +592,7 @@ const createStyles = (theme: Theme) =>
     },
     listContent: {
       padding: theme.spacing.md,
-      paddingBottom: 96,
+      paddingBottom: 132,
       gap: theme.spacing.sm,
     },
     gridColumns: {
@@ -524,8 +606,20 @@ const createStyles = (theme: Theme) =>
       padding: theme.spacing.md,
       gap: 6,
     },
+    cardSelected: {
+      borderColor: theme.colors.primary,
+      borderWidth: 2,
+    },
     cardGrid: {
       flex: 1,
+    },
+    contentPressable: {
+      flex: 1,
+    },
+    fabContainer: {
+      position: 'absolute',
+      right: theme.spacing.xl,
+      bottom: theme.spacing.xl,
     },
     cardTop: {
       flexDirection: 'row',
@@ -544,7 +638,7 @@ const createStyles = (theme: Theme) =>
       fontSize: theme.typography.sizes.base,
     },
     cardCategory: {
-      color: theme.colors.background,
+      color: theme.colors.text,
       fontSize: theme.typography.sizes.xs,
       backgroundColor: theme.colors.secondary,
     },
@@ -619,9 +713,6 @@ const createStyles = (theme: Theme) =>
       backgroundColor: theme.colors.error,
     },
     fab: {
-      position: 'absolute',
-      right: theme.spacing.xl,
-      bottom: theme.spacing.xl,
       width: 56,
       height: 56,
       borderRadius: 28,

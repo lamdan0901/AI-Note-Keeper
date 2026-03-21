@@ -585,12 +585,6 @@ const TrashScreenContent: React.FC<TrashScreenProps> = ({
             </Pressable>
           )}
 
-          {(activeTab === 'notes' ? filteredNotes.length > 0 : subscriptionMeta.count > 0) && (
-            <Pressable onPress={handleEmptyTrash} style={styles.emptyButton}>
-              <Text style={styles.emptyTrashText}>Empty</Text>
-            </Pressable>
-          )}
-
           <Pressable
             style={styles.iconButton}
             onPress={() => onViewModeChange(viewMode === 'grid' ? 'list' : 'grid')}
@@ -624,22 +618,31 @@ const TrashScreenContent: React.FC<TrashScreenProps> = ({
       />
 
       <View style={styles.tabsRow}>
-        <Pressable
-          style={[styles.tabButton, activeTab === 'notes' && styles.tabButtonActive]}
-          onPress={() => setActiveTab('notes')}
-        >
-          <Text style={[styles.tabLabel, activeTab === 'notes' && styles.tabLabelActive]}>
-            Notes
-          </Text>
-        </Pressable>
-        {subscriptionsEnabled && (
+        <View style={styles.tabsSwitch}>
           <Pressable
-            style={[styles.tabButton, activeTab === 'subscriptions' && styles.tabButtonActive]}
-            onPress={() => setActiveTab('subscriptions')}
+            style={[styles.tabButton, activeTab === 'notes' && styles.tabButtonActive]}
+            onPress={() => setActiveTab('notes')}
           >
-            <Text style={[styles.tabLabel, activeTab === 'subscriptions' && styles.tabLabelActive]}>
-              Subscriptions
+            <Text style={[styles.tabLabel, activeTab === 'notes' && styles.tabLabelActive]}>
+              Notes
             </Text>
+          </Pressable>
+          {subscriptionsEnabled && (
+            <Pressable
+              style={[styles.tabButton, activeTab === 'subscriptions' && styles.tabButtonActive]}
+              onPress={() => setActiveTab('subscriptions')}
+            >
+              <Text
+                style={[styles.tabLabel, activeTab === 'subscriptions' && styles.tabLabelActive]}
+              >
+                Subscriptions
+              </Text>
+            </Pressable>
+          )}
+        </View>
+        {(activeTab === 'notes' ? filteredNotes.length > 0 : subscriptionMeta.count > 0) && (
+          <Pressable onPress={handleEmptyTrash} style={styles.emptyButton}>
+            <Text style={styles.emptyTrashText}>Empty Trash</Text>
           </Pressable>
         )}
       </View>
@@ -751,7 +754,12 @@ const createStyles = (theme: Theme) =>
       justifyContent: 'center',
     },
     emptyButton: {
-      paddingHorizontal: theme.spacing.xs,
+      paddingHorizontal: theme.spacing.md,
+      paddingVertical: theme.spacing.xs,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      backgroundColor: theme.colors.surface,
+      borderRadius: 999,
     },
     emptyTrashText: {
       fontSize: theme.typography.sizes.sm,
@@ -760,11 +768,17 @@ const createStyles = (theme: Theme) =>
     },
     tabsRow: {
       flexDirection: 'row',
-      gap: theme.spacing.sm,
+      alignItems: 'center',
+      justifyContent: 'space-between',
       paddingHorizontal: theme.spacing.md,
       paddingTop: theme.spacing.sm,
       paddingBottom: theme.spacing.xs,
       backgroundColor: theme.colors.background,
+    },
+    tabsSwitch: {
+      flexDirection: 'row',
+      gap: theme.spacing.sm,
+      flexShrink: 1,
     },
     tabButton: {
       paddingVertical: theme.spacing.xs,
