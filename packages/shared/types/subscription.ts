@@ -1,15 +1,6 @@
 export type BillingCycle = 'weekly' | 'monthly' | 'yearly' | 'custom';
 
-export type SubscriptionCategory =
-  | 'streaming'
-  | 'music'
-  | 'tools'
-  | 'productivity'
-  | 'gaming'
-  | 'news'
-  | 'fitness'
-  | 'cloud'
-  | 'other';
+export type SubscriptionCategory = string;
 
 export type SubscriptionStatus = 'active' | 'cancelled' | 'paused';
 

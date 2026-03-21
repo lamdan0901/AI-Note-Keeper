@@ -14,9 +14,21 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import type {
+  Subscription,
+  SubscriptionCreate,
+  SubscriptionUpdate,
+} from '../../../../packages/shared/types/subscription';
 import { type Theme, useTheme } from '../theme';
 import { SettingsDrawer } from '../components/SettingsDrawer';
-import { useSubscriptions } from '../subscriptions/service';
+import { SubscriptionEditorModal } from '../components/subscriptions/SubscriptionEditorModal';
+import {
+  createSubscription,
+  updateSubscription,
+  useCreateSubscription,
+  useSubscriptions,
+  useUpdateSubscription,
+} from '../subscriptions/service';
 import {
   computeTotalMonthlyCost,
   formatBillingCycle,
@@ -31,6 +43,33 @@ type SubscriptionsScreenProps = {
 
 type ViewMode = 'grid' | 'list';
 
+const CATEGORY_LABELS: Record<string, string> = {
+  streaming: 'Streaming',
+  music: 'Music',
+  tools: 'Tools',
+  productivity: 'Productivity',
+  gaming: 'Gaming',
+  news: 'News',
+  fitness: 'Fitness',
+  cloud: 'Cloud',
+  other: 'Other',
+};
+
+const formatSubCategory = (category: string): string => {
+  const trimmed = category.trim();
+  if (!trimmed) return 'Other';
+
+  const normalized = trimmed.toLowerCase();
+  const fromKnown = CATEGORY_LABELS[normalized];
+  if (fromKnown) return fromKnown;
+
+  return normalized
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+};
+
 const SubscriptionsScreenContent: React.FC<SubscriptionsScreenProps> = ({
   onNavigateToNotes,
   onNavigateToTrash,
@@ -38,10 +77,15 @@ const SubscriptionsScreenContent: React.FC<SubscriptionsScreenProps> = ({
   const { theme, resolvedMode } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const subscriptions = useSubscriptions();
+  const createMutate = useCreateSubscription();
+  const updateMutate = useUpdateSubscription();
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
   const [drawerVisible, setDrawerVisible] = useState(false);
+  const [editorVisible, setEditorVisible] = useState(false);
+  const [savingSubscription, setSavingSubscription] = useState(false);
+  const [editingSubscription, setEditingSubscription] = useState<Subscription | null>(null);
   const drawerAnim = useRef(new Animated.Value(0)).current;
   const searchInputRef = useRef<TextInput>(null);
 
@@ -84,6 +128,46 @@ const SubscriptionsScreenContent: React.FC<SubscriptionsScreenProps> = ({
     setSearchFocused(false);
     Keyboard.dismiss();
   }, []);
+
+  const handleOpenNew = useCallback(() => {
+    setEditingSubscription(null);
+    setEditorVisible(true);
+  }, []);
+
+  const handleOpenEdit = useCallback((subscription: Subscription) => {
+    setEditingSubscription(subscription);
+    setEditorVisible(true);
+  }, []);
+
+  const handleCloseEditor = useCallback(() => {
+    if (savingSubscription) return;
+    setEditorVisible(false);
+    setEditingSubscription(null);
+  }, [savingSubscription]);
+
+  const handleSaveSubscription = useCallback(
+    async (data: SubscriptionCreate | SubscriptionUpdate) => {
+      setSavingSubscription(true);
+      try {
+        if (editingSubscription) {
+          await updateSubscription(
+            updateMutate,
+            editingSubscription.id,
+            data as SubscriptionUpdate,
+          );
+        } else {
+          await createSubscription(createMutate, data as SubscriptionCreate);
+        }
+        setEditorVisible(false);
+        setEditingSubscription(null);
+      } catch {
+        Alert.alert('Save failed', 'Unable to save subscription. Please try again.');
+      } finally {
+        setSavingSubscription(false);
+      }
+    },
+    [createMutate, editingSubscription, updateMutate],
+  );
 
   const list = subscriptions ?? [];
   const filtered = searchQuery.trim()
@@ -225,9 +309,7 @@ const SubscriptionsScreenContent: React.FC<SubscriptionsScreenProps> = ({
             return (
               <Pressable
                 style={[styles.card, viewMode === 'grid' && styles.cardGrid]}
-                onPress={() => {
-                  Alert.alert('Coming soon', `Edit ${item.serviceName} on mobile is next.`);
-                }}
+                onPress={() => handleOpenEdit(item)}
               >
                 <View style={styles.cardTop}>
                   <Text style={styles.cardTitle} numberOfLines={1}>
@@ -244,6 +326,9 @@ const SubscriptionsScreenContent: React.FC<SubscriptionsScreenProps> = ({
                     ]}
                   />
                 </View>
+                <Text style={[styles.cardCategory, styles.cardCountdownChip]} numberOfLines={1}>
+                  {formatSubCategory(item.category)}
+                </Text>
                 <Text style={styles.cardPricingLine}>
                   <Text style={styles.cardPrice}>{formatPrice(item.price, item.currency)}</Text>
                   <Text style={styles.cardCycle}>
@@ -294,13 +379,19 @@ const SubscriptionsScreenContent: React.FC<SubscriptionsScreenProps> = ({
 
       <Pressable
         style={styles.fab}
-        onPress={() => {
-          Alert.alert('Coming soon', 'Create and edit subscriptions on mobile is next.');
-        }}
+        onPress={handleOpenNew}
         accessibilityLabel="Create subscription"
       >
         <Ionicons name="add" size={32} color="white" />
       </Pressable>
+
+      <SubscriptionEditorModal
+        visible={editorVisible}
+        subscription={editingSubscription}
+        saving={savingSubscription}
+        onClose={handleCloseEditor}
+        onSave={handleSaveSubscription}
+      />
 
       <Pressable
         style={styles.backButton}
@@ -439,6 +530,11 @@ const createStyles = (theme: Theme) =>
     cardPricingLine: {
       color: theme.colors.text,
       fontSize: theme.typography.sizes.base,
+    },
+    cardCategory: {
+      color: theme.colors.background,
+      fontSize: theme.typography.sizes.xs,
+      backgroundColor: theme.colors.secondary,
     },
     cardPrice: {
       color: theme.colors.text,

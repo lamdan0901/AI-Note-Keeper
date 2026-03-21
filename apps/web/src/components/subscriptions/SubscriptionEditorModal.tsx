@@ -39,6 +39,8 @@ const CATEGORY_OPTIONS: { value: SubscriptionCategory; label: string }[] = [
   { value: 'other', label: 'Other' },
 ];
 
+const CATEGORY_SUGGESTIONS = CATEGORY_OPTIONS.map((option) => option.value);
+
 const STATUS_OPTIONS: { value: SubscriptionStatus; label: string }[] = [
   { value: 'active', label: 'Active' },
   { value: 'paused', label: 'Paused' },
@@ -177,6 +179,8 @@ export function SubscriptionEditorModal({
 
   const [showPresets, setShowPresets] = useState(false);
   const [presetFilter, setPresetFilter] = useState('');
+  const [showCategorySuggestions, setShowCategorySuggestions] = useState(false);
+  const [categoryFilter, setCategoryFilter] = useState('');
   const [serviceNameTouched, setServiceNameTouched] = useState(false);
   const [priceTouched, setPriceTouched] = useState(false);
   const [nextBillingDateTouched, setNextBillingDateTouched] = useState(false);
@@ -198,6 +202,10 @@ export function SubscriptionEditorModal({
 
   const filteredPresets = SERVICE_PRESETS.filter((p) =>
     p.name.toLowerCase().includes(presetFilter.toLowerCase()),
+  );
+
+  const filteredCategorySuggestions = CATEGORY_SUGGESTIONS.filter((value) =>
+    value.toLowerCase().includes(categoryFilter.toLowerCase()),
   );
 
   const selectPreset = (name: string, cat: SubscriptionCategory) => {
@@ -359,23 +367,51 @@ export function SubscriptionEditorModal({
             </div>
           </div>
 
-          {/* Category */}
+          {/* Category (autocomplete with optional free text) */}
           <div className="sub-editor-modal__field">
             <label className="sub-editor-modal__label" htmlFor="sub-category">
               Category
             </label>
-            <Select<SelectOption<SubscriptionCategory>, false>
-              inputId="sub-category"
-              options={CATEGORY_OPTIONS}
-              value={CATEGORY_OPTIONS.find((o) => o.value === category) ?? null}
-              onChange={(selected: SingleValue<SelectOption<SubscriptionCategory>>) => {
-                if (selected) setCategory(selected.value);
-              }}
-              isSearchable={false}
-              styles={SUB_SELECT_STYLES as StylesConfig<SelectOption<SubscriptionCategory>, false>}
-              menuPortalTarget={typeof document === 'undefined' ? undefined : document.body}
-              menuPosition="fixed"
-            />
+            <div className="sub-editor-modal__autocomplete">
+              <input
+                id="sub-category"
+                className="sub-editor-modal__input"
+                type="text"
+                value={category}
+                onChange={(e) => {
+                  setCategory(e.target.value);
+                  setCategoryFilter(e.target.value);
+                  setShowCategorySuggestions(true);
+                }}
+                onFocus={() => {
+                  setCategoryFilter(category);
+                  setShowCategorySuggestions(true);
+                }}
+                onBlur={() => {
+                  setTimeout(() => setShowCategorySuggestions(false), 150);
+                }}
+                placeholder="e.g. streaming or custom"
+                autoComplete="off"
+              />
+              {showCategorySuggestions && filteredCategorySuggestions.length > 0 && (
+                <ul className="sub-editor-modal__presets" role="listbox">
+                  {filteredCategorySuggestions.slice(0, 8).map((suggestion) => (
+                    <li
+                      key={suggestion}
+                      className="sub-editor-modal__preset-item"
+                      role="option"
+                      aria-selected={category === suggestion}
+                      onMouseDown={() => {
+                        setCategory(suggestion);
+                        setShowCategorySuggestions(false);
+                      }}
+                    >
+                      {suggestion}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </div>
 
           {/* Price + currency */}

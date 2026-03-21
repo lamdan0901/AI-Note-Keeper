@@ -190,22 +190,10 @@ const AppContent = ({
         backgroundColor={theme.colors.background}
         translucent={false}
       />
-      {currentScreen === 'trash' ? (
-        <TrashScreen
-          viewMode={viewMode}
-          onViewModeChange={setViewMode}
-          onNavigateToNotes={() => setCurrentScreen('notes')}
-          onNavigateToSubscriptions={
-            hasConvexClient ? () => setCurrentScreen('subscriptions') : undefined
-          }
-          subscriptionsEnabled={hasConvexClient}
-        />
-      ) : currentScreen === 'subscriptions' && hasConvexClient ? (
-        <SubscriptionsScreen
-          onNavigateToNotes={() => setCurrentScreen('notes')}
-          onNavigateToTrash={() => setCurrentScreen('trash')}
-        />
-      ) : (
+      <View
+        style={currentScreen === 'notes' ? styles.screenVisible : styles.screenHidden}
+        pointerEvents={currentScreen === 'notes' ? 'auto' : 'none'}
+      >
         <NotesScreen
           rescheduleNoteId={rescheduleNoteId}
           onRescheduleHandled={onRescheduleHandled}
@@ -219,6 +207,33 @@ const AppContent = ({
           viewMode={viewMode}
           onViewModeChange={setViewMode}
         />
+      </View>
+
+      <View
+        style={currentScreen === 'trash' ? styles.screenVisible : styles.screenHidden}
+        pointerEvents={currentScreen === 'trash' ? 'auto' : 'none'}
+      >
+        <TrashScreen
+          viewMode={viewMode}
+          onViewModeChange={setViewMode}
+          onNavigateToNotes={() => setCurrentScreen('notes')}
+          onNavigateToSubscriptions={
+            hasConvexClient ? () => setCurrentScreen('subscriptions') : undefined
+          }
+          subscriptionsEnabled={hasConvexClient}
+        />
+      </View>
+
+      {hasConvexClient && (
+        <View
+          style={currentScreen === 'subscriptions' ? styles.screenVisible : styles.screenHidden}
+          pointerEvents={currentScreen === 'subscriptions' ? 'auto' : 'none'}
+        >
+          <SubscriptionsScreen
+            onNavigateToNotes={() => setCurrentScreen('notes')}
+            onNavigateToTrash={() => setCurrentScreen('trash')}
+          />
+        </View>
       )}
     </View>
   );
@@ -227,6 +242,13 @@ const AppContent = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  screenVisible: {
+    flex: 1,
+  },
+  screenHidden: {
+    ...StyleSheet.absoluteFillObject,
+    opacity: 0,
   },
   loadingContainer: {
     flex: 1,
