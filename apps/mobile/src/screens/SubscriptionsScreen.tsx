@@ -169,7 +169,18 @@ const SubscriptionsScreenContent: React.FC<SubscriptionsScreenProps> = ({
     [createMutate, editingSubscription, updateMutate],
   );
 
-  const list = subscriptions ?? [];
+  const list = useMemo(() => subscriptions ?? [], [subscriptions]);
+  const existingCategories = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          list
+            .map((item) => item.category.trim())
+            .filter((value): value is string => value.length > 0),
+        ),
+      ),
+    [list],
+  );
   const filtered = searchQuery.trim()
     ? list.filter((item) => item.serviceName.toLowerCase().includes(searchQuery.toLowerCase()))
     : list;
@@ -388,6 +399,7 @@ const SubscriptionsScreenContent: React.FC<SubscriptionsScreenProps> = ({
       <SubscriptionEditorModal
         visible={editorVisible}
         subscription={editingSubscription}
+        existingCategories={existingCategories}
         saving={savingSubscription}
         onClose={handleCloseEditor}
         onSave={handleSaveSubscription}

@@ -27,6 +27,7 @@ import { type Theme, useTheme } from '../../theme';
 type SubscriptionEditorModalProps = {
   visible: boolean;
   subscription: Subscription | null;
+  existingCategories: SubscriptionCategory[];
   saving: boolean;
   onClose: () => void;
   onSave: (data: SubscriptionCreate | SubscriptionUpdate) => Promise<void>;
@@ -38,20 +39,6 @@ const BILLING_CYCLE_OPTIONS: { value: BillingCycle; label: string }[] = [
   { value: 'yearly', label: 'Yearly' },
   { value: 'custom', label: 'Custom' },
 ];
-
-const CATEGORY_OPTIONS: { value: SubscriptionCategory; label: string }[] = [
-  { value: 'streaming', label: 'Streaming' },
-  { value: 'music', label: 'Music' },
-  { value: 'tools', label: 'Tools' },
-  { value: 'productivity', label: 'Productivity' },
-  { value: 'gaming', label: 'Gaming' },
-  { value: 'news', label: 'News' },
-  { value: 'fitness', label: 'Fitness' },
-  { value: 'cloud', label: 'Cloud' },
-  { value: 'other', label: 'Other' },
-];
-
-const CATEGORY_SUGGESTIONS = CATEGORY_OPTIONS.map((option) => option.value);
 
 const STATUS_OPTIONS: { value: SubscriptionStatus; label: string }[] = [
   { value: 'active', label: 'Active' },
@@ -110,6 +97,7 @@ function normalizeDate(date: Date): Date {
 export const SubscriptionEditorModal: React.FC<SubscriptionEditorModalProps> = ({
   visible,
   subscription,
+  existingCategories,
   saving,
   onClose,
   onSave,
@@ -117,9 +105,11 @@ export const SubscriptionEditorModal: React.FC<SubscriptionEditorModalProps> = (
   const { theme, resolvedMode } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const isNew = subscription === null;
+  const placeholderTextColor =
+    resolvedMode === 'dark' ? 'rgba(248, 250, 252, 0.5)' : 'rgba(30, 41, 59, 0.45)';
 
   const [serviceName, setServiceName] = useState('');
-  const [category, setCategory] = useState<SubscriptionCategory>('other');
+  const [category, setCategory] = useState<SubscriptionCategory>('');
   const [price, setPrice] = useState('');
   const [currency, setCurrency] = useState('USD');
   const [billingCycle, setBillingCycle] = useState<BillingCycle>('monthly');
@@ -142,7 +132,7 @@ export const SubscriptionEditorModal: React.FC<SubscriptionEditorModalProps> = (
   useEffect(() => {
     if (!visible) return;
     setServiceName(subscription?.serviceName ?? '');
-    setCategory(subscription?.category ?? 'other');
+    setCategory(subscription?.category ?? '');
     setPrice(subscription?.price !== undefined ? String(subscription.price) : '');
     setCurrency(subscription?.currency ?? 'USD');
     setBillingCycle(subscription?.billingCycle ?? 'monthly');
@@ -161,7 +151,7 @@ export const SubscriptionEditorModal: React.FC<SubscriptionEditorModalProps> = (
     setPickerDraftDate(epochToDate(subscription?.nextBillingDate) ?? today);
   }, [subscription, today, visible]);
 
-  const filteredCategorySuggestions = CATEGORY_SUGGESTIONS.filter((value) =>
+  const filteredCategorySuggestions = existingCategories.filter((value) =>
     value.toLowerCase().includes(category.toLowerCase()),
   );
 
@@ -221,15 +211,18 @@ export const SubscriptionEditorModal: React.FC<SubscriptionEditorModalProps> = (
   };
 
   const handleAndroidDateChange = (event: DateTimePickerEvent, selected?: Date) => {
-    if (event.type === 'dismissed' || !activeDateField) {
-      setActiveDateField(null);
+    const selectedField = activeDateField;
+    setActiveDateField(null);
+
+    if (event.type === 'dismissed' || !selectedField) {
       return;
     }
     if (selected) {
-      applySelectedDate(activeDateField, selected);
-      setTouched((prev) => ({ ...prev, [activeDateField]: true }));
+      const normalized = normalizeDate(selected);
+      setPickerDraftDate(normalized);
+      applySelectedDate(selectedField, normalized);
+      setTouched((prev) => ({ ...prev, [selectedField]: true }));
     }
-    setActiveDateField(null);
   };
 
   const toggleReminderDay = (day: number) => {
@@ -312,7 +305,7 @@ export const SubscriptionEditorModal: React.FC<SubscriptionEditorModalProps> = (
                   onChangeText={setServiceName}
                   onBlur={() => setTouched((prev) => ({ ...prev, serviceName: true }))}
                   placeholder="e.g. Netflix"
-                  placeholderTextColor={theme.colors.textMuted}
+                  placeholderTextColor={placeholderTextColor}
                   style={styles.input}
                 />
                 {serviceNameError && <Text style={styles.error}>{serviceNameError}</Text>}
@@ -332,7 +325,7 @@ export const SubscriptionEditorModal: React.FC<SubscriptionEditorModalProps> = (
                       setTimeout(() => setShowCategorySuggestions(false), 120);
                     }}
                     placeholder="e.g. streaming or custom"
-                    placeholderTextColor={theme.colors.textMuted}
+                    placeholderTextColor={placeholderTextColor}
                     style={styles.input}
                     autoCapitalize="none"
                     autoCorrect={false}
@@ -372,7 +365,7 @@ export const SubscriptionEditorModal: React.FC<SubscriptionEditorModalProps> = (
                     onChangeText={setPrice}
                     onBlur={() => setTouched((prev) => ({ ...prev, price: true }))}
                     placeholder="9.99"
-                    placeholderTextColor={theme.colors.textMuted}
+                    placeholderTextColor={placeholderTextColor}
                     style={styles.input}
                     keyboardType="decimal-pad"
                   />
@@ -385,7 +378,7 @@ export const SubscriptionEditorModal: React.FC<SubscriptionEditorModalProps> = (
                     value={currency}
                     onChangeText={(value) => setCurrency(value.toUpperCase())}
                     placeholder="USD"
-                    placeholderTextColor={theme.colors.textMuted}
+                    placeholderTextColor={placeholderTextColor}
                     style={styles.inputSmall}
                     maxLength={3}
                     autoCapitalize="characters"
@@ -422,7 +415,7 @@ export const SubscriptionEditorModal: React.FC<SubscriptionEditorModalProps> = (
                     onChangeText={setCustomDays}
                     onBlur={() => setTouched((prev) => ({ ...prev, customDays: true }))}
                     placeholder="30"
-                    placeholderTextColor={theme.colors.textMuted}
+                    placeholderTextColor={placeholderTextColor}
                     style={styles.input}
                     keyboardType="number-pad"
                   />
@@ -513,7 +506,7 @@ export const SubscriptionEditorModal: React.FC<SubscriptionEditorModalProps> = (
                   value={notes}
                   onChangeText={setNotes}
                   placeholder="Any extra info"
-                  placeholderTextColor={theme.colors.textMuted}
+                  placeholderTextColor={placeholderTextColor}
                   style={styles.textarea}
                   multiline
                   textAlignVertical="top"

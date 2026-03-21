@@ -14,6 +14,7 @@ import { USER_ID } from '../../services/subscriptions';
 
 interface SubscriptionEditorModalProps {
   subscription: Subscription | null;
+  existingCategories: SubscriptionCategory[];
   onSave: (data: SubscriptionCreate | SubscriptionUpdate) => void;
   onClose: () => void;
 }
@@ -26,20 +27,6 @@ const BILLING_CYCLE_OPTIONS: { value: BillingCycle; label: string }[] = [
   { value: 'yearly', label: 'Yearly' },
   { value: 'custom', label: 'Custom' },
 ];
-
-const CATEGORY_OPTIONS: { value: SubscriptionCategory; label: string }[] = [
-  { value: 'streaming', label: 'Streaming' },
-  { value: 'music', label: 'Music' },
-  { value: 'tools', label: 'Tools' },
-  { value: 'productivity', label: 'Productivity' },
-  { value: 'gaming', label: 'Gaming' },
-  { value: 'news', label: 'News' },
-  { value: 'fitness', label: 'Fitness' },
-  { value: 'cloud', label: 'Cloud' },
-  { value: 'other', label: 'Other' },
-];
-
-const CATEGORY_SUGGESTIONS = CATEGORY_OPTIONS.map((option) => option.value);
 
 const STATUS_OPTIONS: { value: SubscriptionStatus; label: string }[] = [
   { value: 'active', label: 'Active' },
@@ -150,6 +137,7 @@ function todayDateInput(): string {
 
 export function SubscriptionEditorModal({
   subscription,
+  existingCategories,
   onSave,
   onClose,
 }: SubscriptionEditorModalProps) {
@@ -158,7 +146,7 @@ export function SubscriptionEditorModal({
   const minAllowedDate = todayDateInput();
 
   const [serviceName, setServiceName] = useState(subscription?.serviceName ?? '');
-  const [category, setCategory] = useState<SubscriptionCategory>(subscription?.category ?? 'other');
+  const [category, setCategory] = useState<SubscriptionCategory>(subscription?.category ?? '');
   const [price, setPrice] = useState(subscription?.price?.toString() ?? '');
   const [currency, setCurrency] = useState(subscription?.currency ?? 'USD');
   const [billingCycle, setBillingCycle] = useState<BillingCycle>(
@@ -204,7 +192,7 @@ export function SubscriptionEditorModal({
     p.name.toLowerCase().includes(presetFilter.toLowerCase()),
   );
 
-  const filteredCategorySuggestions = CATEGORY_SUGGESTIONS.filter((value) =>
+  const filteredCategorySuggestions = existingCategories.filter((value) =>
     value.toLowerCase().includes(categoryFilter.toLowerCase()),
   );
 

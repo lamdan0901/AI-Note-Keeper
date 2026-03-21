@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { LayoutGrid, List, Plus } from 'lucide-react';
 import type {
   Subscription,
@@ -63,6 +63,17 @@ export default function SubscriptionsPage(): JSX.Element {
   );
 
   const list = subscriptions ?? [];
+  const existingCategories = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          list
+            .map((item) => item.category.trim())
+            .filter((value): value is string => value.length > 0),
+        ),
+      ),
+    [list],
+  );
   const filtered = searchQuery.trim()
     ? list.filter((s) => s.serviceName.toLowerCase().includes(searchQuery.toLowerCase()))
     : list;
@@ -145,6 +156,7 @@ export default function SubscriptionsPage(): JSX.Element {
       {editorOpen && (
         <SubscriptionEditorModal
           subscription={editingSubscription}
+          existingCategories={existingCategories}
           onSave={handleSave}
           onClose={handleClose}
         />

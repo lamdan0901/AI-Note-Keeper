@@ -2200,6 +2200,8 @@ body {
 }
 .sub-editor-modal__input::placeholder {
   color: var(--modal-fg-placeholder);
+  opacity: 0.72;
+  font-weight: 400;
 }
 .sub-editor-modal__input--short {
   width: 72px;
@@ -2234,11 +2236,13 @@ body {
   line-height: 1.5;
   transition: border-color 0.12s;
 }
-.sub-editor-modal__textarea:focus {
-  border-color: var(--color-accent);
-}
 .sub-editor-modal__textarea::placeholder {
   color: var(--modal-fg-placeholder);
+  opacity: 0.72;
+  font-weight: 400;
+}
+.sub-editor-modal__textarea:focus {
+  border-color: var(--color-accent);
 }
 /* Autocomplete presets dropdown */
 .sub-editor-modal__autocomplete {
