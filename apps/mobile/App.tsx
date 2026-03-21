@@ -191,7 +191,15 @@ const AppContent = ({
         translucent={false}
       />
       {currentScreen === 'trash' ? (
-        <TrashScreen onBack={() => setCurrentScreen('notes')} viewMode={viewMode} />
+        <TrashScreen
+          viewMode={viewMode}
+          onViewModeChange={setViewMode}
+          onNavigateToNotes={() => setCurrentScreen('notes')}
+          onNavigateToSubscriptions={
+            hasConvexClient ? () => setCurrentScreen('subscriptions') : undefined
+          }
+          subscriptionsEnabled={hasConvexClient}
+        />
       ) : currentScreen === 'subscriptions' && hasConvexClient ? (
         <SubscriptionsScreen
           onNavigateToNotes={() => setCurrentScreen('notes')}

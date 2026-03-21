@@ -8,6 +8,8 @@ import {
 import { v } from 'convex/values';
 import { internal } from '../_generated/api';
 
+const FOURTEEN_DAYS_MS = 14 * 24 * 60 * 60 * 1000;
+
 // ─── Pure helpers ─────────────────────────────────────────────────────────────
 
 /**
@@ -62,6 +64,18 @@ export const listSubscriptions = query({
       .query('subscriptions')
       .filter((q) => q.and(q.eq(q.field('userId'), userId), q.eq(q.field('active'), true)))
       .collect();
+  },
+});
+
+export const listDeletedSubscriptions = query({
+  args: { userId: v.string() },
+  handler: async (ctx, { userId }) => {
+    const trashed = await ctx.db
+      .query('subscriptions')
+      .filter((q) => q.and(q.eq(q.field('userId'), userId), q.eq(q.field('active'), false)))
+      .collect();
+
+    return trashed.sort((a, b) => (b.deletedAt ?? b.updatedAt) - (a.deletedAt ?? a.updatedAt));
   },
 });
 
@@ -139,7 +153,42 @@ export const updateSubscription = mutation({
 export const deleteSubscription = mutation({
   args: { id: v.id('subscriptions') },
   handler: async (ctx, { id }) => {
-    await ctx.db.patch(id, { active: false, updatedAt: Date.now() });
+    await ctx.db.patch(id, { active: false, deletedAt: Date.now(), updatedAt: Date.now() });
+  },
+});
+
+export const restoreSubscription = mutation({
+  args: { id: v.id('subscriptions') },
+  handler: async (ctx, { id }) => {
+    await ctx.db.patch(id, { active: true, deletedAt: undefined, updatedAt: Date.now() });
+  },
+});
+
+export const permanentlyDeleteSubscription = mutation({
+  args: { id: v.id('subscriptions') },
+  handler: async (ctx, { id }) => {
+    const existing = await ctx.db.get(id);
+    if (!existing || existing.active !== false) {
+      return { deleted: false };
+    }
+    await ctx.db.delete(id);
+    return { deleted: true };
+  },
+});
+
+export const emptySubscriptionTrash = mutation({
+  args: { userId: v.string() },
+  handler: async (ctx, { userId }) => {
+    const trashed = await ctx.db
+      .query('subscriptions')
+      .filter((q) => q.and(q.eq(q.field('userId'), userId), q.eq(q.field('active'), false)))
+      .collect();
+
+    for (const subscription of trashed) {
+      await ctx.db.delete(subscription._id);
+    }
+
+    return { deleted: trashed.length };
   },
 });
 
@@ -241,6 +290,29 @@ export const advanceBillingSubscription = internalMutation({
       computeNextReminderAt(nextBillingDate, sub.reminderDaysBefore) ?? undefined;
 
     await ctx.db.patch(id, { nextBillingDate, nextReminderAt, updatedAt: now });
+  },
+});
+
+export const purgeExpiredSubscriptionTrash = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const cutoff = Date.now() - FOURTEEN_DAYS_MS;
+    const expired = await ctx.db
+      .query('subscriptions')
+      .filter((q) =>
+        q.and(
+          q.eq(q.field('active'), false),
+          q.neq(q.field('deletedAt'), undefined),
+          q.lt(q.field('deletedAt'), cutoff),
+        ),
+      )
+      .collect();
+
+    for (const subscription of expired) {
+      await ctx.db.delete(subscription._id);
+    }
+
+    return { purged: expired.length };
   },
 });
 

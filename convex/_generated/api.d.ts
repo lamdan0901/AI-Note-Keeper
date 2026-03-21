@@ -18,6 +18,7 @@ import type * as functions_push from "../functions/push.js";
 import type * as functions_reminderChangeEvents from "../functions/reminderChangeEvents.js";
 import type * as functions_reminderTriggers from "../functions/reminderTriggers.js";
 import type * as functions_reminders from "../functions/reminders.js";
+import type * as functions_subscriptionMigration from "../functions/subscriptionMigration.js";
 import type * as functions_subscriptions from "../functions/subscriptions.js";
 import type * as utils_uuid from "../utils/uuid.js";
 
@@ -38,6 +39,7 @@ declare const fullApi: ApiFromModules<{
   "functions/reminderChangeEvents": typeof functions_reminderChangeEvents;
   "functions/reminderTriggers": typeof functions_reminderTriggers;
   "functions/reminders": typeof functions_reminders;
+  "functions/subscriptionMigration": typeof functions_subscriptionMigration;
   "functions/subscriptions": typeof functions_subscriptions;
   "utils/uuid": typeof utils_uuid;
 }>;

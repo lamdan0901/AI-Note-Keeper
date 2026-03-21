@@ -7,6 +7,8 @@ import type {
 } from '../../../../packages/shared/types/subscription';
 
 export const USER_ID = 'local-user';
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const subscriptionsApi = api.functions.subscriptions as any;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function mapDocToMobileSubscription(doc: any): Subscription {
@@ -27,6 +29,7 @@ export function mapDocToMobileSubscription(doc: any): Subscription {
     nextReminderAt: doc.nextReminderAt,
     lastNotifiedBillingDate: doc.lastNotifiedBillingDate,
     active: doc.active as boolean,
+    deletedAt: doc.deletedAt,
     createdAt: doc.createdAt as number,
     updatedAt: doc.updatedAt as number,
   };
@@ -50,9 +53,33 @@ export function useDeleteSubscription() {
   return useMutation(api.functions.subscriptions.deleteSubscription);
 }
 
+export function useDeletedSubscriptions(enabled = true): Subscription[] | undefined {
+  const raw = useQuery(
+    subscriptionsApi.listDeletedSubscriptions,
+    enabled ? { userId: USER_ID } : 'skip',
+  );
+  if (raw === undefined) return undefined;
+  return raw.map(mapDocToMobileSubscription);
+}
+
+export function useRestoreSubscription() {
+  return useMutation(subscriptionsApi.restoreSubscription);
+}
+
+export function usePermanentlyDeleteSubscription() {
+  return useMutation(subscriptionsApi.permanentlyDeleteSubscription);
+}
+
+export function useEmptySubscriptionTrash() {
+  return useMutation(subscriptionsApi.emptySubscriptionTrash);
+}
+
 type CreateFn = ReturnType<typeof useCreateSubscription>;
 type UpdateFn = ReturnType<typeof useUpdateSubscription>;
 type DeleteFn = ReturnType<typeof useDeleteSubscription>;
+type RestoreFn = ReturnType<typeof useRestoreSubscription>;
+type DeleteForeverFn = ReturnType<typeof usePermanentlyDeleteSubscription>;
+type EmptyTrashFn = ReturnType<typeof useEmptySubscriptionTrash>;
 
 export async function createSubscription(
   mutate: CreateFn,
@@ -86,4 +113,21 @@ export async function updateSubscription(
 export async function deleteSubscription(mutate: DeleteFn, id: string): Promise<void> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   await mutate({ id: id as any });
+}
+
+export async function restoreSubscription(mutate: RestoreFn, id: string): Promise<void> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await mutate({ id: id as any });
+}
+
+export async function permanentlyDeleteSubscription(
+  mutate: DeleteForeverFn,
+  id: string,
+): Promise<void> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await mutate({ id: id as any });
+}
+
+export async function emptySubscriptionTrash(mutate: EmptyTrashFn): Promise<void> {
+  await mutate({ userId: USER_ID });
 }

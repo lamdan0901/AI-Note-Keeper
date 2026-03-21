@@ -30,6 +30,7 @@ export type Subscription = {
   nextReminderAt?: number; // epoch ms
   lastNotifiedBillingDate?: number; // epoch ms
   active: boolean;
+  deletedAt?: number; // epoch ms when moved to trash
   createdAt: number;
   updatedAt: number;
 };

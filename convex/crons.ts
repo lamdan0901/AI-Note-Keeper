@@ -13,6 +13,14 @@ crons.cron(
 // Purge soft-deleted notes older than 14 days, daily at 3 AM UTC
 crons.cron('purge-expired-trash', '0 3 * * *', internal.functions.notes.purgeExpiredTrash);
 
+// Purge soft-deleted subscriptions older than 14 days, daily at 3 AM UTC
+crons.cron(
+  'purge-expired-subscription-trash',
+  '0 3 * * *',
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (internal.functions.subscriptions as any).purgeExpiredSubscriptionTrash,
+);
+
 // Check for due subscription billing reminders every hour
 crons.cron(
   'check-subscription-reminders',
