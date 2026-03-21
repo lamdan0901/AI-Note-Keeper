@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { LayoutGrid, List, Monitor, Moon, Plus, Sun, Trash2, X } from 'lucide-react';
+import { LayoutGrid, List, Moon, Plus, Sun, Trash2, X } from 'lucide-react';
 import NotesPage from './pages/NotesPage';
 import SubscriptionsPage from './pages/SubscriptionsPage';
 import { useSubscriptions } from './services/subscriptions';
 import { SubscriptionReminderBanner } from './components/subscriptions/SubscriptionReminderBanner';
 import {
-  getInitialThemeMode,
+  getStoredThemeMode,
+  getSystemPrefersDark,
   resolveThemeMode,
   SYSTEM_DARK_QUERY,
   THEME_STORAGE_KEY,
@@ -16,7 +17,6 @@ import type { NotesViewMode } from './services/notesTypes';
 const THEME_OPTIONS: Array<{ mode: ThemeMode; icon: React.ReactNode; label: string }> = [
   { mode: 'light', icon: <Sun size={16} />, label: 'Light' },
   { mode: 'dark', icon: <Moon size={16} />, label: 'Dark' },
-  { mode: 'auto', icon: <Monitor size={16} />, label: 'Auto' },
 ];
 
 type ActiveTab = 'notes' | 'subscriptions';
@@ -30,7 +30,10 @@ const SAVE_STATUS_LABELS: Record<SaveStatus, string | null> = {
 };
 
 export default function App(): JSX.Element {
-  const [themeMode, setThemeMode] = useState<ThemeMode>(getInitialThemeMode);
+  const [themeMode, setThemeMode] = useState<ThemeMode | null>(getStoredThemeMode);
+  const [resolvedTheme, setResolvedTheme] = useState<ThemeMode>(() =>
+    resolveThemeMode(getStoredThemeMode(), getSystemPrefersDark()),
+  );
   const [activeTab, setActiveTab] = useState<ActiveTab>('notes');
   const subscriptions = useSubscriptions();
 
@@ -47,6 +50,11 @@ export default function App(): JSX.Element {
   const [notesSaveStatus, setNotesSaveStatus] = useState<SaveStatus>('idle');
 
   useEffect(() => {
+    if (themeMode == null) {
+      window.localStorage.removeItem(THEME_STORAGE_KEY);
+      return;
+    }
+
     window.localStorage.setItem(THEME_STORAGE_KEY, themeMode);
   }, [themeMode]);
 
@@ -55,6 +63,7 @@ export default function App(): JSX.Element {
 
     const applyTheme = () => {
       const resolvedTheme = resolveThemeMode(themeMode, mediaQuery.matches);
+      setResolvedTheme(resolvedTheme);
       const root = document.documentElement;
       root.dataset.theme = resolvedTheme;
       root.style.colorScheme = resolvedTheme;
@@ -62,7 +71,7 @@ export default function App(): JSX.Element {
 
     applyTheme();
 
-    if (themeMode !== 'auto') {
+    if (themeMode != null) {
       return;
     }
 
@@ -86,22 +95,24 @@ export default function App(): JSX.Element {
   return (
     <>
       <nav className="app-nav">
-        <button
-          className={`app-nav__tab${activeTab === 'notes' ? ' app-nav__tab--active' : ''}`}
-          onClick={() => setActiveTab('notes')}
-          aria-pressed={activeTab === 'notes'}
-          type="button"
-        >
-          Notes
-        </button>
-        <button
-          className={`app-nav__tab${activeTab === 'subscriptions' ? ' app-nav__tab--active' : ''}`}
-          onClick={() => setActiveTab('subscriptions')}
-          aria-pressed={activeTab === 'subscriptions'}
-          type="button"
-        >
-          Subscriptions
-        </button>
+        <div className="app-nav__left">
+          <button
+            className={`app-nav__tab${activeTab === 'notes' ? ' app-nav__tab--active' : ''}`}
+            onClick={() => setActiveTab('notes')}
+            aria-pressed={activeTab === 'notes'}
+            type="button"
+          >
+            Notes
+          </button>
+          <button
+            className={`app-nav__tab${activeTab === 'subscriptions' ? ' app-nav__tab--active' : ''}`}
+            onClick={() => setActiveTab('subscriptions')}
+            aria-pressed={activeTab === 'subscriptions'}
+            type="button"
+          >
+            Subscriptions
+          </button>
+        </div>
         <div className="app-nav__search">
           <input
             className="app-nav__search-input"
@@ -136,116 +147,117 @@ export default function App(): JSX.Element {
             </button>
           )}
         </div>
-        <div className="app-nav__theme" role="radiogroup" aria-label="Theme mode">
-          {THEME_OPTIONS.map((option) => (
+        <div className="app-nav__right">
+          <div
+            className="app-nav__theme notes-header__view-toggle"
+            role="radiogroup"
+            aria-label="Theme mode"
+          >
+            {THEME_OPTIONS.map((option) => (
+              <button
+                key={option.mode}
+                className={`notes-header__view-btn${resolvedTheme === option.mode ? ' notes-header__view-btn--active' : ''}`}
+                onClick={() => setThemeMode(option.mode)}
+                role="radio"
+                aria-checked={resolvedTheme === option.mode}
+                aria-label={option.label}
+                title={option.label}
+                type="button"
+              >
+                <span className="notes-header__theme-btn-icon" aria-hidden="true">
+                  {option.icon}
+                </span>
+              </button>
+            ))}
+          </div>
+
+          <div className="app-nav__actions" style={{ display: activeTab === 'notes' ? undefined : 'none' }}>
+            {notesStatusLabel && (
+              <span className={`notes-header__status notes-header__status--${notesSaveStatus}`}>
+                {notesStatusLabel}
+              </span>
+            )}
+            <div className="notes-header__view-toggle" role="group" aria-label="View mode">
+              <button
+                className={`notes-header__view-btn${notesViewMode === 'grid' ? ' notes-header__view-btn--active' : ''}`}
+                onClick={() => setNotesViewMode('grid')}
+                aria-pressed={notesViewMode === 'grid'}
+                title="Grid view"
+                type="button"
+              >
+                <LayoutGrid size={16} />
+              </button>
+              <button
+                className={`notes-header__view-btn${notesViewMode === 'list' ? ' notes-header__view-btn--active' : ''}`}
+                onClick={() => setNotesViewMode('list')}
+                aria-pressed={notesViewMode === 'list'}
+                title="List view"
+                type="button"
+              >
+                <List size={16} />
+              </button>
+            </div>
             <button
-              key={option.mode}
-              className={`notes-header__theme-btn${themeMode === option.mode ? ' notes-header__theme-btn--active' : ''}`}
-              onClick={() => setThemeMode(option.mode)}
-              role="radio"
-              aria-checked={themeMode === option.mode}
-              title={option.label}
+              className="subs-header__new-btn"
+              onClick={() => setNewNoteTrigger((t) => t + 1)}
               type="button"
             >
-              <span className="notes-header__theme-btn-icon" aria-hidden="true">
-                {option.icon}
-              </span>
-              <span className="notes-header__theme-btn-text">{option.label}</span>
+              <Plus size={16} /> New
             </button>
-          ))}
-        </div>
-
-        <div className="app-nav__actions">
-          {activeTab === 'notes' ? (
-            <>
-              {notesStatusLabel && (
-                <span className={`notes-header__status notes-header__status--${notesSaveStatus}`}>
-                  {notesStatusLabel}
-                </span>
+            <button
+              className={`notes-header__trash-btn${notesViewingTrash ? ' notes-header__trash-btn--active' : ''}`}
+              onClick={() => setNotesViewingTrash((v) => !v)}
+              title={notesViewingTrash ? 'Back to notes' : 'View trash'}
+              aria-pressed={notesViewingTrash}
+              type="button"
+            >
+              <Trash2 size={16} />
+              {!notesViewingTrash && notesTrashCount > 0 && (
+                <span className="notes-header__trash-badge">{notesTrashCount}</span>
               )}
-              <div className="notes-header__view-toggle" role="group" aria-label="View mode">
-                <button
-                  className={`notes-header__view-btn${notesViewMode === 'grid' ? ' notes-header__view-btn--active' : ''}`}
-                  onClick={() => setNotesViewMode('grid')}
-                  aria-pressed={notesViewMode === 'grid'}
-                  title="Grid view"
-                  type="button"
-                >
-                  <LayoutGrid size={16} />
-                </button>
-                <button
-                  className={`notes-header__view-btn${notesViewMode === 'list' ? ' notes-header__view-btn--active' : ''}`}
-                  onClick={() => setNotesViewMode('list')}
-                  aria-pressed={notesViewMode === 'list'}
-                  title="List view"
-                  type="button"
-                >
-                  <List size={16} />
-                </button>
-              </div>
+            </button>
+          </div>
+          <div className="app-nav__actions" style={{ display: activeTab === 'subscriptions' ? undefined : 'none' }}>
+            <div className="notes-header__view-toggle" role="group" aria-label="View mode">
               <button
-                className="notes-header__new-btn"
-                onClick={() => setNewNoteTrigger((t) => t + 1)}
+                className={`notes-header__view-btn${subsViewMode === 'grid' ? ' notes-header__view-btn--active' : ''}`}
+                onClick={() => setSubsViewMode('grid')}
+                aria-pressed={subsViewMode === 'grid'}
+                title="Grid view"
                 type="button"
               >
-                <Plus size={16} /> New note
+                <LayoutGrid size={16} />
               </button>
               <button
-                className={`notes-header__trash-btn${notesViewingTrash ? ' notes-header__trash-btn--active' : ''}`}
-                onClick={() => setNotesViewingTrash((v) => !v)}
-                title={notesViewingTrash ? 'Back to notes' : 'View trash'}
-                aria-pressed={notesViewingTrash}
+                className={`notes-header__view-btn${subsViewMode === 'list' ? ' notes-header__view-btn--active' : ''}`}
+                onClick={() => setSubsViewMode('list')}
+                aria-pressed={subsViewMode === 'list'}
+                title="List view"
                 type="button"
               >
-                <Trash2 size={16} />
-                {!notesViewingTrash && notesTrashCount > 0 && (
-                  <span className="notes-header__trash-badge">{notesTrashCount}</span>
-                )}
+                <List size={16} />
               </button>
-            </>
-          ) : (
-            <>
-              <div className="subs-header__view-toggle" role="group" aria-label="View mode">
-                <button
-                  className={`subs-header__view-btn${subsViewMode === 'grid' ? ' subs-header__view-btn--active' : ''}`}
-                  onClick={() => setSubsViewMode('grid')}
-                  aria-pressed={subsViewMode === 'grid'}
-                  title="Grid view"
-                  type="button"
-                >
-                  <LayoutGrid size={16} />
-                </button>
-                <button
-                  className={`subs-header__view-btn${subsViewMode === 'list' ? ' subs-header__view-btn--active' : ''}`}
-                  onClick={() => setSubsViewMode('list')}
-                  aria-pressed={subsViewMode === 'list'}
-                  title="List view"
-                  type="button"
-                >
-                  <List size={16} />
-                </button>
-              </div>
-              <button
-                className="subs-header__new-btn"
-                onClick={() => setNewSubTrigger((t) => t + 1)}
-                type="button"
-              >
-                <Plus size={16} /> New
-              </button>
-              <button
-                className={`notes-header__trash-btn${subsViewingTrash ? ' notes-header__trash-btn--active' : ''}`}
-                onClick={() => setSubsViewingTrash((v) => !v)}
-                title={subsViewingTrash ? 'Back to subscriptions' : 'View trash'}
-                aria-pressed={subsViewingTrash}
-                type="button"
-              >
-                <Trash2 size={16} />
-                {!subsViewingTrash && subsTrashCount > 0 && (
-                  <span className="notes-header__trash-badge">{subsTrashCount}</span>
-                )}
-              </button>
-            </>
-          )}
+            </div>
+            <button
+              className="subs-header__new-btn"
+              onClick={() => setNewSubTrigger((t) => t + 1)}
+              type="button"
+            >
+              <Plus size={16} /> New
+            </button>
+            <button
+              className={`notes-header__trash-btn${subsViewingTrash ? ' notes-header__trash-btn--active' : ''}`}
+              onClick={() => setSubsViewingTrash((v) => !v)}
+              title={subsViewingTrash ? 'Back to subscriptions' : 'View trash'}
+              aria-pressed={subsViewingTrash}
+              type="button"
+            >
+              <Trash2 size={16} />
+              {!subsViewingTrash && subsTrashCount > 0 && (
+                <span className="notes-header__trash-badge">{subsTrashCount}</span>
+              )}
+            </button>
+          </div>
         </div>
       </nav>
 

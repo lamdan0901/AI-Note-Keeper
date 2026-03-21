@@ -1550,23 +1550,31 @@ body {
    App-level navigation tabs
    ============================================================ */
 .app-nav {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 4px;
+  gap: 8px;
   padding: 12px 24px 0;
   max-width: 1200px;
   margin: 0 auto;
   width: 100%;
 }
+.app-nav__left {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.app-nav__right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: flex-end;
+}
 .app-nav__search {
   position: relative;
   display: flex;
   align-items: center;
-  flex: 1 1 260px;
-  max-width: 420px;
-  min-width: 220px;
-  margin-left: 12px;
+  width: 280px;
 }
 .app-nav__search-input {
   width: 100%;
@@ -1609,15 +1617,12 @@ body {
 .app-nav__theme {
   display: flex;
   align-items: center;
-  gap: 2px;
-  margin-left: 8px;
+  gap: 0;
 }
 .app-nav__actions {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-left: 12px;
-  flex-wrap: wrap;
 }
 .app-banner-wrap {
   max-width: 1200px;
@@ -1655,22 +1660,20 @@ body {
 }
 @media (max-width: 768px) {
   .app-nav {
+    grid-template-columns: 1fr;
     padding: 10px 16px 0;
   }
   .app-nav__search {
-    flex: 1 1 100%;
-    max-width: none;
-    min-width: 0;
-    margin-left: 0;
+    width: 100%;
+    order: 2;
+  }
+  .app-nav__left {
+    order: 1;
+  }
+  .app-nav__right {
     order: 3;
-  }
-  .app-nav__theme {
-    margin-left: 0;
-    order: 4;
-  }
-  .app-nav__actions {
-    margin-left: 0;
-    order: 5;
+    justify-content: flex-start;
+    flex-wrap: wrap;
   }
 }
 
@@ -1718,30 +1721,7 @@ body {
 /* ============================================================
    Subscription action buttons
    ============================================================ */
-.subs-header__view-toggle {
-  display: flex;
-  border: 1px solid var(--color-border-strong);
-  border-radius: 8px;
-  overflow: hidden;
-}
-.subs-header__view-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  background: transparent;
-  padding: 6px 10px;
-  cursor: pointer;
-  color: var(--color-text-secondary);
-  transition: background 0.1s;
-}
-.subs-header__view-btn:hover {
-  background: var(--color-hover-soft);
-}
-.subs-header__view-btn--active {
-  background: var(--color-accent-soft);
-  color: var(--color-accent);
-}
+
 .subs-header__new-btn {
   display: inline-flex;
   align-items: center;
