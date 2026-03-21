@@ -107,9 +107,13 @@ export const createSubscription = mutation({
     const now = Date.now();
     const nextReminderAt =
       computeNextReminderAt(args.nextBillingDate, args.reminderDaysBefore) ?? undefined;
+    const nextTrialReminderAt = args.trialEndDate
+      ? (computeNextReminderAt(args.trialEndDate, args.reminderDaysBefore) ?? undefined)
+      : undefined;
     return ctx.db.insert('subscriptions', {
       ...args,
       nextReminderAt,
+      nextTrialReminderAt,
       active: true,
       createdAt: now,
       updatedAt: now,
@@ -141,10 +145,15 @@ export const updateSubscription = mutation({
     const nextBillingDate = patch.nextBillingDate ?? existing.nextBillingDate;
     const reminderDaysBefore = patch.reminderDaysBefore ?? existing.reminderDaysBefore;
     const nextReminderAt = computeNextReminderAt(nextBillingDate, reminderDaysBefore) ?? undefined;
+    const trialEndDate = patch.trialEndDate ?? existing.trialEndDate;
+    const nextTrialReminderAt = trialEndDate
+      ? (computeNextReminderAt(trialEndDate, reminderDaysBefore) ?? undefined)
+      : undefined;
 
     await ctx.db.patch(id, {
       ...patch,
       nextReminderAt,
+      nextTrialReminderAt,
       updatedAt: Date.now(),
     });
   },
@@ -227,6 +236,23 @@ export const getSubscriptionsWithOverdueBilling = internalQuery({
   },
 });
 
+export const getDueTrialReminders = internalQuery({
+  args: { now: v.number() },
+  handler: async (ctx, { now }) => {
+    return ctx.db
+      .query('subscriptions')
+      .filter((q) =>
+        q.and(
+          q.eq(q.field('active'), true),
+          q.eq(q.field('status'), 'active'),
+          q.neq(q.field('nextTrialReminderAt'), undefined),
+          q.lte(q.field('nextTrialReminderAt'), now),
+        ),
+      )
+      .collect();
+  },
+});
+
 // ─── Internal mutations (used by cron) ───────────────────────────────────────
 
 /**
@@ -259,6 +285,27 @@ export const advanceSubscriptionAfterReminder = internalMutation({
       nextReminderAt,
       lastNotifiedBillingDate: sub.nextBillingDate,
       updatedAt: now,
+    });
+  },
+});
+
+/**
+ * Called after a trial-end reminder push fires. Marks the trial end date as
+ * notified and recomputes nextTrialReminderAt for remaining thresholds.
+ */
+export const advanceSubscriptionAfterTrialReminder = internalMutation({
+  args: { id: v.id('subscriptions') },
+  handler: async (ctx, { id }) => {
+    const sub = await ctx.db.get(id);
+    if (!sub || !sub.trialEndDate) return;
+
+    const nextTrialReminderAt =
+      computeNextReminderAt(sub.trialEndDate, sub.reminderDaysBefore) ?? undefined;
+
+    await ctx.db.patch(id, {
+      nextTrialReminderAt,
+      lastNotifiedTrialEndDate: sub.trialEndDate,
+      updatedAt: Date.now(),
     });
   },
 });
@@ -323,13 +370,13 @@ export const checkSubscriptionReminders = internalAction({
   handler: async (ctx) => {
     const now = Date.now();
 
-    // 1. Send push notifications for due reminders
+    // 1. Send push notifications for due billing reminders
     const dueSubscriptions = await ctx.runQuery(
       internal.functions.subscriptions.getDueSubscriptionReminders,
       { now },
     );
 
-    console.log(`[SubscriptionCron] Found ${dueSubscriptions.length} due subscription reminder(s)`);
+    console.log(`[SubscriptionCron] Found ${dueSubscriptions.length} due billing reminder(s)`);
 
     for (const sub of dueSubscriptions) {
       try {
@@ -345,19 +392,56 @@ export const checkSubscriptionReminders = internalAction({
           subscriptionId: sub._id,
           title,
           body,
+          reminderKind: 'billing',
         });
 
         await ctx.runMutation(internal.functions.subscriptions.advanceSubscriptionAfterReminder, {
           id: sub._id,
         });
 
-        console.log(`[SubscriptionCron] Notified for subscription ${sub._id} (${sub.serviceName})`);
+        console.log(`[SubscriptionCron] Billing notified for ${sub._id} (${sub.serviceName})`);
       } catch (err) {
-        console.error(`[SubscriptionCron] Failed for subscription ${sub._id}:`, err);
+        console.error(`[SubscriptionCron] Billing failed for ${sub._id}:`, err);
       }
     }
 
-    // 2. Auto-advance billing dates that have passed without any remaining reminders
+    // 2. Send push notifications for due trial-end reminders
+    const dueTrialSubscriptions = await ctx.runQuery(
+      internal.functions.subscriptions.getDueTrialReminders,
+      { now },
+    );
+
+    console.log(`[SubscriptionCron] Found ${dueTrialSubscriptions.length} due trial reminder(s)`);
+
+    for (const sub of dueTrialSubscriptions) {
+      try {
+        const msUntilTrialEnd = (sub.trialEndDate ?? 0) - now;
+        const daysUntil = Math.ceil(msUntilTrialEnd / (24 * 60 * 60 * 1000));
+        const dueLabel =
+          daysUntil <= 0 ? 'today' : `in ${daysUntil} day${daysUntil === 1 ? '' : 's'}`;
+        const title = `${sub.serviceName} trial ends ${dueLabel}`;
+        const body = `${sub.currency}${sub.price.toFixed(2)} – ${sub.billingCycle} billing starts after trial`;
+
+        await ctx.runAction(internal.functions.push.sendSubscriptionPush, {
+          userId: sub.userId,
+          subscriptionId: sub._id,
+          title,
+          body,
+          reminderKind: 'trial_end',
+        });
+
+        await ctx.runMutation(
+          internal.functions.subscriptions.advanceSubscriptionAfterTrialReminder,
+          { id: sub._id },
+        );
+
+        console.log(`[SubscriptionCron] Trial notified for ${sub._id} (${sub.serviceName})`);
+      } catch (err) {
+        console.error(`[SubscriptionCron] Trial failed for ${sub._id}:`, err);
+      }
+    }
+
+    // 3. Auto-advance billing dates that have passed without any remaining reminders
     const overdueSubscriptions = await ctx.runQuery(
       internal.functions.subscriptions.getSubscriptionsWithOverdueBilling,
       { now },

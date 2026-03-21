@@ -40,11 +40,40 @@ export function getDaysUntilBilling(nextBillingDate: number): number {
   return Math.ceil((nextBillingDate - now) / (24 * 60 * 60 * 1000));
 }
 
-export function isReminderDue(subscription: Subscription): boolean {
-  if (subscription.status !== 'active') return false;
+export type DueReminderEvent = {
+  kind: 'billing' | 'trial_end';
+  daysUntil: number;
+};
 
-  const daysUntil = getDaysUntilBilling(subscription.nextBillingDate);
-  return subscription.reminderDaysBefore.some((days) => daysUntil >= 0 && daysUntil <= days);
+/**
+ * Returns all due reminder events for a subscription (billing and/or trial).
+ * A reminder is due when `daysUntil` falls within any `reminderDaysBefore` value.
+ */
+export function getDueReminderEvents(subscription: Subscription): DueReminderEvent[] {
+  if (subscription.status !== 'active') return [];
+
+  const events: DueReminderEvent[] = [];
+
+  const billingDays = getDaysUntilBilling(subscription.nextBillingDate);
+  if (subscription.reminderDaysBefore.some((d) => billingDays >= 0 && billingDays <= d)) {
+    events.push({ kind: 'billing', daysUntil: billingDays });
+  }
+
+  if (subscription.trialEndDate != null) {
+    const trialDays = getDaysUntilBilling(subscription.trialEndDate);
+    if (subscription.reminderDaysBefore.some((d) => trialDays >= 0 && trialDays <= d)) {
+      events.push({ kind: 'trial_end', daysUntil: trialDays });
+    }
+  }
+
+  return events;
+}
+
+/**
+ * Returns true when any reminder (billing or trial) is due for the subscription.
+ */
+export function isReminderDue(subscription: Subscription): boolean {
+  return getDueReminderEvents(subscription).length > 0;
 }
 
 export function formatBillingCycle(billingCycle: BillingCycle, customDays?: number): string {

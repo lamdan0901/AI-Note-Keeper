@@ -21,10 +21,10 @@ crons.cron(
   (internal.functions.subscriptions as any).purgeExpiredSubscriptionTrash,
 );
 
-// Check for due subscription billing reminders every hour
+// Check for due subscription billing/trial reminders daily at 3 AM UTC
 crons.cron(
   'check-subscription-reminders',
-  '0 * * * *',
+  '0 3 * * *',
   internal.functions.subscriptions.checkSubscriptionReminders,
 );
 

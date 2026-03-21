@@ -260,9 +260,12 @@ export const sendSubscriptionPush = internalAction({
     subscriptionId: v.id('subscriptions'),
     title: v.string(),
     body: v.string(),
+    reminderKind: v.optional(v.string()), // 'billing' | 'trial_end'
   },
-  handler: async (ctx, { userId, subscriptionId, title, body }) => {
-    console.log(`[Push] Subscription push for ${subscriptionId}, user ${userId}`);
+  handler: async (ctx, { userId, subscriptionId, title, body, reminderKind }) => {
+    console.log(
+      `[Push] Subscription push (${reminderKind ?? 'billing'}) for ${subscriptionId}, user ${userId}`,
+    );
 
     const tokens = await ctx.runQuery(api.functions.deviceTokens.getTokensByUser, { userId });
     if (!tokens || tokens.length === 0) {
@@ -302,6 +305,7 @@ export const sendSubscriptionPush = internalAction({
                   token: token.fcmToken,
                   data: {
                     type: 'subscription_reminder',
+                    reminderKind: reminderKind ?? 'billing',
                     id: subscriptionId,
                     title,
                     body,

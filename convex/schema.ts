@@ -72,6 +72,8 @@ export default defineSchema({
     reminderDaysBefore: v.array(v.number()),
     nextReminderAt: v.optional(v.number()), // epoch ms of earliest upcoming reminder
     lastNotifiedBillingDate: v.optional(v.number()), // billing date epoch ms we last notified for
+    nextTrialReminderAt: v.optional(v.number()), // epoch ms of earliest upcoming trial-end reminder
+    lastNotifiedTrialEndDate: v.optional(v.number()), // trial end date epoch ms we last notified for
     active: v.boolean(), // soft delete flag
     deletedAt: v.optional(v.number()), // epoch ms when soft-deleted (for 14-day purge)
     createdAt: v.number(),

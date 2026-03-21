@@ -20,6 +20,8 @@ export type Subscription = {
   reminderDaysBefore: number[];
   nextReminderAt?: number; // epoch ms
   lastNotifiedBillingDate?: number; // epoch ms
+  nextTrialReminderAt?: number; // epoch ms
+  lastNotifiedTrialEndDate?: number; // epoch ms
   active: boolean;
   deletedAt?: number; // epoch ms when moved to trash
   createdAt: number;
@@ -28,7 +30,14 @@ export type Subscription = {
 
 export type SubscriptionCreate = Omit<
   Subscription,
-  'id' | 'nextReminderAt' | 'lastNotifiedBillingDate' | 'active' | 'createdAt' | 'updatedAt'
+  | 'id'
+  | 'nextReminderAt'
+  | 'lastNotifiedBillingDate'
+  | 'nextTrialReminderAt'
+  | 'lastNotifiedTrialEndDate'
+  | 'active'
+  | 'createdAt'
+  | 'updatedAt'
 >;
 
 export type SubscriptionUpdate = Partial<
@@ -38,6 +47,8 @@ export type SubscriptionUpdate = Partial<
     | 'userId'
     | 'nextReminderAt'
     | 'lastNotifiedBillingDate'
+    | 'nextTrialReminderAt'
+    | 'lastNotifiedTrialEndDate'
     | 'active'
     | 'createdAt'
     | 'updatedAt'

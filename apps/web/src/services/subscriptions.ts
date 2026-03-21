@@ -34,6 +34,8 @@ export function mapDocToWebSubscription(doc: any): Subscription {
     reminderDaysBefore: doc.reminderDaysBefore as number[],
     nextReminderAt: doc.nextReminderAt,
     lastNotifiedBillingDate: doc.lastNotifiedBillingDate,
+    nextTrialReminderAt: doc.nextTrialReminderAt,
+    lastNotifiedTrialEndDate: doc.lastNotifiedTrialEndDate,
     active: doc.active as boolean,
     deletedAt: doc.deletedAt ?? undefined,
     createdAt: doc.createdAt as number,

@@ -78,8 +78,10 @@ jest.mock(
       functions: {
         subscriptions: {
           getDueSubscriptionReminders: {},
+          getDueTrialReminders: {},
           getSubscriptionsWithOverdueBilling: {},
           advanceSubscriptionAfterReminder: {},
+          advanceSubscriptionAfterTrialReminder: {},
           advanceBillingSubscription: {},
         },
         push: {
