@@ -30,6 +30,8 @@ import { useNoteActions } from '../hooks/useNoteActions';
 import { useNoteSelection } from '../hooks/useNoteSelection';
 import { useToast } from '../hooks/useToast';
 import { useHasDueSubscriptions } from '../subscriptions/useHasDueSubscriptions';
+import { useRealtimeNotes } from '../notes/realtimeService';
+import { isMobileNotesRealtimeV1Enabled } from '../constants/featureFlags';
 import { RepeatRule } from '../../../../packages/shared/types/reminder';
 import { NoteContentType } from '../../../../packages/shared/types/note';
 import { useDebouncedValue } from '../../../../packages/shared/hooks/useDebouncedValue';
@@ -56,6 +58,76 @@ const DueSubscriptionsBridge = ({ onValue }: { onValue: (value: boolean) => void
   return null;
 };
 
+const RealtimeNotesBridge = ({ onValue }: { onValue: (notes: Note[] | undefined) => void }) => {
+  const notes = useRealtimeNotes(true);
+
+  useEffect(() => {
+    onValue(notes);
+  }, [notes, onValue]);
+
+  return null;
+};
+
+const sortNotesForDisplay = (input: Note[]): Note[] => {
+  return [...input].sort((a, b) => {
+    const pinnedSort = Number(Boolean(b.isPinned)) - Number(Boolean(a.isPinned));
+    if (pinnedSort !== 0) return pinnedSort;
+
+    const doneSort = Number(Boolean(a.done)) - Number(Boolean(b.done));
+    if (doneSort !== 0) return doneSort;
+
+    return b.updatedAt - a.updatedAt;
+  });
+};
+
+const areNoteCollectionsEqual = (a: Note[], b: Note[]): boolean => {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) {
+    const left = a[i];
+    const right = b[i];
+    if (left.id !== right.id) return false;
+    if (left.updatedAt !== right.updatedAt) return false;
+    if (left.syncStatus !== right.syncStatus) return false;
+    if (left.done !== right.done) return false;
+    if (left.active !== right.active) return false;
+    if (left.isPinned !== right.isPinned) return false;
+  }
+  return true;
+};
+
+const mergeRealtimeWithLocal = (localNotes: Note[], realtimeNotes: Note[]): Note[] => {
+  const localById = new Map(localNotes.map((note) => [note.id, note]));
+  const merged: Note[] = realtimeNotes.map((serverNote) => {
+    const localNote = localById.get(serverNote.id);
+    if (!localNote) return serverNote;
+
+    const localPending = localNote.syncStatus === 'pending' || localNote.syncStatus === 'conflict';
+    if (localPending) return localNote;
+
+    if (localNote.updatedAt > serverNote.updatedAt) return localNote;
+
+    return {
+      ...serverNote,
+      syncStatus: localNote.syncStatus ?? 'synced',
+      // For non-pending notes, always track latest server version from realtime stream.
+      serverVersion: serverNote.version ?? localNote.serverVersion ?? 0,
+    };
+  });
+
+  for (const localNote of localNotes) {
+    if (realtimeNotes.some((note) => note.id === localNote.id)) continue;
+    const keepLocal =
+      localNote.syncStatus === 'pending' ||
+      localNote.syncStatus === 'conflict' ||
+      (localNote.serverVersion ?? 0) === 0;
+    if (keepLocal && localNote.active) {
+      merged.push(localNote);
+    }
+  }
+
+  return sortNotesForDisplay(merged);
+};
+
 const NotesScreenContent = ({
   rescheduleNoteId,
   onRescheduleHandled,
@@ -68,6 +140,15 @@ const NotesScreenContent = ({
   onViewModeChange,
 }: NotesScreenProps) => {
   const { theme } = useTheme();
+  const realtimeReadEnabled = subscriptionsEnabled && isMobileNotesRealtimeV1Enabled();
+  const [realtimeNotes, setRealtimeNotes] = useState<Note[] | undefined>(undefined);
+  const handleRealtimeNotesChange = useCallback((incoming: Note[] | undefined) => {
+    setRealtimeNotes((prev) => {
+      if (prev === undefined && incoming === undefined) return prev;
+      if (prev && incoming && areNoteCollectionsEqual(prev, incoming)) return prev;
+      return incoming;
+    });
+  }, []);
   const [searchQuery, setSearchQuery] = useState('');
   const debouncedSearchQuery = useDebouncedValue(searchQuery, 250);
   const [drawerVisible, setDrawerVisible] = useState(false);
@@ -125,6 +206,18 @@ const NotesScreenContent = ({
     showToast,
     closeEditor: () => editorModalRef.current?.closeEditor(),
   });
+
+  useEffect(() => {
+    if (!realtimeReadEnabled) {
+      setRealtimeNotes(undefined);
+      return;
+    }
+    if (realtimeNotes === undefined) return;
+    setNotes((prev) => {
+      const merged = mergeRealtimeWithLocal(prev, realtimeNotes);
+      return areNoteCollectionsEqual(prev, merged) ? prev : merged;
+    });
+  }, [realtimeNotes, realtimeReadEnabled, setNotes]);
 
   const {
     selectedNoteIds,
@@ -392,6 +485,8 @@ const NotesScreenContent = ({
   };
 
   const styles = useMemo(() => createStyles(theme), [theme]);
+  const isRealtimeHydrating =
+    realtimeReadEnabled && realtimeNotes === undefined && notes.length === 0;
   const filteredNotes = useMemo(() => {
     const normalizedQuery = debouncedSearchQuery.trim().toLowerCase();
     if (!normalizedQuery) return notes;
@@ -405,6 +500,7 @@ const NotesScreenContent = ({
   return (
     <SafeAreaView style={styles.container}>
       {subscriptionsEnabled && <DueSubscriptionsBridge onValue={setHasDueSubscriptions} />}
+      {realtimeReadEnabled && <RealtimeNotesBridge onValue={handleRealtimeNotesChange} />}
 
       <NotesHeader
         viewMode={viewMode}
@@ -444,7 +540,7 @@ const NotesScreenContent = ({
       />
 
       {/* Content */}
-      {loading ? (
+      {loading || isRealtimeHydrating ? (
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={theme.colors.primary} />
         </View>

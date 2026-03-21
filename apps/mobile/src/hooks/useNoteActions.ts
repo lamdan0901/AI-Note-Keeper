@@ -128,8 +128,8 @@ export const useNoteActions = ({
         updatedAt: now,
 
         // Preserve sync-tracking fields from existing note to avoid false conflicts
-        serverVersion: editingNote?.serverVersion ?? 0,
-        version: editingNote?.version ?? 0,
+        serverVersion: editingNote?.serverVersion ?? editingNote?.version ?? 0,
+        version: editingNote?.version ?? editingNote?.serverVersion ?? 0,
         syncStatus: editingNote ? 'pending' : undefined,
       };
 

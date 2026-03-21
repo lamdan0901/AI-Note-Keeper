@@ -11,6 +11,19 @@ export type ConflictResult =
  * Returns a result indicating if auto-merge was successful or if user input is needed.
  */
 export const resolveNoteConflict = (local: Note, server: Note): ConflictResult => {
+  // Local delete should win even if server moved ahead.
+  // Otherwise we can silently drop delete outbox entries and the web view never reflects deletion.
+  if (local.active === false) {
+    return {
+      type: 'none',
+      mergedNote: {
+        ...local,
+        syncStatus: 'pending',
+        serverVersion: server.version,
+      },
+    };
+  }
+
   // If versions match, no conflict (though this function shouldn't be called in that case usually)
   if (local.serverVersion === server.version) {
     return { type: 'none', mergedNote: local };
