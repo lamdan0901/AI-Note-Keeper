@@ -9,6 +9,8 @@ import { api } from '../../../../convex/_generated/api';
 import { logSyncEvent } from '../reminders/logging';
 
 const DEVICE_ID_KEY = 'DEVICE_UNIQUE_ID';
+const PUSH_PERMISSION_DENIED_LOG_TS_KEY = 'PUSH_PERMISSION_DENIED_LOG_TS';
+const PUSH_PERMISSION_DENIED_LOG_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Default userId for this single-user app.
@@ -83,6 +85,21 @@ const getOrCreateStableDeviceId = async (override?: string): Promise<string> => 
   }
 };
 
+const shouldEmitDeniedPermissionWarning = async (): Promise<boolean> => {
+  try {
+    const lastLoggedAtRaw = await AsyncStorage.getItem(PUSH_PERMISSION_DENIED_LOG_TS_KEY);
+    const lastLoggedAt = lastLoggedAtRaw ? Number(lastLoggedAtRaw) : 0;
+    if (lastLoggedAt && Date.now() - lastLoggedAt < PUSH_PERMISSION_DENIED_LOG_INTERVAL_MS) {
+      return false;
+    }
+    await AsyncStorage.setItem(PUSH_PERMISSION_DENIED_LOG_TS_KEY, String(Date.now()));
+    return true;
+  } catch {
+    // If AsyncStorage is unavailable, keep previous behavior and emit the warning.
+    return true;
+  }
+};
+
 export const registerDevicePushToken = async (
   options: RegisterDeviceTokenOptions = {},
 ): Promise<void> => {
@@ -125,8 +142,14 @@ export const registerDevicePushToken = async (
       requested.granted,
     );
     if (!requested.granted) {
-      console.warn('[PushToken] ABORT: Permission denied');
-      logSyncEvent('warn', 'push_token_permission_denied');
+      const shouldWarn = await shouldEmitDeniedPermissionWarning();
+      if (shouldWarn) {
+        console.warn('[PushToken] ABORT: Permission denied');
+        logSyncEvent('warn', 'push_token_permission_denied');
+      } else {
+        console.log('[PushToken] SKIP: Permission denied (warning throttled)');
+        logSyncEvent('info', 'push_token_permission_denied_throttled');
+      }
       return;
     }
   }
