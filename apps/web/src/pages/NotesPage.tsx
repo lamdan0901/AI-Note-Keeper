@@ -22,7 +22,6 @@ import {
   sortNotes,
 } from '../services/notesUtils';
 import { buildReminderSyncFields } from '../services/reminderUtils';
-import { NotesHeader } from '../components/NotesHeader';
 import { NotesList } from '../components/NotesList';
 import { NoteEditorModal } from '../components/NoteEditorModal';
 
@@ -32,6 +31,8 @@ interface NotesPageProps {
   viewMode: NotesViewMode;
   viewingTrash: boolean;
   newNoteTrigger: number;
+  searchQuery: string;
+  onSaveStatusChange: (status: SaveStatus) => void;
   onTrashCountChange: (count: number) => void;
 }
 
@@ -39,6 +40,8 @@ export default function NotesPage({
   viewMode,
   viewingTrash,
   newNoteTrigger,
+  searchQuery,
+  onSaveStatusChange,
   onTrashCountChange,
 }: NotesPageProps): JSX.Element {
   const allNotes = useNotes();
@@ -53,7 +56,6 @@ export default function NotesPage({
   const [editingNote, setEditingNote] = useState<WebNote | null>(null);
   const [optimisticNotes, setOptimisticNotes] = useState<WebNote[] | null>(null);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
-  const [searchQuery, setSearchQuery] = useState('');
   const debouncedSearchQuery = useDebouncedValue(searchQuery, 250);
 
   // Active notes (for main view)
@@ -78,6 +80,10 @@ export default function NotesPage({
     () => filterBySearchQuery(displayNotes, debouncedSearchQuery),
     [displayNotes, debouncedSearchQuery],
   );
+  const filteredTrashNotes = useMemo(
+    () => filterBySearchQuery(trashNotes, debouncedSearchQuery),
+    [trashNotes, debouncedSearchQuery],
+  );
 
   useEffect(() => {
     if (newNoteTrigger > 0) {
@@ -90,6 +96,10 @@ export default function NotesPage({
   useEffect(() => {
     onTrashCountChange(trashNotes.length);
   }, [trashNotes.length, onTrashCountChange]);
+
+  useEffect(() => {
+    onSaveStatusChange(saveStatus);
+  }, [onSaveStatusChange, saveStatus]);
 
   const handleCardClick = useCallback((note: WebNote) => {
     setDraft(draftFromNote(note));
@@ -392,16 +402,11 @@ export default function NotesPage({
 
   return (
     <main className="notes-page">
-      <NotesHeader
-        saveStatus={saveStatus}
-        searchQuery={searchQuery}
-        onSearchQueryChange={setSearchQuery}
-        onClearSearch={() => setSearchQuery('')}
-      />
-
       {viewingTrash ? (
         <TrashView
-          notes={trashNotes}
+          notes={filteredTrashNotes}
+          totalCount={trashNotes.length}
+          searchQuery={debouncedSearchQuery}
           viewMode={viewMode}
           onRestore={handleRestoreNote}
           onDeleteForever={handlePermanentDelete}
@@ -465,18 +470,30 @@ function getDaysRemaining(deletedAt: number | undefined, updatedAt: number): num
 
 function TrashView({
   notes,
+  totalCount,
+  searchQuery,
   viewMode,
   onRestore,
   onDeleteForever,
   onEmptyTrash,
 }: {
   notes: WebNote[];
+  totalCount: number;
+  searchQuery: string;
   viewMode: NotesViewMode;
   onRestore: (note: WebNote) => void;
   onDeleteForever: (note: WebNote) => void;
   onEmptyTrash: () => void;
 }) {
   if (notes.length === 0) {
+    if (totalCount > 0 && searchQuery.trim().length > 0) {
+      return (
+        <div className="trash-empty">
+          <p className="trash-empty__text">No deleted notes match your search.</p>
+        </div>
+      );
+    }
+
     return (
       <div className="trash-empty">
         <p className="trash-empty__text">Trash is empty</p>

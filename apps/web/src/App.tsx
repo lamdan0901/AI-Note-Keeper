@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { LayoutGrid, List, Monitor, Moon, Plus, Sun, Trash2 } from 'lucide-react';
+import { LayoutGrid, List, Monitor, Moon, Plus, Sun, Trash2, X } from 'lucide-react';
 import NotesPage from './pages/NotesPage';
 import SubscriptionsPage from './pages/SubscriptionsPage';
 import { useSubscriptions } from './services/subscriptions';
@@ -20,6 +20,14 @@ const THEME_OPTIONS: Array<{ mode: ThemeMode; icon: React.ReactNode; label: stri
 ];
 
 type ActiveTab = 'notes' | 'subscriptions';
+type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
+
+const SAVE_STATUS_LABELS: Record<SaveStatus, string | null> = {
+  idle: null,
+  saving: 'Saving…',
+  saved: 'Saved',
+  error: 'Error saving',
+};
 
 export default function App(): JSX.Element {
   const [themeMode, setThemeMode] = useState<ThemeMode>(getInitialThemeMode);
@@ -34,6 +42,9 @@ export default function App(): JSX.Element {
   const [subsTrashCount, setSubsTrashCount] = useState(0);
   const [newNoteTrigger, setNewNoteTrigger] = useState(0);
   const [newSubTrigger, setNewSubTrigger] = useState(0);
+  const [notesSearchQuery, setNotesSearchQuery] = useState('');
+  const [subsSearchQuery, setSubsSearchQuery] = useState('');
+  const [notesSaveStatus, setNotesSaveStatus] = useState<SaveStatus>('idle');
 
   useEffect(() => {
     window.localStorage.setItem(THEME_STORAGE_KEY, themeMode);
@@ -60,6 +71,18 @@ export default function App(): JSX.Element {
     return () => mediaQuery.removeEventListener('change', handleThemeChange);
   }, [themeMode]);
 
+  const activeSearchQuery = activeTab === 'notes' ? notesSearchQuery : subsSearchQuery;
+  const activeSearchPlaceholder =
+    activeTab === 'notes'
+      ? notesViewingTrash
+        ? 'Search deleted notes'
+        : 'Search notes'
+      : subsViewingTrash
+        ? 'Search deleted subscriptions'
+        : 'Search subscriptions';
+  const hasSearch = activeSearchQuery.trim().length > 0;
+  const notesStatusLabel = SAVE_STATUS_LABELS[notesSaveStatus];
+
   return (
     <>
       <nav className="app-nav">
@@ -79,6 +102,40 @@ export default function App(): JSX.Element {
         >
           Subscriptions
         </button>
+        <div className="app-nav__search">
+          <input
+            className="app-nav__search-input"
+            type="text"
+            value={activeSearchQuery}
+            onChange={(event) => {
+              const nextValue = event.target.value;
+              if (activeTab === 'notes') {
+                setNotesSearchQuery(nextValue);
+              } else {
+                setSubsSearchQuery(nextValue);
+              }
+            }}
+            placeholder={activeSearchPlaceholder}
+            aria-label={activeSearchPlaceholder}
+          />
+          {hasSearch && (
+            <button
+              className="app-nav__search-clear"
+              type="button"
+              onClick={() => {
+                if (activeTab === 'notes') {
+                  setNotesSearchQuery('');
+                } else {
+                  setSubsSearchQuery('');
+                }
+              }}
+              aria-label="Clear search"
+              title="Clear search"
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
         <div className="app-nav__theme" role="radiogroup" aria-label="Theme mode">
           {THEME_OPTIONS.map((option) => (
             <button
@@ -101,6 +158,11 @@ export default function App(): JSX.Element {
         <div className="app-nav__actions">
           {activeTab === 'notes' ? (
             <>
+              {notesStatusLabel && (
+                <span className={`notes-header__status notes-header__status--${notesSaveStatus}`}>
+                  {notesStatusLabel}
+                </span>
+              )}
               <div className="notes-header__view-toggle" role="group" aria-label="View mode">
                 <button
                   className={`notes-header__view-btn${notesViewMode === 'grid' ? ' notes-header__view-btn--active' : ''}`}
@@ -198,6 +260,8 @@ export default function App(): JSX.Element {
           viewMode={notesViewMode}
           viewingTrash={notesViewingTrash}
           newNoteTrigger={newNoteTrigger}
+          searchQuery={notesSearchQuery}
+          onSaveStatusChange={setNotesSaveStatus}
           onTrashCountChange={setNotesTrashCount}
         />
       </div>
@@ -205,7 +269,7 @@ export default function App(): JSX.Element {
         <SubscriptionsPage
           viewMode={subsViewMode}
           viewingTrash={subsViewingTrash}
-          onToggleView={setSubsViewMode}
+          searchQuery={subsSearchQuery}
           newSubTrigger={newSubTrigger}
           onTrashCountChange={setSubsTrashCount}
         />

@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
+import { useDebouncedValue } from '../../../../packages/shared/hooks/useDebouncedValue';
 import type {
   Subscription,
   SubscriptionCreate,
@@ -27,7 +28,7 @@ import { SubscriptionEditorModal } from '../components/subscriptions/Subscriptio
 interface SubscriptionsPageProps {
   viewMode: 'grid' | 'list';
   viewingTrash: boolean;
-  onToggleView: (mode: 'grid' | 'list') => void;
+  searchQuery: string;
   newSubTrigger: number;
   onTrashCountChange: (count: number) => void;
 }
@@ -35,6 +36,7 @@ interface SubscriptionsPageProps {
 export default function SubscriptionsPage({
   viewMode,
   viewingTrash,
+  searchQuery,
   newSubTrigger,
   onTrashCountChange,
 }: SubscriptionsPageProps): JSX.Element {
@@ -47,9 +49,9 @@ export default function SubscriptionsPage({
   const permanentlyDeleteMutate = usePermanentlyDeleteSubscription();
   const emptyTrashMutate = useEmptySubscriptionTrash();
 
-  const [searchQuery, setSearchQuery] = useState('');
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingSubscription, setEditingSubscription] = useState<Subscription | null>(null);
+  const debouncedSearchQuery = useDebouncedValue(searchQuery, 250);
 
   useEffect(() => {
     if (newSubTrigger > 0) {
@@ -119,30 +121,22 @@ export default function SubscriptionsPage({
       list.map((item) => item.category.trim()).filter((value): value is string => value.length > 0),
     ),
   );
-  const filtered = searchQuery.trim()
-    ? list.filter((s) => s.serviceName.toLowerCase().includes(searchQuery.toLowerCase()))
+  const filtered = debouncedSearchQuery.trim()
+    ? list.filter((s) => s.serviceName.toLowerCase().includes(debouncedSearchQuery.toLowerCase()))
     : list;
 
   const trashed = deletedSubscriptions ?? [];
+  const filteredTrashed = debouncedSearchQuery.trim()
+    ? trashed.filter((s) =>
+        s.serviceName.toLowerCase().includes(debouncedSearchQuery.toLowerCase()),
+      )
+    : trashed;
 
   const totalMonthly = computeTotalMonthlyCost(list);
   const primaryCurrency = list[0]?.currency ?? 'USD';
 
   return (
     <div className="subs-page">
-      <header className="subs-header">
-        <div className="subs-header__search-wrap">
-          <input
-            className="subs-header__search"
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search subscriptions"
-            aria-label="Search subscriptions"
-          />
-        </div>
-      </header>
-
       <div className="total-cost">
         {!viewingTrash && list.length > 0 && (
           <span className="total-cost__total">
@@ -153,7 +147,9 @@ export default function SubscriptionsPage({
 
       {viewingTrash ? (
         <SubscriptionTrashView
-          subscriptions={trashed}
+          subscriptions={filteredTrashed}
+          totalCount={trashed.length}
+          searchQuery={debouncedSearchQuery}
           loading={deletedSubscriptions === undefined}
           viewMode={viewMode}
           onRestore={handleRestore}
@@ -166,7 +162,7 @@ export default function SubscriptionsPage({
             <p className="subs-page__loading">Loading subscriptions…</p>
           ) : filtered.length === 0 ? (
             <p className="subs-page__empty">
-              {searchQuery.trim()
+              {debouncedSearchQuery.trim()
                 ? 'No subscriptions match your search.'
                 : 'No subscriptions yet. Add one to get started.'}
             </p>
@@ -208,6 +204,8 @@ function getDaysRemaining(deletedAt: number | undefined, updatedAt: number): num
 
 function SubscriptionTrashView({
   subscriptions,
+  totalCount,
+  searchQuery,
   loading,
   viewMode,
   onRestore,
@@ -215,6 +213,8 @@ function SubscriptionTrashView({
   onEmptyTrash,
 }: {
   subscriptions: Subscription[];
+  totalCount: number;
+  searchQuery: string;
   loading: boolean;
   viewMode: 'grid' | 'list';
   onRestore: (sub: Subscription) => void;
@@ -226,6 +226,14 @@ function SubscriptionTrashView({
   }
 
   if (subscriptions.length === 0) {
+    if (totalCount > 0 && searchQuery.trim().length > 0) {
+      return (
+        <div className="trash-empty">
+          <p className="trash-empty__text">No deleted subscriptions match your search.</p>
+        </div>
+      );
+    }
+
     return (
       <div className="trash-empty">
         <p className="trash-empty__text">Trash is empty</p>
