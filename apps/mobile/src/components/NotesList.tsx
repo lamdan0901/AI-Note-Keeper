@@ -10,6 +10,64 @@ import {
 import { type Note } from '../db/notesRepo';
 import { NoteCard } from './NoteCard';
 import { type Theme, useTheme } from '../theme';
+import { parseChecklist } from '../../../../packages/shared/utils/checklist';
+
+// Estimate card height for balanced masonry column distribution.
+// Values are approximate pixel heights matching NoteCard's rendered layout.
+const GRID_CHARS_PER_LINE = 22; // ~card width 155px at font-size 14
+const estimateNoteHeight = (note: Note): number => {
+  const PADDING = 32; // top + bottom card padding
+  const TITLE_LINE_HEIGHT = 22;
+  const CONTENT_LINE_HEIGHT = 20;
+  const CHECKLIST_ITEM_HEIGHT = 26;
+  const REMINDER_HEIGHT = 38; // metaRow + badge
+
+  let height = PADDING;
+
+  const title = note.title?.trim() ?? '';
+  if (title) {
+    const lines = Math.max(1, Math.ceil(title.length / GRID_CHARS_PER_LINE));
+    height += lines * TITLE_LINE_HEIGHT + 8; // 8 = marginBottom xs
+  }
+
+  const content = note.content?.trim() ?? '';
+  if (content) {
+    if (note.contentType === 'checklist') {
+      const items = parseChecklist(content);
+      height += Math.min(items.length, 6) * CHECKLIST_ITEM_HEIGHT; // maxItems=6 in grid
+    } else {
+      const lines = Math.max(1, Math.ceil(content.length / GRID_CHARS_PER_LINE));
+      height += Math.min(lines, 8) * CONTENT_LINE_HEIGHT;
+    }
+  }
+
+  const effectiveTriggerAt = note.snoozedUntil ?? note.nextTriggerAt ?? note.triggerAt;
+  if (effectiveTriggerAt) {
+    height += REMINDER_HEIGHT;
+  }
+
+  return height;
+};
+
+const distributeIntoColumns = (notes: Note[]): { left: Note[]; right: Note[] } => {
+  const left: Note[] = [];
+  const right: Note[] = [];
+  let leftHeight = 0;
+  let rightHeight = 0;
+
+  for (const note of notes) {
+    const h = estimateNoteHeight(note);
+    if (leftHeight <= rightHeight) {
+      left.push(note);
+      leftHeight += h;
+    } else {
+      right.push(note);
+      rightHeight += h;
+    }
+  }
+
+  return { left, right };
+};
 
 interface NotesListProps {
   notes: Note[];
@@ -66,34 +124,12 @@ export const NotesList: React.FC<NotesListProps> = ({
 
   // Distribute notes into two columns for masonry layout (Google Keep style)
   const { leftColumn, rightColumn } = useMemo(() => {
-    const left: Note[] = [];
-    const right: Note[] = [];
-
-    // Simple distribution: alternate notes between columns
-    // For better distribution, we'd need to measure heights, but this works well enough
-    otherNotes.forEach((note, index) => {
-      if (index % 2 === 0) {
-        left.push(note);
-      } else {
-        right.push(note);
-      }
-    });
-
+    const { left, right } = distributeIntoColumns(otherNotes);
     return { leftColumn: left, rightColumn: right };
   }, [otherNotes]);
 
   const { pinnedLeft, pinnedRight } = useMemo(() => {
-    const left: Note[] = [];
-    const right: Note[] = [];
-
-    pinnedNotes.forEach((note, index) => {
-      if (index % 2 === 0) {
-        left.push(note);
-      } else {
-        right.push(note);
-      }
-    });
-
+    const { left, right } = distributeIntoColumns(pinnedNotes);
     return { pinnedLeft: left, pinnedRight: right };
   }, [pinnedNotes]);
 
