@@ -138,6 +138,14 @@ function dateInputToEpoch(val: string): number {
   return new Date(y, m - 1, d).getTime();
 }
 
+function todayDateInput(): string {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
 export function SubscriptionEditorModal({
   subscription,
   onSave,
@@ -145,6 +153,7 @@ export function SubscriptionEditorModal({
 }: SubscriptionEditorModalProps) {
   const isNew = subscription === null;
   const dialogRef = useRef<HTMLDivElement>(null);
+  const minAllowedDate = todayDateInput();
 
   const [serviceName, setServiceName] = useState(subscription?.serviceName ?? '');
   const [category, setCategory] = useState<SubscriptionCategory>(subscription?.category ?? 'other');
@@ -168,6 +177,24 @@ export function SubscriptionEditorModal({
 
   const [showPresets, setShowPresets] = useState(false);
   const [presetFilter, setPresetFilter] = useState('');
+  const [serviceNameTouched, setServiceNameTouched] = useState(false);
+  const [priceTouched, setPriceTouched] = useState(false);
+  const [nextBillingDateTouched, setNextBillingDateTouched] = useState(false);
+  const [trialEndDateTouched, setTrialEndDateTouched] = useState(false);
+
+  const serviceNameError =
+    serviceNameTouched && !serviceName.trim() ? 'Service name is required.' : null;
+  const priceError = priceTouched && !price.trim() ? 'Price is required.' : null;
+  const nextBillingDateError =
+    nextBillingDateTouched && !nextBillingDate
+      ? 'Next billing date is required.'
+      : nextBillingDateTouched && nextBillingDate < minAllowedDate
+        ? 'Next billing date cannot be before today.'
+        : null;
+  const trialEndDateError =
+    trialEndDateTouched && trialEndDate && trialEndDate < minAllowedDate
+      ? 'Trial end date cannot be before today.'
+      : null;
 
   const filteredPresets = SERVICE_PRESETS.filter((p) =>
     p.name.toLowerCase().includes(presetFilter.toLowerCase()),
@@ -189,7 +216,20 @@ export function SubscriptionEditorModal({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const parsedPrice = parseFloat(price);
-    if (!serviceName.trim() || isNaN(parsedPrice) || !nextBillingDate) return;
+    const trialEndDateBeforeToday = trialEndDate && trialEndDate < minAllowedDate;
+    setServiceNameTouched(true);
+    setPriceTouched(true);
+    setNextBillingDateTouched(true);
+    setTrialEndDateTouched(true);
+    if (
+      !serviceName.trim() ||
+      isNaN(parsedPrice) ||
+      !nextBillingDate ||
+      nextBillingDate < minAllowedDate ||
+      trialEndDateBeforeToday
+    ) {
+      return;
+    }
 
     const base = {
       serviceName: serviceName.trim(),
@@ -281,13 +321,21 @@ export function SubscriptionEditorModal({
                   setShowPresets(true);
                 }}
                 onBlur={() => {
+                  setServiceNameTouched(true);
                   // Slight delay so mouseDown on preset item fires first
                   setTimeout(() => setShowPresets(false), 150);
                 }}
                 placeholder="e.g. Netflix, Spotify…"
                 autoComplete="off"
+                aria-invalid={Boolean(serviceNameError)}
+                aria-describedby={serviceNameError ? 'sub-serviceName-error' : undefined}
                 required
               />
+              {serviceNameError && (
+                <p id="sub-serviceName-error" className="sub-editor-modal__error" role="alert">
+                  {serviceNameError}
+                </p>
+              )}
               {showPresets && filteredPresets.length > 0 && (
                 <ul className="sub-editor-modal__presets" role="listbox">
                   {filteredPresets.slice(0, 8).map((p) => (
@@ -331,37 +379,47 @@ export function SubscriptionEditorModal({
           </div>
 
           {/* Price + currency */}
-          <div className="sub-editor-modal__row">
-            <div className="sub-editor-modal__field sub-editor-modal__field--grow">
-              <label className="sub-editor-modal__label" htmlFor="sub-price">
-                Price
-              </label>
-              <input
-                id="sub-price"
-                className="sub-editor-modal__input"
-                type="number"
-                min="0"
-                step="0.01"
-                value={price}
-                onChange={(e) => setPrice(e.target.value)}
-                placeholder="9.99"
-                required
-              />
+          <div>
+            <div className="sub-editor-modal__row">
+              <div className="sub-editor-modal__field sub-editor-modal__field--grow">
+                <label className="sub-editor-modal__label" htmlFor="sub-price">
+                  Price
+                </label>
+                <input
+                  id="sub-price"
+                  className="sub-editor-modal__input"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={price}
+                  onChange={(e) => setPrice(e.target.value)}
+                  onBlur={() => setPriceTouched(true)}
+                  placeholder="9.99"
+                  aria-invalid={Boolean(priceError)}
+                  aria-describedby={priceError ? 'sub-price-error' : undefined}
+                  required
+                />
+              </div>
+              <div className="sub-editor-modal__field">
+                <label className="sub-editor-modal__label" htmlFor="sub-currency">
+                  Currency
+                </label>
+                <input
+                  id="sub-currency"
+                  className="sub-editor-modal__input sub-editor-modal__input--short"
+                  type="text"
+                  maxLength={3}
+                  value={currency}
+                  onChange={(e) => setCurrency(e.target.value.toUpperCase())}
+                  placeholder="USD"
+                />
+              </div>
             </div>
-            <div className="sub-editor-modal__field">
-              <label className="sub-editor-modal__label" htmlFor="sub-currency">
-                Currency
-              </label>
-              <input
-                id="sub-currency"
-                className="sub-editor-modal__input sub-editor-modal__input--short"
-                type="text"
-                maxLength={3}
-                value={currency}
-                onChange={(e) => setCurrency(e.target.value.toUpperCase())}
-                placeholder="USD"
-              />
-            </div>
+            {priceError && (
+              <p id="sub-price-error" className="sub-editor-modal__error" role="alert">
+                {priceError}
+              </p>
+            )}
           </div>
 
           {/* Billing cycle */}
@@ -410,10 +468,19 @@ export function SubscriptionEditorModal({
               id="sub-nextBillingDate"
               className="sub-editor-modal__input"
               type="date"
+              min={minAllowedDate}
               value={nextBillingDate}
               onChange={(e) => setNextBillingDate(e.target.value)}
+              onBlur={() => setNextBillingDateTouched(true)}
+              aria-invalid={Boolean(nextBillingDateError)}
+              aria-describedby={nextBillingDateError ? 'sub-nextBillingDate-error' : undefined}
               required
             />
+            {nextBillingDateError && (
+              <p id="sub-nextBillingDate-error" className="sub-editor-modal__error" role="alert">
+                {nextBillingDateError}
+              </p>
+            )}
           </div>
 
           {/* Status */}
@@ -444,9 +511,18 @@ export function SubscriptionEditorModal({
               id="sub-trialEndDate"
               className="sub-editor-modal__input"
               type="date"
+              min={minAllowedDate}
               value={trialEndDate}
               onChange={(e) => setTrialEndDate(e.target.value)}
+              onBlur={() => setTrialEndDateTouched(true)}
+              aria-invalid={Boolean(trialEndDateError)}
+              aria-describedby={trialEndDateError ? 'sub-trialEndDate-error' : undefined}
             />
+            {trialEndDateError && (
+              <p id="sub-trialEndDate-error" className="sub-editor-modal__error" role="alert">
+                {trialEndDateError}
+              </p>
+            )}
           </div>
 
           {/* Reminder days */}

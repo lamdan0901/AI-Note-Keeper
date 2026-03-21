@@ -751,8 +751,6 @@ body {
   break-inside: avoid;
   -webkit-column-break-inside: avoid;
   page-break-inside: avoid;
-  content-visibility: auto;
-  contain-intrinsic-size: 238px;
 }
 @media (max-width: 1024px) {
   .notes-list--grid,
@@ -2196,6 +2194,10 @@ body {
 .sub-editor-modal__input:focus {
   border-color: var(--color-accent);
 }
+.sub-editor-modal__input[aria-invalid='true'],
+.sub-editor-modal__input[aria-invalid='true']:focus {
+  border-color: var(--color-error);
+}
 .sub-editor-modal__input::placeholder {
   color: var(--modal-fg-placeholder);
 }
@@ -2288,6 +2290,12 @@ body {
   display: flex;
   gap: 16px;
   flex-wrap: wrap;
+}
+.sub-editor-modal__error {
+  margin: 2px 0 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-status-error-text);
 }
 .sub-editor-modal__checkbox-label {
   display: inline-flex;
