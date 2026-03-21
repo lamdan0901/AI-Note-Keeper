@@ -143,7 +143,7 @@ export const SubscriptionEditorModal: React.FC<SubscriptionEditorModalProps> = (
     setTrialEndDate(epochToDate(subscription?.trialEndDate));
     setStatus(subscription?.status ?? 'active');
     setNotes(subscription?.notes ?? '');
-    setReminderDays(subscription?.reminderDaysBefore ?? [3]);
+    setReminderDays(subscription?.reminderDaysBefore ?? [1, 3]);
     setTouched(EMPTY_TOUCHED);
     setSubmitAttempted(false);
     setActiveDateField(null);
@@ -163,10 +163,7 @@ export const SubscriptionEditorModal: React.FC<SubscriptionEditorModalProps> = (
       ? 'Service name is required.'
       : null;
 
-  const priceError =
-    (submitAttempted || touched.price) && (!price.trim() || Number.isNaN(parsedPrice))
-      ? 'Price is required.'
-      : null;
+  const priceError = null;
 
   const customDaysError =
     billingCycle === 'custom' &&
@@ -243,8 +240,7 @@ export const SubscriptionEditorModal: React.FC<SubscriptionEditorModalProps> = (
 
     const hasBlockingErrors =
       !serviceName.trim() ||
-      !price.trim() ||
-      Number.isNaN(parsedPrice) ||
+      (price.trim() && Number.isNaN(parsedPrice)) ||
       (billingCycle === 'custom' &&
         (!customDays.trim() || Number.isNaN(parsedCustomDays) || parsedCustomDays < 1)) ||
       !nextBillingDate ||
@@ -256,7 +252,7 @@ export const SubscriptionEditorModal: React.FC<SubscriptionEditorModalProps> = (
     const payload = {
       serviceName: serviceName.trim(),
       category,
-      price: parsedPrice,
+      price: price.trim() ? parsedPrice : 0,
       currency: (currency.trim().toUpperCase() || 'USD').slice(0, 3),
       billingCycle,
       billingCycleCustomDays: billingCycle === 'custom' ? parsedCustomDays : undefined,

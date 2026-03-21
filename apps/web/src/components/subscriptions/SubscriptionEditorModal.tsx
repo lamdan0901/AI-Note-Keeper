@@ -162,7 +162,7 @@ export function SubscriptionEditorModal({
   const [status, setStatus] = useState<SubscriptionStatus>(subscription?.status ?? 'active');
   const [notes, setNotes] = useState(subscription?.notes ?? '');
   const [reminderDays, setReminderDays] = useState<number[]>(
-    subscription?.reminderDaysBefore ?? [3],
+    subscription?.reminderDaysBefore ?? [1, 3],
   );
 
   const [showPresets, setShowPresets] = useState(false);
@@ -176,7 +176,7 @@ export function SubscriptionEditorModal({
 
   const serviceNameError =
     serviceNameTouched && !serviceName.trim() ? 'Service name is required.' : null;
-  const priceError = priceTouched && !price.trim() ? 'Price is required.' : null;
+  const priceError = null;
   const nextBillingDateError =
     nextBillingDateTouched && !nextBillingDate
       ? 'Next billing date is required.'
@@ -211,10 +211,9 @@ export function SubscriptionEditorModal({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const parsedPrice = parseFloat(price);
+    const parsedPrice = price.trim() ? parseFloat(price) : 0;
     const trialEndDateBeforeToday = trialEndDate && trialEndDate < minAllowedDate;
     setServiceNameTouched(true);
-    setPriceTouched(true);
     setNextBillingDateTouched(true);
     setTrialEndDateTouched(true);
     if (
@@ -264,7 +263,7 @@ export function SubscriptionEditorModal({
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [handleKeyDown]);
 
-  const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
+  const handleBackdropMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     if (e.target === e.currentTarget) onClose();
   };
 
@@ -274,7 +273,7 @@ export function SubscriptionEditorModal({
       role="dialog"
       aria-modal="true"
       aria-label={isNew ? 'New subscription' : 'Edit subscription'}
-      onClick={handleBackdropClick}
+      onMouseDown={handleBackdropMouseDown}
     >
       <div
         className="modal-dialog sub-editor-modal"
@@ -418,10 +417,7 @@ export function SubscriptionEditorModal({
                   value={price}
                   onChange={(e) => setPrice(e.target.value)}
                   onBlur={() => setPriceTouched(true)}
-                  placeholder="9.99"
-                  aria-invalid={Boolean(priceError)}
-                  aria-describedby={priceError ? 'sub-price-error' : undefined}
-                  required
+                  placeholder="0.00"
                 />
               </div>
               <div className="sub-editor-modal__field">
@@ -439,11 +435,6 @@ export function SubscriptionEditorModal({
                 />
               </div>
             </div>
-            {priceError && (
-              <p id="sub-price-error" className="sub-editor-modal__error" role="alert">
-                {priceError}
-              </p>
-            )}
           </div>
 
           {/* Billing cycle */}
