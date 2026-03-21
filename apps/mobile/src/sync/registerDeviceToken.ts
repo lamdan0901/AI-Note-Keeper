@@ -100,7 +100,7 @@ export const registerDevicePushToken = async (
       '[PushToken] ABORT: No Convex URL. Env value:',
       String(process.env.EXPO_PUBLIC_CONVEX_URL ?? 'undefined'),
     );
-    logSyncEvent('error', 'push_token_missing_convex_url', {
+    logSyncEvent('warn', 'push_token_missing_convex_url', {
       rawEnv: String(process.env.EXPO_PUBLIC_CONVEX_URL ?? 'undefined'),
     });
     return;

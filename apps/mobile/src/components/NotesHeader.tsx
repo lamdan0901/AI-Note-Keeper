@@ -1,5 +1,5 @@
-import React, { useMemo, useRef, useState } from 'react';
-import { Keyboard, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Animated, Keyboard, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SyncStatusIndicator } from './SyncStatusIndicator';
 import { type Theme, useTheme } from '../theme';
@@ -11,6 +11,7 @@ type NotesHeaderProps = {
   onMenuPress: () => void;
   searchQuery: string;
   onSearchQueryChange: (value: string) => void;
+  showDueSubscriptionsIndicator?: boolean;
 };
 
 export const NotesHeader: React.FC<NotesHeaderProps> = ({
@@ -20,10 +21,12 @@ export const NotesHeader: React.FC<NotesHeaderProps> = ({
   onMenuPress,
   searchQuery,
   onSearchQueryChange,
+  showDueSubscriptionsIndicator = false,
 }) => {
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const inputRef = useRef<TextInput>(null);
+  const bumpAnim = useRef(new Animated.Value(0)).current;
   const [searchFocused, setSearchFocused] = useState(false);
   const hasSearchValue = searchQuery.trim().length > 0;
   const isSearchExpanded = hasSearchValue || searchFocused;
@@ -44,13 +47,60 @@ export const NotesHeader: React.FC<NotesHeaderProps> = ({
     Keyboard.dismiss();
   };
 
+  useEffect(() => {
+    if (!showDueSubscriptionsIndicator) {
+      bumpAnim.stopAnimation();
+      bumpAnim.setValue(0);
+      return;
+    }
+
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(bumpAnim, {
+          toValue: 1,
+          duration: 420,
+          useNativeDriver: true,
+        }),
+        Animated.timing(bumpAnim, {
+          toValue: 0,
+          duration: 420,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+
+    loop.start();
+    return () => loop.stop();
+  }, [bumpAnim, showDueSubscriptionsIndicator]);
+
   return (
     <View style={[styles.header, selectionMode && styles.headerHidden]}>
       <View style={styles.headerLeft}>
         <Pressable style={styles.iconButton} onPress={onMenuPress}>
           <Ionicons name="menu" size={26} color={theme.colors.text} />
+          {showDueSubscriptionsIndicator && (
+            <Animated.View
+              style={[
+                styles.dueDot,
+                {
+                  opacity: bumpAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0.55, 1],
+                  }),
+                  transform: [
+                    {
+                      scale: bumpAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0.88, 1.12],
+                      }),
+                    },
+                  ],
+                },
+              ]}
+            />
+          )}
         </Pressable>
-        <Text style={styles.headerTitle}>My Notes</Text>
+        {!isSearchExpanded && <Text style={styles.headerTitle}>My Notes</Text>}
       </View>
       <View style={styles.headerRight}>
         <SyncStatusIndicator />
@@ -141,6 +191,16 @@ const createStyles = (theme: Theme) =>
     },
     iconButton: {
       padding: theme.spacing.xs,
+      position: 'relative',
+    },
+    dueDot: {
+      position: 'absolute',
+      right: 2,
+      top: 2,
+      width: 9,
+      height: 9,
+      borderRadius: 5,
+      backgroundColor: theme.colors.cta,
     },
     searchContainer: {
       flexDirection: 'row',

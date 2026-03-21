@@ -29,6 +29,7 @@ import { RescheduleModal } from '../reminders/ui/SnoozeModal';
 import { useNoteActions } from '../hooks/useNoteActions';
 import { useNoteSelection } from '../hooks/useNoteSelection';
 import { useToast } from '../hooks/useToast';
+import { useHasDueSubscriptions } from '../subscriptions/useHasDueSubscriptions';
 import { RepeatRule } from '../../../../packages/shared/types/reminder';
 import { NoteContentType } from '../../../../packages/shared/types/note';
 import { useDebouncedValue } from '../../../../packages/shared/hooks/useDebouncedValue';
@@ -39,8 +40,20 @@ type NotesScreenProps = {
   editNoteId?: string | null;
   onEditHandled?: () => void;
   onNavigateToTrash?: () => void;
+  onNavigateToSubscriptions?: () => void;
+  subscriptionsEnabled?: boolean;
   viewMode: 'list' | 'grid';
   onViewModeChange: (mode: 'list' | 'grid') => void;
+};
+
+const DueSubscriptionsBridge = ({ onValue }: { onValue: (value: boolean) => void }) => {
+  const hasDueSubscriptions = useHasDueSubscriptions();
+
+  useEffect(() => {
+    onValue(hasDueSubscriptions);
+  }, [hasDueSubscriptions, onValue]);
+
+  return null;
 };
 
 const NotesScreenContent = ({
@@ -49,6 +62,8 @@ const NotesScreenContent = ({
   editNoteId,
   onEditHandled,
   onNavigateToTrash,
+  onNavigateToSubscriptions,
+  subscriptionsEnabled = false,
   viewMode,
   onViewModeChange,
 }: NotesScreenProps) => {
@@ -59,6 +74,7 @@ const NotesScreenContent = ({
   const [rescheduleTargetId, setRescheduleTargetId] = useState<string | null>(null);
   const [showRescheduleModal, setShowRescheduleModal] = useState(false);
   const [showScrollTop, setShowScrollTop] = useState(false);
+  const [hasDueSubscriptions, setHasDueSubscriptions] = useState(false);
   const scrollTopVisibleRef = useRef(false);
   const drawerAnim = useRef(new Animated.Value(0)).current;
   const editorModalRef = useRef<NoteEditorModalRef>(null);
@@ -388,6 +404,8 @@ const NotesScreenContent = ({
 
   return (
     <SafeAreaView style={styles.container}>
+      {subscriptionsEnabled && <DueSubscriptionsBridge onValue={setHasDueSubscriptions} />}
+
       <NotesHeader
         viewMode={viewMode}
         selectionMode={selectionMode}
@@ -395,16 +413,25 @@ const NotesScreenContent = ({
         onViewModeToggle={() => onViewModeChange(viewMode === 'grid' ? 'list' : 'grid')}
         searchQuery={searchQuery}
         onSearchQueryChange={setSearchQuery}
+        showDueSubscriptionsIndicator={subscriptionsEnabled && hasDueSubscriptions}
       />
 
       <SettingsDrawer
         visible={drawerVisible}
         onClose={closeDrawer}
         drawerAnim={drawerAnim}
+        activeScreen="notes"
+        onNotesPress={closeDrawer}
         onTrashPress={() => {
           closeDrawer();
           onNavigateToTrash?.();
         }}
+        onSubscriptionsPress={() => {
+          closeDrawer();
+          onNavigateToSubscriptions?.();
+        }}
+        showSubscriptionsEntry={subscriptionsEnabled}
+        showDueSubscriptionsIndicator={subscriptionsEnabled && hasDueSubscriptions}
       />
 
       <SelectionActionBar

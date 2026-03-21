@@ -301,7 +301,7 @@ export const processQueue = async (
   // Get Convex client
   const convexUrl = process.env.EXPO_PUBLIC_CONVEX_URL;
   if (!convexUrl) {
-    log('error', 'Missing Convex URL');
+    log('warn', 'Missing Convex URL, skipping queue push');
     return { total: 0, succeeded: 0, failed: 0, results: [] };
   }
   const client = new ConvexHttpClient(convexUrl);

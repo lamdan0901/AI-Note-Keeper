@@ -126,10 +126,18 @@ export const SyncProvider: React.FC<SyncProviderProps> = ({ children, userId = '
         hasConflicts: result.conflictCount > 0,
       }));
 
-      console.log('[SyncManager] Sync completed successfully', {
-        pendingCount,
-        hasConflicts: result.conflictCount > 0,
-      });
+      if (result.success) {
+        console.log('[SyncManager] Sync completed successfully', {
+          pendingCount,
+          hasConflicts: result.conflictCount > 0,
+        });
+      } else {
+        console.warn('[SyncManager] Sync completed with warnings', {
+          pendingCount,
+          hasConflicts: result.conflictCount > 0,
+          error: result.error,
+        });
+      }
     } catch (error) {
       console.error('[SyncManager] Sync failed:', error);
 
@@ -169,6 +177,10 @@ export const SyncProvider: React.FC<SyncProviderProps> = ({ children, userId = '
     (state: NetInfoState) => {
       const isOnline = state.isConnected === true && state.isInternetReachable === true;
       const wasOnline = syncState.isOnline;
+
+      if (isOnline === wasOnline) {
+        return;
+      }
 
       console.log('[SyncManager] Network state changed:', {
         isConnected: state.isConnected,

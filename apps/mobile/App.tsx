@@ -13,6 +13,7 @@ import { handleFcmMessage, handleNotificationResponse } from './src/sync/fcmMess
 import { checkStartupPermissions } from './src/reminders/permissions';
 import { NotesScreen } from './src/screens/NotesScreen';
 import { TrashScreen } from './src/screens/TrashScreen';
+import { SubscriptionsScreen } from './src/screens/SubscriptionsScreen';
 import { ThemeProvider, useTheme } from './src/theme';
 
 SplashScreen.preventAutoHideAsync();
@@ -23,6 +24,7 @@ import { getDb } from './src/db/bootstrap';
 
 const convexUrl = process.env.EXPO_PUBLIC_CONVEX_URL;
 const convexClient = convexUrl ? new ConvexReactClient(convexUrl) : null;
+const hasConvexBackend = Boolean(convexUrl);
 
 export default function App(): JSX.Element | null {
   const [isReady, setIsReady] = useState(false);
@@ -37,7 +39,9 @@ export default function App(): JSX.Element | null {
           await Notifications.requestPermissionsAsync();
         }
         await checkStartupPermissions();
-        await registerDevicePushToken();
+        if (hasConvexBackend) {
+          await registerDevicePushToken();
+        }
 
         const db = await getDb();
         await rescheduleAllActiveReminders(db);
@@ -112,13 +116,15 @@ export default function App(): JSX.Element | null {
     });
 
     // Re-register device token whenever FCM rotates it
-    const unsubscribeTokenRefresh = onTokenRefresh(messaging, async () => {
-      try {
-        await registerDevicePushToken();
-      } catch (e) {
-        console.error('[TokenRefresh] Failed to re-register token:', e);
-      }
-    });
+    const unsubscribeTokenRefresh = hasConvexBackend
+      ? onTokenRefresh(messaging, async () => {
+          try {
+            await registerDevicePushToken();
+          } catch (e) {
+            console.error('[TokenRefresh] Failed to re-register token:', e);
+          }
+        })
+      : () => {};
 
     // Handle notification tap/interaction
     const notificationSubscription = Notifications.addNotificationResponseReceivedListener(
@@ -145,6 +151,7 @@ export default function App(): JSX.Element | null {
       onRescheduleHandled={() => setRescheduleNoteId(null)}
       editNoteId={effectiveEditNoteId ?? undefined}
       onEditHandled={() => setEditNoteId(null)}
+      hasConvexClient={Boolean(convexClient)}
     />
   );
 
@@ -164,14 +171,16 @@ const AppContent = ({
   onRescheduleHandled,
   editNoteId,
   onEditHandled,
+  hasConvexClient,
 }: {
   rescheduleNoteId?: string;
   onRescheduleHandled: () => void;
   editNoteId?: string;
   onEditHandled: () => void;
+  hasConvexClient: boolean;
 }) => {
   const { theme, resolvedMode } = useTheme();
-  const [currentScreen, setCurrentScreen] = useState<'notes' | 'trash'>('notes');
+  const [currentScreen, setCurrentScreen] = useState<'notes' | 'trash' | 'subscriptions'>('notes');
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('grid');
 
   return (
@@ -183,6 +192,11 @@ const AppContent = ({
       />
       {currentScreen === 'trash' ? (
         <TrashScreen onBack={() => setCurrentScreen('notes')} viewMode={viewMode} />
+      ) : currentScreen === 'subscriptions' && hasConvexClient ? (
+        <SubscriptionsScreen
+          onNavigateToNotes={() => setCurrentScreen('notes')}
+          onNavigateToTrash={() => setCurrentScreen('trash')}
+        />
       ) : (
         <NotesScreen
           rescheduleNoteId={rescheduleNoteId}
@@ -190,6 +204,10 @@ const AppContent = ({
           editNoteId={editNoteId}
           onEditHandled={onEditHandled}
           onNavigateToTrash={() => setCurrentScreen('trash')}
+          onNavigateToSubscriptions={
+            hasConvexClient ? () => setCurrentScreen('subscriptions') : undefined
+          }
+          subscriptionsEnabled={hasConvexClient}
           viewMode={viewMode}
           onViewModeChange={setViewMode}
         />
