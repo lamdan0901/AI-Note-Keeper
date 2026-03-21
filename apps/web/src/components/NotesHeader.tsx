@@ -1,18 +1,11 @@
 import React from 'react';
-import { LayoutGrid, List, Plus, Trash2, X } from 'lucide-react';
-import type { NotesViewMode } from '../services/notesTypes';
+import { X } from 'lucide-react';
 
 interface NotesHeaderProps {
-  viewMode: NotesViewMode;
-  onToggleView: (mode: NotesViewMode) => void;
-  onNewNote: () => void;
   saveStatus: 'idle' | 'saving' | 'saved' | 'error';
   searchQuery: string;
   onSearchQueryChange: (value: string) => void;
   onClearSearch: () => void;
-  viewingTrash: boolean;
-  onToggleTrash: () => void;
-  trashCount: number;
 }
 
 const SAVE_STATUS_LABELS: Record<NotesHeaderProps['saveStatus'], string | null> = {
@@ -23,16 +16,10 @@ const SAVE_STATUS_LABELS: Record<NotesHeaderProps['saveStatus'], string | null> 
 };
 
 export function NotesHeader({
-  viewMode,
-  onToggleView,
-  onNewNote,
   saveStatus,
   searchQuery,
   onSearchQueryChange,
   onClearSearch,
-  viewingTrash,
-  onToggleTrash,
-  trashCount,
 }: NotesHeaderProps) {
   const statusLabel = SAVE_STATUS_LABELS[saveStatus];
   const hasSearch = searchQuery.trim().length > 0;
@@ -61,47 +48,13 @@ export function NotesHeader({
         )}
       </div>
 
-      <div className="notes-header__actions">
-        {statusLabel && (
+      {statusLabel && (
+        <div className="notes-header__actions">
           <span className={`notes-header__status notes-header__status--${saveStatus}`}>
             {statusLabel}
           </span>
-        )}
-        <div className="notes-header__view-toggle" role="group" aria-label="View mode">
-          <button
-            className={`notes-header__view-btn${viewMode === 'grid' ? ' notes-header__view-btn--active' : ''}`}
-            onClick={() => onToggleView('grid')}
-            aria-pressed={viewMode === 'grid'}
-            title="Grid view"
-          >
-            <LayoutGrid size={16} />
-          </button>
-          <button
-            className={`notes-header__view-btn${viewMode === 'list' ? ' notes-header__view-btn--active' : ''}`}
-            onClick={() => onToggleView('list')}
-            aria-pressed={viewMode === 'list'}
-            title="List view"
-          >
-            <List size={16} />
-          </button>
         </div>
-
-        <button className="notes-header__new-btn" onClick={onNewNote}>
-          <Plus size={16} /> New note
-        </button>
-
-        <button
-          className={`notes-header__trash-btn${viewingTrash ? ' notes-header__trash-btn--active' : ''}`}
-          onClick={onToggleTrash}
-          title={viewingTrash ? 'Back to notes' : 'View trash'}
-          aria-pressed={viewingTrash}
-        >
-          <Trash2 size={16} />
-          {!viewingTrash && trashCount > 0 && (
-            <span className="notes-header__trash-badge">{trashCount}</span>
-          )}
-        </button>
-      </div>
+      )}
     </header>
   );
 }

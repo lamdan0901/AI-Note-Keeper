@@ -28,13 +28,24 @@ import { NoteEditorModal } from '../components/NoteEditorModal';
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
-export default function NotesPage(): JSX.Element {
+interface NotesPageProps {
+  viewMode: NotesViewMode;
+  viewingTrash: boolean;
+  newNoteTrigger: number;
+  onTrashCountChange: (count: number) => void;
+}
+
+export default function NotesPage({
+  viewMode,
+  viewingTrash,
+  newNoteTrigger,
+  onTrashCountChange,
+}: NotesPageProps): JSX.Element {
   const allNotes = useNotes();
   const sync = useSyncNotes();
   const permanentlyDeleteNoteMutation = usePermanentlyDeleteNote();
   const emptyTrashMutation = useEmptyTrash();
 
-  const [viewMode, setViewMode] = useState<NotesViewMode>('grid');
   const [showScrollTop, setShowScrollTop] = useState(false);
   const scrollTopVisibleRef = useRef(false);
   const [modalOpen, setModalOpen] = useState(false);
@@ -44,7 +55,6 @@ export default function NotesPage(): JSX.Element {
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
   const [searchQuery, setSearchQuery] = useState('');
   const debouncedSearchQuery = useDebouncedValue(searchQuery, 250);
-  const [viewingTrash, setViewingTrash] = useState(false);
 
   // Active notes (for main view)
   const serverNotes = useMemo<WebNote[] | undefined>(() => {
@@ -69,11 +79,17 @@ export default function NotesPage(): JSX.Element {
     [displayNotes, debouncedSearchQuery],
   );
 
-  const handleNewNote = useCallback(() => {
-    setDraft(emptyDraft());
-    setEditingNote(null);
-    setModalOpen(true);
-  }, []);
+  useEffect(() => {
+    if (newNoteTrigger > 0) {
+      setDraft(emptyDraft());
+      setEditingNote(null);
+      setModalOpen(true);
+    }
+  }, [newNoteTrigger]);
+
+  useEffect(() => {
+    onTrashCountChange(trashNotes.length);
+  }, [trashNotes.length, onTrashCountChange]);
 
   const handleCardClick = useCallback((note: WebNote) => {
     setDraft(draftFromNote(note));
@@ -377,16 +393,10 @@ export default function NotesPage(): JSX.Element {
   return (
     <main className="notes-page">
       <NotesHeader
-        viewMode={viewMode}
-        onToggleView={setViewMode}
-        onNewNote={handleNewNote}
         saveStatus={saveStatus}
         searchQuery={searchQuery}
         onSearchQueryChange={setSearchQuery}
         onClearSearch={() => setSearchQuery('')}
-        viewingTrash={viewingTrash}
-        onToggleTrash={() => setViewingTrash((v) => !v)}
-        trashCount={trashNotes.length}
       />
 
       {viewingTrash ? (
