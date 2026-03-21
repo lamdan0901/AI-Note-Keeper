@@ -42,6 +42,7 @@ type NoteEditorModalProps = {
     color: string | null;
   }) => void;
   onDelete: () => void;
+  onResolveConflictPress?: (note: Note) => void;
   onClose?: () => void;
 };
 
@@ -63,7 +64,7 @@ export type NoteEditorModalRef = {
 };
 
 export const NoteEditorModal = forwardRef<NoteEditorModalRef, NoteEditorModalProps>(
-  function NoteEditorModal({ onSave, onDelete, onClose }, ref) {
+  function NoteEditorModal({ onSave, onDelete, onResolveConflictPress, onClose }, ref) {
     const { theme, resolvedMode } = useTheme();
     const styles = useMemo(() => createStyles(theme), [theme]);
 
@@ -255,6 +256,15 @@ export const NoteEditorModal = forwardRef<NoteEditorModalRef, NoteEditorModalPro
                         }
                       />
                     </Pressable>
+                    {editingNote?.syncStatus === 'conflict' && onResolveConflictPress && (
+                      <Pressable
+                        style={styles.iconButton}
+                        onPress={() => onResolveConflictPress(editingNote)}
+                        accessibilityLabel="Resolve conflict"
+                      >
+                        <Ionicons name="warning-outline" size={24} color={theme.colors.error} />
+                      </Pressable>
+                    )}
                   </View>
                 </View>
 

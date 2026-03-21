@@ -14,15 +14,18 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { getDb } from '../db/bootstrap';
-import { getNoteById, Note } from '../db/notesRepo';
+import { getNoteById, Note, upsertNote } from '../db/notesRepo';
 import { saveNoteOffline } from '../notes/editor';
+import { markNoteSynced } from '../db/syncHelpers';
 import { syncNotes } from '../sync/noteSync';
+import { fetchNotes } from '../sync/fetchNotes';
 import { SyncProvider, useSyncState } from '../sync/syncManager';
 import { NotesList } from '../components/NotesList';
 import { NotesHeader } from '../components/NotesHeader';
 import { SettingsDrawer } from '../components/SettingsDrawer';
 import { BOTTOM_ACTION_BAR_HEIGHT, SelectionActionBar } from '../components/SelectionActionBar';
 import { NoteEditorModal, NoteEditorModalRef } from '../components/NoteEditorModal';
+import { ConflictResolutionModal } from '../components/ConflictResolutionModal';
 import { Toast } from '../components/Toast';
 import { type Theme, useTheme } from '../theme';
 import { RescheduleModal } from '../reminders/ui/SnoozeModal';
@@ -35,6 +38,13 @@ import { isMobileNotesRealtimeV1Enabled } from '../constants/featureFlags';
 import { RepeatRule } from '../../../../packages/shared/types/reminder';
 import { NoteContentType } from '../../../../packages/shared/types/note';
 import { useDebouncedValue } from '../../../../packages/shared/hooks/useDebouncedValue';
+
+const DEFAULT_USER_ID = 'local-user';
+
+function resolveUserId(): string {
+  const envUser = process.env.EXPO_PUBLIC_USER_ID;
+  return envUser || DEFAULT_USER_ID;
+}
 
 type NotesScreenProps = {
   rescheduleNoteId?: string | null;
@@ -156,6 +166,10 @@ const NotesScreenContent = ({
   const [showRescheduleModal, setShowRescheduleModal] = useState(false);
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [hasDueSubscriptions, setHasDueSubscriptions] = useState(false);
+  const [conflictModalVisible, setConflictModalVisible] = useState(false);
+  const [conflictLocalNote, setConflictLocalNote] = useState<Note | null>(null);
+  const [conflictServerNote, setConflictServerNote] = useState<Note | null>(null);
+  const [conflictLoading, setConflictLoading] = useState(false);
   const scrollTopVisibleRef = useRef(false);
   const drawerAnim = useRef(new Animated.Value(0)).current;
   const editorModalRef = useRef<NoteEditorModalRef>(null);
@@ -309,6 +323,150 @@ const NotesScreenContent = ({
     editorModalRef.current?.closeEditor();
     handleSelectionAwareDelete([editingNote.id]);
   }, [handleSelectionAwareDelete]);
+
+  const handleOpenConflictModal = useCallback(
+    async (note: Note) => {
+      if (note.syncStatus !== 'conflict') return;
+
+      setConflictLocalNote(note);
+      setConflictServerNote(null);
+      setConflictModalVisible(true);
+      setConflictLoading(true);
+
+      try {
+        const realtimeMatch = realtimeNotes?.find((candidate) => candidate.id === note.id) ?? null;
+        if (realtimeMatch) {
+          setConflictServerNote(realtimeMatch);
+          return;
+        }
+
+        const fetched = await fetchNotes(resolveUserId());
+        if (fetched.status === 'ok') {
+          const match = fetched.notes.find((candidate) => candidate.id === note.id) ?? null;
+          setConflictServerNote(match);
+        }
+      } catch (e) {
+        console.error(e);
+        showToast('Failed to load server version', true);
+      } finally {
+        setConflictLoading(false);
+      }
+    },
+    [realtimeNotes, showToast],
+  );
+
+  const closeConflictModal = useCallback(
+    (force: boolean = false) => {
+      if (conflictLoading && !force) return;
+      setConflictModalVisible(false);
+      setConflictLocalNote(null);
+      setConflictServerNote(null);
+    },
+    [conflictLoading],
+  );
+
+  const handleKeepLocalConflict = useCallback(async () => {
+    if (!conflictLocalNote) return;
+
+    notifyActionPending();
+    setConflictLoading(true);
+
+    try {
+      const db = await getDb();
+      const baseVersion =
+        conflictServerNote?.version ??
+        conflictLocalNote.serverVersion ??
+        conflictLocalNote.version ??
+        0;
+      const pendingLocal: Note = {
+        ...conflictLocalNote,
+        syncStatus: 'pending',
+        serverVersion: baseVersion,
+        version: baseVersion,
+        updatedAt: Date.now(),
+      };
+
+      await saveNoteOffline(db, pendingLocal, 'update');
+      await syncNotes(db);
+      setNotes((prev) =>
+        prev.map((note) =>
+          note.id === conflictLocalNote.id ? { ...note, syncStatus: 'synced' } : note,
+        ),
+      );
+      await loadNotes();
+      notifyActionSuccess();
+      setConflictLoading(false);
+      closeConflictModal(true);
+      editorModalRef.current?.closeEditor();
+    } catch (e) {
+      console.error(e);
+      notifyActionError('Failed to resolve conflict');
+      loadNotes();
+    } finally {
+      setConflictLoading(false);
+    }
+  }, [
+    closeConflictModal,
+    conflictLocalNote,
+    conflictServerNote,
+    loadNotes,
+    notifyActionError,
+    notifyActionPending,
+    notifyActionSuccess,
+    setNotes,
+  ]);
+
+  const handleUseServerConflict = useCallback(async () => {
+    if (!conflictLocalNote) return;
+
+    notifyActionPending();
+    setConflictLoading(true);
+
+    try {
+      const db = await getDb();
+
+      if (conflictServerNote) {
+        const serverVersion = conflictServerNote.version ?? conflictServerNote.serverVersion ?? 0;
+        await upsertNote(db, {
+          ...conflictServerNote,
+          syncStatus: 'synced',
+          serverVersion,
+        });
+        await markNoteSynced(db, conflictLocalNote.id, serverVersion);
+      } else {
+        await upsertNote(db, {
+          ...conflictLocalNote,
+          active: false,
+          deletedAt: Date.now(),
+          syncStatus: 'synced',
+          updatedAt: Date.now(),
+        });
+      }
+
+      await db.runAsync('DELETE FROM note_outbox WHERE noteId = ?', [conflictLocalNote.id]);
+      setNotes((prev) => prev.filter((note) => note.id !== conflictLocalNote.id || note.active));
+      await loadNotes();
+      notifyActionSuccess();
+      setConflictLoading(false);
+      closeConflictModal(true);
+      editorModalRef.current?.closeEditor();
+    } catch (e) {
+      console.error(e);
+      notifyActionError('Failed to apply server version');
+      loadNotes();
+    } finally {
+      setConflictLoading(false);
+    }
+  }, [
+    closeConflictModal,
+    conflictLocalNote,
+    conflictServerNote,
+    loadNotes,
+    notifyActionError,
+    notifyActionPending,
+    notifyActionSuccess,
+    setNotes,
+  ]);
 
   const handleNoteReschedule = useCallback((noteId: string) => {
     setRescheduleTargetId(noteId);
@@ -619,7 +777,22 @@ const NotesScreenContent = ({
         </Animated.View>
       )}
 
-      <NoteEditorModal ref={editorModalRef} onSave={saveNote} onDelete={handleDelete} />
+      <NoteEditorModal
+        ref={editorModalRef}
+        onSave={saveNote}
+        onDelete={handleDelete}
+        onResolveConflictPress={handleOpenConflictModal}
+      />
+
+      <ConflictResolutionModal
+        visible={conflictModalVisible}
+        localNote={conflictLocalNote}
+        serverNote={conflictServerNote}
+        loading={conflictLoading}
+        onClose={closeConflictModal}
+        onKeepLocal={handleKeepLocalConflict}
+        onUseServer={handleUseServerConflict}
+      />
 
       {rescheduleTargetId && (
         <RescheduleModal
