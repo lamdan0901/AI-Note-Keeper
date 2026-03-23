@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   Alert,
   Animated,
-  Easing,
   FlatList,
   Keyboard,
   Pressable,
@@ -20,7 +19,6 @@ import type {
   SubscriptionUpdate,
 } from '../../../../packages/shared/types/subscription';
 import { type Theme, useTheme } from '../theme';
-import { SettingsDrawer } from '../components/SettingsDrawer';
 import { SubscriptionEditorModal } from '../components/subscriptions/SubscriptionEditorModal';
 import {
   createSubscription,
@@ -42,11 +40,6 @@ import {
   formatPrice,
   getDaysUntilBilling,
 } from '../../../../packages/shared/utils/subscription';
-
-type SubscriptionsScreenProps = {
-  onNavigateToNotes: () => void;
-  onNavigateToTrash?: () => void;
-};
 
 type ViewMode = 'grid' | 'list';
 
@@ -77,10 +70,7 @@ const formatSubCategory = (category: string): string => {
     .join(' ');
 };
 
-const SubscriptionsScreenContent: React.FC<SubscriptionsScreenProps> = ({
-  onNavigateToNotes,
-  onNavigateToTrash,
-}) => {
+export const SubscriptionsScreen = () => {
   const { theme, resolvedMode } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const subscriptions = useSubscriptions();
@@ -90,36 +80,13 @@ const SubscriptionsScreenContent: React.FC<SubscriptionsScreenProps> = ({
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
-  const [drawerVisible, setDrawerVisible] = useState(false);
   const [editorVisible, setEditorVisible] = useState(false);
   const [savingSubscription, setSavingSubscription] = useState(false);
   const [editingSubscription, setEditingSubscription] = useState<Subscription | null>(null);
-  const drawerAnim = useRef(new Animated.Value(0)).current;
   const searchInputRef = useRef<TextInput>(null);
 
   const hasSearchValue = searchQuery.trim().length > 0;
   const isSearchExpanded = hasSearchValue || searchFocused;
-
-  const openDrawer = useCallback(() => {
-    setDrawerVisible(true);
-    Animated.timing(drawerAnim, {
-      toValue: 1,
-      duration: 260,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
-    }).start();
-  }, [drawerAnim]);
-
-  const closeDrawer = useCallback(() => {
-    Animated.timing(drawerAnim, {
-      toValue: 0,
-      duration: 220,
-      easing: Easing.in(Easing.cubic),
-      useNativeDriver: true,
-    }).start(() => {
-      setDrawerVisible(false);
-    });
-  }, [drawerAnim]);
 
   const handleOpenSearch = useCallback(() => {
     setSearchFocused(true);
@@ -382,9 +349,6 @@ const SubscriptionsScreenContent: React.FC<SubscriptionsScreenProps> = ({
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Pressable style={styles.iconButton} onPress={openDrawer} accessibilityLabel="Open menu">
-            <Ionicons name="menu" size={26} color={theme.colors.text} />
-          </Pressable>
           {!isSearchExpanded && <Text style={styles.headerTitle}>Subscriptions</Text>}
         </View>
 
@@ -446,23 +410,6 @@ const SubscriptionsScreenContent: React.FC<SubscriptionsScreenProps> = ({
           </Pressable>
         </View>
       </View>
-
-      <SettingsDrawer
-        visible={drawerVisible}
-        onClose={closeDrawer}
-        drawerAnim={drawerAnim}
-        activeScreen="subscriptions"
-        onNotesPress={() => {
-          closeDrawer();
-          onNavigateToNotes();
-        }}
-        onSubscriptionsPress={closeDrawer}
-        onTrashPress={() => {
-          closeDrawer();
-          onNavigateToTrash?.();
-        }}
-        showDueSubscriptionsIndicator={false}
-      />
 
       <SubscriptionSelectionActionBar
         selectionHeaderAnim={selectionHeaderAnim}
@@ -546,7 +493,7 @@ const SubscriptionsScreenContent: React.FC<SubscriptionsScreenProps> = ({
           onPress={handleOpenNew}
           accessibilityLabel="Create subscription"
         >
-          <Ionicons name="add" size={32} color="white" />
+          <Ionicons name="add" size={26} color="white" />
         </Pressable>
       </Animated.View>
 
@@ -558,21 +505,8 @@ const SubscriptionsScreenContent: React.FC<SubscriptionsScreenProps> = ({
         onClose={handleCloseEditor}
         onSave={handleSaveSubscription}
       />
-
-      <Pressable
-        style={styles.backButton}
-        onPress={onNavigateToNotes}
-        accessibilityLabel="Back to notes"
-      >
-        <Ionicons name="arrow-back" size={20} color={theme.colors.text} />
-        <Text style={styles.backButtonLabel}>Notes</Text>
-      </Pressable>
     </SafeAreaView>
   );
-};
-
-export const SubscriptionsScreen: React.FC<SubscriptionsScreenProps> = (props) => {
-  return <SubscriptionsScreenContent {...props} />;
 };
 
 const createStyles = (theme: Theme) =>
@@ -696,7 +630,7 @@ const createStyles = (theme: Theme) =>
     fabContainer: {
       position: 'absolute',
       right: theme.spacing.xl,
-      bottom: theme.spacing.xl,
+      bottom: 100,
     },
     cardTop: {
       flexDirection: 'row',
@@ -790,32 +724,12 @@ const createStyles = (theme: Theme) =>
       backgroundColor: theme.colors.error,
     },
     fab: {
-      width: 56,
-      height: 56,
-      borderRadius: 28,
+      width: 46,
+      height: 46,
+      borderRadius: 23,
       backgroundColor: theme.colors.primary,
       alignItems: 'center',
       justifyContent: 'center',
       ...theme.shadows.md,
-    },
-    backButton: {
-      position: 'absolute',
-      left: theme.spacing.md,
-      bottom: theme.spacing.md,
-      backgroundColor: theme.colors.surface,
-      borderColor: theme.colors.border,
-      borderWidth: 1,
-      borderRadius: 18,
-      paddingHorizontal: 12,
-      paddingVertical: 8,
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 4,
-      ...theme.shadows.sm,
-    },
-    backButtonLabel: {
-      color: theme.colors.text,
-      fontSize: theme.typography.sizes.sm,
-      fontWeight: '600',
     },
   });

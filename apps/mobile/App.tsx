@@ -14,6 +14,8 @@ import { checkStartupPermissions } from './src/reminders/permissions';
 import { NotesScreen } from './src/screens/NotesScreen';
 import { TrashScreen } from './src/screens/TrashScreen';
 import { SubscriptionsScreen } from './src/screens/SubscriptionsScreen';
+import { SettingsScreen } from './src/screens/SettingsScreen';
+import { BottomTabBar } from './src/components/BottomTabBar';
 import { ThemeProvider, useTheme } from './src/theme';
 
 SplashScreen.preventAutoHideAsync();
@@ -180,8 +182,11 @@ const AppContent = ({
   hasConvexClient: boolean;
 }) => {
   const { theme, resolvedMode } = useTheme();
-  const [currentScreen, setCurrentScreen] = useState<'notes' | 'trash' | 'subscriptions'>('notes');
+  const [currentScreen, setCurrentScreen] = useState<
+    'notes' | 'trash' | 'subscriptions' | 'settings'
+  >('notes');
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('grid');
+  const [hasDueSubscriptions, setHasDueSubscriptions] = useState(false);
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -190,57 +195,74 @@ const AppContent = ({
         backgroundColor={theme.colors.background}
         translucent={false}
       />
-      <View
-        style={currentScreen === 'notes' ? styles.screenVisible : styles.screenHidden}
-        pointerEvents={currentScreen === 'notes' ? 'auto' : 'none'}
-      >
-        <NotesScreen
-          rescheduleNoteId={rescheduleNoteId}
-          onRescheduleHandled={onRescheduleHandled}
-          editNoteId={editNoteId}
-          onEditHandled={onEditHandled}
-          onNavigateToTrash={() => setCurrentScreen('trash')}
-          onNavigateToSubscriptions={
-            hasConvexClient ? () => setCurrentScreen('subscriptions') : undefined
-          }
-          subscriptionsEnabled={hasConvexClient}
-          viewMode={viewMode}
-          onViewModeChange={setViewMode}
-        />
-      </View>
-
-      <View
-        style={currentScreen === 'trash' ? styles.screenVisible : styles.screenHidden}
-        pointerEvents={currentScreen === 'trash' ? 'auto' : 'none'}
-      >
-        <TrashScreen
-          viewMode={viewMode}
-          onViewModeChange={setViewMode}
-          onNavigateToNotes={() => setCurrentScreen('notes')}
-          onNavigateToSubscriptions={
-            hasConvexClient ? () => setCurrentScreen('subscriptions') : undefined
-          }
-          subscriptionsEnabled={hasConvexClient}
-        />
-      </View>
-
-      {hasConvexClient && (
+      <View style={styles.screenArea}>
         <View
-          style={currentScreen === 'subscriptions' ? styles.screenVisible : styles.screenHidden}
-          pointerEvents={currentScreen === 'subscriptions' ? 'auto' : 'none'}
+          style={currentScreen === 'notes' ? styles.screenVisible : styles.screenHidden}
+          pointerEvents={currentScreen === 'notes' ? 'auto' : 'none'}
         >
-          <SubscriptionsScreen
-            onNavigateToNotes={() => setCurrentScreen('notes')}
+          <NotesScreen
+            rescheduleNoteId={rescheduleNoteId}
+            onRescheduleHandled={onRescheduleHandled}
+            editNoteId={editNoteId}
+            onEditHandled={onEditHandled}
             onNavigateToTrash={() => setCurrentScreen('trash')}
+            onNavigateToSubscriptions={
+              hasConvexClient ? () => setCurrentScreen('subscriptions') : undefined
+            }
+            subscriptionsEnabled={hasConvexClient}
+            viewMode={viewMode}
+            onViewModeChange={setViewMode}
+            onDueSubscriptionsChange={hasConvexClient ? setHasDueSubscriptions : undefined}
           />
         </View>
-      )}
+
+        <View
+          style={currentScreen === 'trash' ? styles.screenVisible : styles.screenHidden}
+          pointerEvents={currentScreen === 'trash' ? 'auto' : 'none'}
+        >
+          <TrashScreen
+            viewMode={viewMode}
+            onViewModeChange={setViewMode}
+            onNavigateToNotes={() => setCurrentScreen('notes')}
+            onNavigateToSubscriptions={
+              hasConvexClient ? () => setCurrentScreen('subscriptions') : undefined
+            }
+            subscriptionsEnabled={hasConvexClient}
+          />
+        </View>
+
+        {hasConvexClient && (
+          <View
+            style={currentScreen === 'subscriptions' ? styles.screenVisible : styles.screenHidden}
+            pointerEvents={currentScreen === 'subscriptions' ? 'auto' : 'none'}
+          >
+            <SubscriptionsScreen />
+          </View>
+        )}
+
+        <View
+          style={currentScreen === 'settings' ? styles.screenVisible : styles.screenHidden}
+          pointerEvents={currentScreen === 'settings' ? 'auto' : 'none'}
+        >
+          <SettingsScreen />
+        </View>
+      </View>
+
+      <BottomTabBar
+        activeTab={currentScreen}
+        onTabPress={setCurrentScreen}
+        hasConvexClient={hasConvexClient}
+        showDueSubscriptionsIndicator={hasDueSubscriptions}
+      />
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
+    flex: 1,
+  },
+  screenArea: {
     flex: 1,
   },
   screenVisible: {

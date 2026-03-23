@@ -2,8 +2,6 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
-  Animated,
-  Easing,
   FlatList,
   Keyboard,
   Pressable,
@@ -28,7 +26,6 @@ import { type Theme, useTheme } from '../theme';
 import { SyncProvider } from '../sync/syncManager';
 import { api } from '../../../../convex/_generated/api';
 import { NoteCard } from '../components/NoteCard';
-import { SettingsDrawer } from '../components/SettingsDrawer';
 import { useDebouncedValue } from '../../../../packages/shared/hooks/useDebouncedValue';
 import type { Subscription } from '../../../../packages/shared/types/subscription';
 import {
@@ -321,38 +318,14 @@ const TrashScreenContent: React.FC<TrashScreenProps> = ({
   const debouncedSearchQuery = useDebouncedValue(searchQuery, 250);
   const [searchFocused, setSearchFocused] = useState(false);
   const [activeTab, setActiveTab] = useState<TrashTab>('notes');
-  const [drawerVisible, setDrawerVisible] = useState(false);
   const [subscriptionMeta, setSubscriptionMeta] = useState<SubscriptionTrashMeta>({
     count: 0,
     loading: false,
   });
   const subscriptionEmptyHandlerRef = useRef<() => void>(() => {});
   const inputRef = useRef<TextInput>(null);
-  const drawerAnim = useRef(new Animated.Value(0)).current;
-
   const hasSearchValue = searchQuery.trim().length > 0;
   const isSearchExpanded = hasSearchValue || searchFocused;
-
-  const openDrawer = useCallback(() => {
-    setDrawerVisible(true);
-    Animated.timing(drawerAnim, {
-      toValue: 1,
-      duration: 260,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
-    }).start();
-  }, [drawerAnim]);
-
-  const closeDrawer = useCallback(() => {
-    Animated.timing(drawerAnim, {
-      toValue: 0,
-      duration: 220,
-      easing: Easing.in(Easing.cubic),
-      useNativeDriver: true,
-    }).start(() => {
-      setDrawerVisible(false);
-    });
-  }, [drawerAnim]);
 
   const handleOpenSearch = useCallback(() => {
     setSearchFocused(true);
@@ -534,9 +507,6 @@ const TrashScreenContent: React.FC<TrashScreenProps> = ({
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Pressable style={styles.iconButton} onPress={openDrawer} accessibilityLabel="Open menu">
-            <Ionicons name="menu" size={26} color={theme.colors.text} />
-          </Pressable>
           {!isSearchExpanded && <Text style={styles.headerTitle}>Trash</Text>}
         </View>
 
@@ -598,24 +568,6 @@ const TrashScreenContent: React.FC<TrashScreenProps> = ({
           </Pressable>
         </View>
       </View>
-
-      <SettingsDrawer
-        visible={drawerVisible}
-        onClose={closeDrawer}
-        drawerAnim={drawerAnim}
-        activeScreen="trash"
-        onNotesPress={() => {
-          closeDrawer();
-          onNavigateToNotes?.();
-        }}
-        onTrashPress={closeDrawer}
-        onSubscriptionsPress={() => {
-          closeDrawer();
-          onNavigateToSubscriptions?.();
-        }}
-        showSubscriptionsEntry={subscriptionsEnabled}
-        showDueSubscriptionsIndicator={false}
-      />
 
       <View style={styles.tabsRow}>
         <View style={styles.tabsSwitch}>

@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
-  Easing,
   Pressable,
   SafeAreaView,
   StyleSheet,
@@ -22,7 +21,6 @@ import { fetchNotes } from '../sync/fetchNotes';
 import { SyncProvider, useSyncState } from '../sync/syncManager';
 import { NotesList } from '../components/NotesList';
 import { NotesHeader } from '../components/NotesHeader';
-import { SettingsDrawer } from '../components/SettingsDrawer';
 import { BOTTOM_ACTION_BAR_HEIGHT, SelectionActionBar } from '../components/SelectionActionBar';
 import { NoteEditorModal, NoteEditorModalRef } from '../components/NoteEditorModal';
 import { ConflictResolutionModal } from '../components/ConflictResolutionModal';
@@ -56,6 +54,7 @@ type NotesScreenProps = {
   subscriptionsEnabled?: boolean;
   viewMode: 'list' | 'grid';
   onViewModeChange: (mode: 'list' | 'grid') => void;
+  onDueSubscriptionsChange?: (value: boolean) => void;
 };
 
 const DueSubscriptionsBridge = ({ onValue }: { onValue: (value: boolean) => void }) => {
@@ -148,6 +147,7 @@ const NotesScreenContent = ({
   subscriptionsEnabled = false,
   viewMode,
   onViewModeChange,
+  onDueSubscriptionsChange,
 }: NotesScreenProps) => {
   const { theme } = useTheme();
   const realtimeReadEnabled = subscriptionsEnabled && isMobileNotesRealtimeV1Enabled();
@@ -161,40 +161,16 @@ const NotesScreenContent = ({
   }, []);
   const [searchQuery, setSearchQuery] = useState('');
   const debouncedSearchQuery = useDebouncedValue(searchQuery, 250);
-  const [drawerVisible, setDrawerVisible] = useState(false);
   const [rescheduleTargetId, setRescheduleTargetId] = useState<string | null>(null);
   const [showRescheduleModal, setShowRescheduleModal] = useState(false);
   const [showScrollTop, setShowScrollTop] = useState(false);
-  const [hasDueSubscriptions, setHasDueSubscriptions] = useState(false);
   const [conflictModalVisible, setConflictModalVisible] = useState(false);
   const [conflictLocalNote, setConflictLocalNote] = useState<Note | null>(null);
   const [conflictServerNote, setConflictServerNote] = useState<Note | null>(null);
   const [conflictLoading, setConflictLoading] = useState(false);
   const scrollTopVisibleRef = useRef(false);
-  const drawerAnim = useRef(new Animated.Value(0)).current;
   const editorModalRef = useRef<NoteEditorModalRef>(null);
   const listRef = useRef<FlatList<Note> | null>(null);
-
-  const openDrawer = useCallback(() => {
-    setDrawerVisible(true);
-    Animated.timing(drawerAnim, {
-      toValue: 1,
-      duration: 260,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
-    }).start();
-  }, [drawerAnim]);
-
-  const closeDrawer = useCallback(() => {
-    Animated.timing(drawerAnim, {
-      toValue: 0,
-      duration: 220,
-      easing: Easing.in(Easing.cubic),
-      useNativeDriver: true,
-    }).start(() => {
-      setDrawerVisible(false);
-    });
-  }, [drawerAnim]);
 
   // Get sync state and action helpers
   const { notifyActionPending, notifyActionSuccess, notifyActionError, lastSyncAt } =
@@ -657,35 +633,17 @@ const NotesScreenContent = ({
 
   return (
     <SafeAreaView style={styles.container}>
-      {subscriptionsEnabled && <DueSubscriptionsBridge onValue={setHasDueSubscriptions} />}
+      {subscriptionsEnabled && onDueSubscriptionsChange && (
+        <DueSubscriptionsBridge onValue={onDueSubscriptionsChange} />
+      )}
       {realtimeReadEnabled && <RealtimeNotesBridge onValue={handleRealtimeNotesChange} />}
 
       <NotesHeader
         viewMode={viewMode}
         selectionMode={selectionMode}
-        onMenuPress={openDrawer}
         onViewModeToggle={() => onViewModeChange(viewMode === 'grid' ? 'list' : 'grid')}
         searchQuery={searchQuery}
         onSearchQueryChange={setSearchQuery}
-        showDueSubscriptionsIndicator={subscriptionsEnabled && hasDueSubscriptions}
-      />
-
-      <SettingsDrawer
-        visible={drawerVisible}
-        onClose={closeDrawer}
-        drawerAnim={drawerAnim}
-        activeScreen="notes"
-        onNotesPress={closeDrawer}
-        onTrashPress={() => {
-          closeDrawer();
-          onNavigateToTrash?.();
-        }}
-        onSubscriptionsPress={() => {
-          closeDrawer();
-          onNavigateToSubscriptions?.();
-        }}
-        showSubscriptionsEntry={subscriptionsEnabled}
-        showDueSubscriptionsIndicator={subscriptionsEnabled && hasDueSubscriptions}
       />
 
       <SelectionActionBar
@@ -748,7 +706,7 @@ const NotesScreenContent = ({
         ]}
       >
         <Pressable style={styles.fab} onPress={() => editorModalRef.current?.openEditor()}>
-          <Ionicons name="add" size={32} color="white" />
+          <Ionicons name="add" size={26} color="white" />
         </Pressable>
       </Animated.View>
 
@@ -772,7 +730,7 @@ const NotesScreenContent = ({
             style={styles.scrollTopButton}
             onPress={() => listRef.current?.scrollToOffset({ offset: 0, animated: true })}
           >
-            <Ionicons name="arrow-up" size={26} color="white" />
+            <Ionicons name="arrow-up" size={20} color="white" />
           </Pressable>
         </Animated.View>
       )}
@@ -836,30 +794,30 @@ const createStyles = (theme: Theme) =>
     },
     fabContainer: {
       position: 'absolute',
-      bottom: theme.spacing.xl,
+      bottom: 100,
       right: theme.spacing.xl,
       zIndex: 900,
     },
     fab: {
       backgroundColor: theme.colors.primary,
-      width: 56,
-      height: 56,
-      borderRadius: 28,
+      width: 46,
+      height: 46,
+      borderRadius: 23,
       justifyContent: 'center',
       alignItems: 'center',
       ...theme.shadows.md,
     },
     scrollTopContainer: {
       position: 'absolute',
-      bottom: theme.spacing.xl,
+      bottom: 100,
       left: theme.spacing.xl,
       zIndex: 900,
     },
     scrollTopButton: {
       backgroundColor: theme.colors.primary,
-      width: 56,
-      height: 56,
-      borderRadius: 28,
+      width: 46,
+      height: 46,
+      borderRadius: 23,
       justifyContent: 'center',
       alignItems: 'center',
       ...theme.shadows.md,
