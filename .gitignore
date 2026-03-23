@@ -19,3 +19,4 @@ apps/mobile/google-services.json
 build
 .env.local
 google-services.json
+google-services-base64.txt

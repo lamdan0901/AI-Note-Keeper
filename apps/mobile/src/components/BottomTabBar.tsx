@@ -136,6 +136,7 @@ const createStyles = (theme: Theme) =>
       alignItems: 'center',
       paddingVertical: 8,
       paddingHorizontal: 8,
+      backgroundColor: theme.colors.surfaceTranslucent,
     },
     tab: {
       flex: 1,
