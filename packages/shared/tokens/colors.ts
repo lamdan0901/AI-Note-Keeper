@@ -7,7 +7,7 @@ export const lightColors = {
   textMuted: '#475569',
   border: '#E2E8F0',
   surface: '#FFFFFF',
-  surfaceTranslucent: 'rgba(255, 255, 255, 0.7)',
+  surfaceTranslucent: 'rgba(255, 255, 255, 0.9)',
   success: '#22c55e',
   error: '#ef4444',
 };
@@ -21,7 +21,7 @@ export const darkColors = {
   textMuted: '#ccd0d7',
   border: '#334155',
   surface: '#1E293B',
-  surfaceTranslucent: 'rgba(30, 41, 59, 0.7)',
+  surfaceTranslucent: 'rgba(30, 41, 59, 0.9)',
   success: '#4ADE80',
   error: '#F87171',
 };

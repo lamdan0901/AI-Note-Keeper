@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, View, StatusBar } from 'react-native';
+import { Platform, StyleSheet, View, StatusBar } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { getMessaging, onMessage, onTokenRefresh } from '@react-native-firebase/messaging';
 import { ConvexProvider, ConvexReactClient } from 'convex/react';
+import * as NavigationBar from 'expo-navigation-bar';
 
 import * as SplashScreen from 'expo-splash-screen';
 
@@ -187,6 +188,13 @@ const AppContent = ({
   >('notes');
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('grid');
   const [hasDueSubscriptions, setHasDueSubscriptions] = useState(false);
+
+  useEffect(() => {
+    if (Platform.OS === 'android') {
+      NavigationBar.setBackgroundColorAsync(theme.colors.background);
+      NavigationBar.setButtonStyleAsync(resolvedMode === 'dark' ? 'light' : 'dark');
+    }
+  }, [theme.colors.background, resolvedMode]);
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
