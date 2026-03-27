@@ -115,8 +115,7 @@ export const scheduleReminderNotification = async (
       if (triggerTime > now) {
         const hasPermission = await ReminderModule.hasExactAlarmPermission();
         if (!hasPermission) {
-          // Permission prompt is handled at startup by checkStartupPermissions().
-          // Just log here and fall through — native module uses inexact alarm as fallback.
+          // Exact alarm permission may be unavailable; native module falls back to inexact alarms.
           logSyncEvent('warn', 'scheduling_without_exact_alarm_permission', {
             reminderId: reminder.id,
           });

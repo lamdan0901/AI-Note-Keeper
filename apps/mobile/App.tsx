@@ -11,7 +11,6 @@ import { runMigrations } from './src/db/bootstrap';
 import { configureReminderNotifications } from './src/reminders/notifications';
 import { registerDevicePushToken } from './src/sync/registerDeviceToken';
 import { handleFcmMessage, handleNotificationResponse } from './src/sync/fcmMessageHandler';
-import { checkStartupPermissions } from './src/reminders/permissions';
 import { NotesScreen } from './src/screens/NotesScreen';
 import { TrashScreen } from './src/screens/TrashScreen';
 import { SubscriptionsScreen } from './src/screens/SubscriptionsScreen';
@@ -51,7 +50,6 @@ export default function App(): JSX.Element | null {
         if (!permissions.granted) {
           await Notifications.requestPermissionsAsync();
         }
-        await checkStartupPermissions();
         if (hasConvexBackend) {
           await registerDevicePushToken();
         }
