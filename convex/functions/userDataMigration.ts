@@ -599,22 +599,3 @@ export const applyUserDataMerge = mutation({
   },
   handler: async (ctx, args) => runApply(ctx, args),
 });
-
-export const migrateUserData = mutation({
-  args: {
-    fromUserId: v.string(),
-    toUserId: v.string(),
-    username: v.optional(v.string()),
-    password: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    const result = await runApply(ctx, { ...args, strategy: 'local' });
-    return {
-      migrated:
-        result.targetCounts.notes +
-        result.targetCounts.subscriptions +
-        result.targetCounts.events +
-        result.targetCounts.tokens,
-    };
-  },
-});

@@ -17,6 +17,7 @@ jest.mock('react-native-uuid', () => ({
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
+import * as sessionModule from '../../src/auth/session';
 import {
   AUTH_SESSION_KEY,
   DEVICE_ID_KEY,
@@ -40,6 +41,10 @@ describe('auth session lifecycle', () => {
 
     expect(id).toBe('env-device-id');
     expect(AsyncStorage.getItem).not.toHaveBeenCalled();
+  });
+
+  it('does not expose legacy migration key constant', () => {
+    expect('LEGACY_MIGRATION_DONE_KEY' in sessionModule).toBe(false);
   });
 
   it('returns stored device id when found', async () => {
@@ -111,6 +116,15 @@ describe('auth session lifecycle', () => {
 
   it('resolves current user id from device id when no session', async () => {
     (SecureStore.getItemAsync as any).mockResolvedValue(null);
+    (AsyncStorage.getItem as any).mockResolvedValue('device-only-id');
+
+    const userId = await resolveCurrentUserId();
+
+    expect(userId).toBe('device-only-id');
+  });
+
+  it('falls back to device id for malformed session payload', async () => {
+    (SecureStore.getItemAsync as any).mockResolvedValue(JSON.stringify({ userId: 'u1' }));
     (AsyncStorage.getItem as any).mockResolvedValue('device-only-id');
 
     const userId = await resolveCurrentUserId();

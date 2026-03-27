@@ -78,9 +78,9 @@ jest.mock(
 
 import {
   applyUserDataMerge,
-  migrateUserData,
   preflightUserDataMerge,
 } from '../../convex/functions/userDataMigration';
+import * as userDataMigrationModule from '../../convex/functions/userDataMigration';
 
 describe('userDataMigration preflight and apply', () => {
   beforeEach(() => {
@@ -449,32 +449,7 @@ describe('userDataMigration preflight and apply', () => {
     expect(result.targetCounts.notes).toBe(2);
   });
 
-  test('legacy migrateUserData uses local strategy semantics', async () => {
-    const handler = (migrateUserData as unknown as { _handler: Handler })._handler;
-
-    const salt = 'salt';
-    const password = 'password123';
-    (mockDb.get as any).mockResolvedValue({
-      _id: { toString: () => 'user-target' },
-      username: 'alice',
-      passwordHash: `${salt}:${sha256(salt + password)}`,
-    });
-    (usersQuery.first as any).mockResolvedValue({
-      _id: { toString: () => 'user-target' },
-      username: 'alice',
-      passwordHash: `${salt}:${sha256(salt + password)}`,
-    });
-    (notesQuery.collect as any).mockResolvedValue([]);
-    (subscriptionsQuery.collect as any).mockResolvedValue([]);
-    (eventsQuery.collect as any).mockResolvedValue([]);
-
-    const result = (await handler(mockCtx, {
-      fromUserId: 'device-1',
-      toUserId: 'user-target',
-      username: 'alice',
-      password,
-    })) as { migrated: number };
-
-    expect(result.migrated).toBe(0);
+  test('legacy migrateUserData mutation is no longer exported', () => {
+    expect((userDataMigrationModule as any).migrateUserData).toBeUndefined();
   });
 });

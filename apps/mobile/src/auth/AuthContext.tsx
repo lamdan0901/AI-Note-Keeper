@@ -7,7 +7,6 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ConvexHttpClient } from 'convex/browser';
 
 import { api } from '../../../../convex/_generated/api';
@@ -15,17 +14,23 @@ import { getDb } from '../db/bootstrap';
 import { syncNotes } from '../sync/noteSync';
 import {
   AuthSession,
+  clearAnonymousInstallKeys,
   clearAuthSession,
   getOrCreateDeviceId,
-  LEGACY_MIGRATION_DONE_KEY,
+  hasCompletedInstallBootstrap,
+  hasStoredDeviceId,
   loadAuthSession,
+  markInstallBootstrapCompleted,
   saveAuthSession,
 } from './session';
 import {
   backfillMissingLocalUserId as backfillUserIdInDb,
+  clearAllLocalData as clearAllLocalDataInDb,
   clearLocalUserData as clearLocalUserDataInDb,
+  inspectLocalDataFootprint,
   migrateLocalUserData as migrateLocalUserDataInDb,
 } from './localUserData';
+import { clearMobileWelcomeCompleted, hasCompletedMobileWelcome } from './localMode';
 import {
   MergeStrategy,
   MergeSummary,
@@ -36,8 +41,6 @@ import {
 const authApi = (api.functions as any).auth;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const migrationApi = (api.functions as any).userDataMigration;
-
-const DEFAULT_LEGACY_USER_ID = 'local-user';
 
 type AuthTransitionState =
   | 'idle'
@@ -131,6 +134,53 @@ const syncNotesForUser = async (userId: string): Promise<void> => {
   await syncNotes(db, userId);
 };
 
+const clearAllLocalData = async (): Promise<void> => {
+  const db = await getDb();
+  const cleared = await clearAllLocalDataInDb(db);
+  if (!cleared) {
+    throw new Error('Clearing all local data failed');
+  }
+};
+
+const hasExistingInstallFootprint = async (): Promise<boolean> => {
+  const [hasSession, hasDeviceId, hasCompletedWelcome] = await Promise.all([
+    loadAuthSession().then((session) => session !== null),
+    hasStoredDeviceId(),
+    hasCompletedMobileWelcome(),
+  ]);
+
+  if (hasSession || hasDeviceId || hasCompletedWelcome) {
+    return true;
+  }
+
+  const db = await getDb();
+  const footprint = await inspectLocalDataFootprint(db);
+  if (!footprint.hasAnyData) {
+    return false;
+  }
+
+  return footprint.hasNonLegacyData;
+};
+
+const runFreshInstallResetIfNeeded = async (): Promise<void> => {
+  const hasBootstrapped = await hasCompletedInstallBootstrap();
+  if (hasBootstrapped) {
+    return;
+  }
+
+  const shouldPreserveExistingInstall = await hasExistingInstallFootprint();
+  if (shouldPreserveExistingInstall) {
+    await markInstallBootstrapCompleted();
+    return;
+  }
+
+  await clearAllLocalData();
+  await clearAuthSession();
+  await clearAnonymousInstallKeys();
+  await clearMobileWelcomeCompleted();
+  await markInstallBootstrapCompleted();
+};
+
 type AuthProviderProps = {
   children: React.ReactNode;
 };
@@ -147,99 +197,86 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   });
   const currentSecretRef = useRef<{ username: string; password: string } | null>(null);
 
-  const runLegacyMigrationIfNeeded = useCallback(async () => {
-    const envUserId = process.env.EXPO_PUBLIC_USER_ID;
-    if (!envUserId || envUserId === DEFAULT_LEGACY_USER_ID) return;
-
-    const done = await AsyncStorage.getItem(LEGACY_MIGRATION_DONE_KEY);
-    if (done === '1') return;
-
-    const client = getConvexClient();
-    if (client && migrationApi?.migrateUserData) {
-      try {
-        await client.mutation(migrationApi.migrateUserData, {
-          fromUserId: DEFAULT_LEGACY_USER_ID,
-          toUserId: envUserId,
-        });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        if (!message.includes('Migration target must be a valid account user')) {
-          throw error;
-        }
-      }
-    }
-
-    await migrateLocalUserData(DEFAULT_LEGACY_USER_ID, envUserId);
-    await AsyncStorage.setItem(LEGACY_MIGRATION_DONE_KEY, '1');
-  }, []);
-
   useEffect(() => {
     const init = async () => {
-      const deviceId = await getOrCreateDeviceId();
-      await runLegacyMigrationIfNeeded();
-      const session = await loadAuthSession();
+      try {
+        await runFreshInstallResetIfNeeded();
+        const deviceId = await getOrCreateDeviceId();
+        const session = await loadAuthSession();
 
-      if (session) {
-        const client = getConvexClient();
-        if (!client || !authApi?.validateSession) {
-          await backfillMissingLocalUserId(session.userId);
-          setState({
-            isLoading: false,
-            isAuthenticated: true,
-            userId: session.userId,
-            username: session.username,
-            deviceId,
-            transitionState: 'idle',
-            pendingMerge: null,
-          });
-          return;
-        }
-
-        try {
-          const user = await client.query(authApi.validateSession, { userId: session.userId });
-          if (user) {
-            await backfillMissingLocalUserId(user.userId);
+        if (session) {
+          const client = getConvexClient();
+          if (!client || !authApi?.validateSession) {
+            await backfillMissingLocalUserId(session.userId);
             setState({
               isLoading: false,
               isAuthenticated: true,
-              userId: user.userId,
-              username: user.username,
+              userId: session.userId,
+              username: session.username,
               deviceId,
               transitionState: 'idle',
               pendingMerge: null,
             });
             return;
           }
-          await clearAuthSession();
-        } catch {
-          await backfillMissingLocalUserId(session.userId);
-          setState({
-            isLoading: false,
-            isAuthenticated: true,
-            userId: session.userId,
-            username: session.username,
-            deviceId,
-            transitionState: 'idle',
-            pendingMerge: null,
-          });
-          return;
-        }
-      }
 
-      await backfillMissingLocalUserId(deviceId);
-      setState({
-        isLoading: false,
-        isAuthenticated: false,
-        userId: deviceId,
-        username: null,
-        deviceId,
-        transitionState: 'idle',
-        pendingMerge: null,
-      });
+          try {
+            const user = await client.query(authApi.validateSession, { userId: session.userId });
+            if (user) {
+              await backfillMissingLocalUserId(user.userId);
+              setState({
+                isLoading: false,
+                isAuthenticated: true,
+                userId: user.userId,
+                username: user.username,
+                deviceId,
+                transitionState: 'idle',
+                pendingMerge: null,
+              });
+              return;
+            }
+            await clearAuthSession();
+          } catch {
+            await backfillMissingLocalUserId(session.userId);
+            setState({
+              isLoading: false,
+              isAuthenticated: true,
+              userId: session.userId,
+              username: session.username,
+              deviceId,
+              transitionState: 'idle',
+              pendingMerge: null,
+            });
+            return;
+          }
+        }
+
+        await backfillMissingLocalUserId(deviceId);
+        setState({
+          isLoading: false,
+          isAuthenticated: false,
+          userId: deviceId,
+          username: null,
+          deviceId,
+          transitionState: 'idle',
+          pendingMerge: null,
+        });
+      } catch {
+        const fallbackDeviceId = await getOrCreateDeviceId();
+        setState({
+          isLoading: false,
+          isAuthenticated: false,
+          userId: fallbackDeviceId,
+          username: null,
+          deviceId: fallbackDeviceId,
+          transitionState: 'idle',
+          pendingMerge: null,
+        });
+      }
     };
 
     void init();
-  }, [runLegacyMigrationIfNeeded]);
+  }, []);
 
   const finalizeAuthenticatedState = useCallback(
     async ({

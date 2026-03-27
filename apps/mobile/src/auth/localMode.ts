@@ -19,6 +19,10 @@ export const markMobileWelcomeCompleted = async (): Promise<void> => {
   await AsyncStorage.setItem(MOBILE_WELCOME_COMPLETED_KEY, '1');
 };
 
+export const clearMobileWelcomeCompleted = async (): Promise<void> => {
+  await AsyncStorage.removeItem(MOBILE_WELCOME_COMPLETED_KEY);
+};
+
 export const seedWelcomeSampleNoteIfNeeded = async (userId: string): Promise<boolean> => {
   const db = await getDb();
   const rows = await db.getAllAsync<{ count: number }>(
@@ -36,6 +40,7 @@ export const seedWelcomeSampleNoteIfNeeded = async (userId: string): Promise<boo
     userId,
     title: WELCOME_NOTE_TITLE,
     content: WELCOME_NOTE_CONTENT,
+    color: null,
     active: true,
     done: false,
     isPinned: false,

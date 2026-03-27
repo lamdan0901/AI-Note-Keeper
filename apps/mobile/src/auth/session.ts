@@ -4,7 +4,9 @@ import uuid from 'react-native-uuid';
 
 export const AUTH_SESSION_KEY = 'AUTH_SESSION';
 export const DEVICE_ID_KEY = 'DEVICE_UNIQUE_ID';
-export const LEGACY_MIGRATION_DONE_KEY = 'LEGACY_MIGRATION_DONE';
+export const INSTALL_BOOTSTRAP_DONE_KEY = 'INSTALL_BOOTSTRAP_DONE_V1';
+
+const LEGACY_MIGRATION_DONE_KEY = 'LEGACY_MIGRATION_DONE';
 
 export type AuthSession = {
   userId: string;
@@ -25,6 +27,11 @@ export const getOrCreateDeviceId = async (): Promise<string> => {
   } catch {
     return String(uuid.v4());
   }
+};
+
+export const hasStoredDeviceId = async (): Promise<boolean> => {
+  const existing = await AsyncStorage.getItem(DEVICE_ID_KEY);
+  return Boolean(existing && existing.trim().length > 0);
 };
 
 export const loadAuthSession = async (): Promise<AuthSession | null> => {
@@ -58,4 +65,18 @@ export const resolveCurrentUserId = async (): Promise<string> => {
     return session.userId;
   }
   return getOrCreateDeviceId();
+};
+
+export const hasCompletedInstallBootstrap = async (): Promise<boolean> => {
+  const raw = await AsyncStorage.getItem(INSTALL_BOOTSTRAP_DONE_KEY);
+  return raw === '1';
+};
+
+export const markInstallBootstrapCompleted = async (): Promise<void> => {
+  await AsyncStorage.setItem(INSTALL_BOOTSTRAP_DONE_KEY, '1');
+};
+
+export const clearAnonymousInstallKeys = async (): Promise<void> => {
+  await AsyncStorage.removeItem(DEVICE_ID_KEY);
+  await AsyncStorage.removeItem(LEGACY_MIGRATION_DONE_KEY);
 };
