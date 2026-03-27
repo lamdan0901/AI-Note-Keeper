@@ -13,14 +13,14 @@ interface ChecklistDisplayProps {
   isDone?: boolean;
 }
 
-export const ChecklistDisplay: React.FC<ChecklistDisplayProps> = ({
+function ChecklistDisplayComponent({
   items,
   maxItems = 5,
   theme,
   textColor,
   mutedTextColor,
   isDone = false,
-}) => {
+}: ChecklistDisplayProps) {
   const styles = useMemo(() => createStyles(theme), [theme]);
   const visible = maxItems > 0 ? items.slice(0, maxItems) : items;
   const remaining = items.length - visible.length;
@@ -51,7 +51,9 @@ export const ChecklistDisplay: React.FC<ChecklistDisplayProps> = ({
       )}
     </View>
   );
-};
+}
+
+export const ChecklistDisplay = React.memo(ChecklistDisplayComponent);
 
 const createStyles = (theme: Theme) =>
   StyleSheet.create({

@@ -42,6 +42,37 @@ describe('createHoldInteraction', () => {
 
     expect(onHold).toHaveBeenCalledTimes(1);
   });
+
+  test('restarting hold resets timer and fires once from latest start', () => {
+    const onHold = jest.fn();
+    const hold = createHoldInteraction({ delayMs: 250, onHold });
+
+    hold.start();
+    jest.advanceTimersByTime(160);
+    hold.start();
+    jest.advanceTimersByTime(220);
+    hold.end();
+
+    expect(onHold).toHaveBeenCalledTimes(0);
+
+    hold.start();
+    jest.advanceTimersByTime(250);
+    hold.end();
+
+    expect(onHold).toHaveBeenCalledTimes(1);
+  });
+
+  test('consumeHoldFired is one-shot after hold fires', () => {
+    const onHold = jest.fn();
+    const hold = createHoldInteraction({ delayMs: 250, onHold });
+
+    hold.start();
+    jest.advanceTimersByTime(250);
+    hold.end();
+
+    expect(hold.consumeHoldFired()).toBe(true);
+    expect(hold.consumeHoldFired()).toBe(false);
+  });
 });
 
 describe('note-card selection toggle flow', () => {
@@ -111,4 +142,3 @@ describe('note-card selection toggle flow', () => {
     expect(openCount.value).toBe(1);
   });
 });
-

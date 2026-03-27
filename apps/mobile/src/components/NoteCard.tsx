@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef } from 'react';
-import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { type Note } from '../db/notesRepo';
 import { type Theme, useTheme } from '../theme';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,8 +8,6 @@ import { formatReminder } from '../utils/formatReminder';
 import { hasCustomColor, resolveNoteColor } from '../constants/noteColors';
 import { ChecklistDisplay } from './ChecklistDisplay';
 import { parseChecklist } from '../../../../packages/shared/utils/checklist';
-
-const SELECTION_ANIMATION_DURATION_MS = 240;
 
 interface TrashInfo {
   daysRemaining: number;
@@ -32,7 +30,50 @@ interface NoteCardProps {
   trashInfo?: TrashInfo;
 }
 
-export const NoteCard: React.FC<NoteCardProps> = ({
+const areRenderedNoteFieldsEqual = (left: Note, right: Note): boolean => {
+  return (
+    left.id === right.id &&
+    left.title === right.title &&
+    left.content === right.content &&
+    left.contentType === right.contentType &&
+    left.done === right.done &&
+    left.syncStatus === right.syncStatus &&
+    left.color === right.color &&
+    left.snoozedUntil === right.snoozedUntil &&
+    left.nextTriggerAt === right.nextTriggerAt &&
+    left.triggerAt === right.triggerAt &&
+    left.repeat === right.repeat
+  );
+};
+
+const areTrashInfoEqual = (left?: TrashInfo, right?: TrashInfo): boolean => {
+  if (!left && !right) return true;
+  if (!left || !right) return false;
+
+  return (
+    left.daysRemaining === right.daysRemaining &&
+    left.actionPending === right.actionPending &&
+    left.onRestore === right.onRestore &&
+    left.onDeleteForever === right.onDeleteForever
+  );
+};
+
+export const areNoteCardPropsEqual = (
+  prevProps: Readonly<NoteCardProps>,
+  nextProps: Readonly<NoteCardProps>,
+): boolean => {
+  return (
+    prevProps.variant === nextProps.variant &&
+    prevProps.selectionMode === nextProps.selectionMode &&
+    prevProps.isSelected === nextProps.isSelected &&
+    prevProps.onPress === nextProps.onPress &&
+    prevProps.onLongPress === nextProps.onLongPress &&
+    areTrashInfoEqual(prevProps.trashInfo, nextProps.trashInfo) &&
+    areRenderedNoteFieldsEqual(prevProps.note, nextProps.note)
+  );
+};
+
+function NoteCardComponent({
   note,
   variant,
   onPress,
@@ -40,13 +81,11 @@ export const NoteCard: React.FC<NoteCardProps> = ({
   selectionMode = false,
   isSelected = false,
   trashInfo,
-}) => {
+}: NoteCardProps) {
   const { theme, resolvedMode } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const isGrid = variant === 'grid';
   const isDone = !!note.done;
-
-  const selectionAnim = useRef(new Animated.Value(isSelected ? 1 : 0)).current;
   const holdHandlerRef = useRef<(() => void) | null>(null);
   const holdInteractionRef = useRef<ReturnType<typeof createHoldInteraction> | null>(null);
 
@@ -67,21 +106,19 @@ export const NoteCard: React.FC<NoteCardProps> = ({
     };
   }, []);
 
-  useEffect(() => {
-    Animated.timing(selectionAnim, {
-      toValue: isSelected ? 1 : 0,
-      duration: SELECTION_ANIMATION_DURATION_MS,
-      useNativeDriver: true,
-    }).start();
-  }, [isSelected, selectionAnim]);
+  const { backgroundColor, useWhiteText, textColor, mutedTextColor } = useMemo(() => {
+    const isDark = resolvedMode === 'dark';
+    const resolvedBg = resolveNoteColor(note.color, isDark);
+    const hasColor = hasCustomColor(note.color);
+    const whiteText = hasColor && isDark;
 
-  const isDark = resolvedMode === 'dark';
-  const resolvedBg = resolveNoteColor(note.color, isDark);
-  const backgroundColor = resolvedBg || theme.colors.surface;
-  const hasColor = hasCustomColor(note.color);
-  const useWhiteText = hasColor && isDark;
-  const textColor = useWhiteText ? '#ffffff' : theme.colors.text;
-  const mutedTextColor = useWhiteText ? 'rgba(255, 255, 255, 0.8)' : theme.colors.textMuted;
+    return {
+      backgroundColor: resolvedBg || theme.colors.surface,
+      useWhiteText: whiteText,
+      textColor: whiteText ? '#ffffff' : theme.colors.text,
+      mutedTextColor: whiteText ? 'rgba(255, 255, 255, 0.8)' : theme.colors.textMuted,
+    };
+  }, [note.color, resolvedMode, theme.colors.surface, theme.colors.text, theme.colors.textMuted]);
 
   // Dynamic styles based on variant
   const containerStyle = [
@@ -91,15 +128,20 @@ export const NoteCard: React.FC<NoteCardProps> = ({
     { backgroundColor },
   ];
 
-  const effectiveTriggerAt = note.snoozedUntil ?? note.nextTriggerAt ?? note.triggerAt;
+  const effectiveTriggerAt = useMemo(
+    () => note.snoozedUntil ?? note.nextTriggerAt ?? note.triggerAt,
+    [note.nextTriggerAt, note.snoozedUntil, note.triggerAt],
+  );
 
-  const selectionCardStyle = useMemo(() => {
-    const scale = selectionAnim.interpolate({
-      inputRange: [0, 1],
-      outputRange: [1, 0.94],
-    });
-    return { transform: [{ scale }] };
-  }, [selectionAnim]);
+  const formattedReminder = useMemo(() => {
+    if (!effectiveTriggerAt) return null;
+    return formatReminder(new Date(effectiveTriggerAt), note.repeat ?? null);
+  }, [effectiveTriggerAt, note.repeat]);
+
+  const checklistItems = useMemo(() => {
+    if (note.contentType !== 'checklist') return [];
+    return parseChecklist(note.content);
+  }, [note.content, note.contentType]);
 
   const title = note.title?.trim();
   const content = note.content?.trim();
@@ -121,14 +163,7 @@ export const NoteCard: React.FC<NoteCardProps> = ({
         }}
       >
         {({ pressed }) => (
-          <Animated.View
-            style={[
-              containerStyle,
-              selectionCardStyle,
-              pressed && styles.pressed,
-              isSelected && styles.selected,
-            ]}
-          >
+          <View style={[containerStyle, pressed && styles.pressed, isSelected && styles.selected]}>
             {!!title && (
               <View style={styles.header}>
                 <View style={styles.headerLeft}>
@@ -140,7 +175,7 @@ export const NoteCard: React.FC<NoteCardProps> = ({
             )}
             {!!content && isChecklist ? (
               <ChecklistDisplay
-                items={parseChecklist(note.content)}
+                items={checklistItems}
                 maxItems={isGrid ? 6 : 4}
                 theme={theme}
                 textColor={textColor}
@@ -185,7 +220,7 @@ export const NoteCard: React.FC<NoteCardProps> = ({
                       { color: mutedTextColor },
                     ]}
                   >
-                    {formatReminder(new Date(effectiveTriggerAt), note.repeat ?? null)}
+                    {formattedReminder}
                   </Text>
                 </View>
               </View>
@@ -217,12 +252,14 @@ export const NoteCard: React.FC<NoteCardProps> = ({
                 </View>
               </View>
             )}
-          </Animated.View>
+          </View>
         )}
       </Pressable>
     </View>
   );
-};
+}
+
+export const NoteCard = React.memo(NoteCardComponent, areNoteCardPropsEqual);
 
 const createStyles = (theme: Theme) =>
   StyleSheet.create({

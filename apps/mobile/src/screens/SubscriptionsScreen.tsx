@@ -29,17 +29,14 @@ import {
   useSubscriptions,
   useUpdateSubscription,
 } from '../subscriptions/service';
-import {
-  SubscriptionSelectionActionBar,
-} from '../components/subscriptions/SubscriptionSelectionActionBar';
+import { SubscriptionSelectionActionBar } from '../components/subscriptions/SubscriptionSelectionActionBar';
 import { useSubscriptionSelection } from '../hooks/useSubscriptionSelection';
 import {
   computeTotalMonthlyCost,
-  formatBillingCycle,
   formatPrice,
-  getDaysUntilBilling,
 } from '../../../../packages/shared/utils/subscription';
 import { useUserId } from '../auth/useUserId';
+import { SubscriptionCard } from '../components/subscriptions/SubscriptionCard';
 
 type ViewMode = 'grid' | 'list';
 const TEMP_SUBSCRIPTION_ID_PREFIX = 'temp-subscription:';
@@ -388,9 +385,11 @@ export const SubscriptionsScreen = (props: SubscriptionsScreenProps) => {
       ),
     [list],
   );
-  const filtered = searchQuery.trim()
-    ? list.filter((item) => item.serviceName.toLowerCase().includes(searchQuery.toLowerCase()))
-    : list;
+  const filtered = useMemo(() => {
+    const normalizedSearch = searchQuery.trim().toLowerCase();
+    if (!normalizedSearch) return list;
+    return list.filter((item) => item.serviceName.toLowerCase().includes(normalizedSearch));
+  }, [list, searchQuery]);
 
   const estimateCardHeight = useCallback((item: Subscription) => {
     // Approximate per-card height to keep masonry columns visually balanced.
@@ -531,92 +530,24 @@ export const SubscriptionsScreen = (props: SubscriptionsScreenProps) => {
 
   const handleCardPress = useCallback(
     (subscription: Subscription) => {
-      if (selectionMode) {
-        handleSubscriptionLongPress(subscription.id);
-        return;
-      }
       handleOpenEdit(subscription);
     },
-    [handleOpenEdit, handleSubscriptionLongPress, selectionMode],
+    [handleOpenEdit],
   );
 
   const renderSubscriptionCard = useCallback(
     (item: Subscription, variant: ViewMode) => {
-      const daysUntil = getDaysUntilBilling(item.nextBillingDate);
-      const nextBillingLabel =
-        daysUntil < 0 ? 'Overdue' : daysUntil === 0 ? 'Today' : `${daysUntil}d left`;
-      const countdownTone =
-        daysUntil < 0 ? 'overdue' : daysUntil <= 3 ? 'urgent' : daysUntil <= 7 ? 'warning' : 'ok';
-      const isDarkMode = resolvedMode === 'dark';
-      const isSelected = selectedSubscriptionIds.has(item.id);
-
       return (
-        <Pressable
+        <SubscriptionCard
           key={item.id}
-          style={[
-            styles.card,
-            variant === 'grid' && styles.cardGrid,
-            isSelected && styles.cardSelected,
-          ]}
-          onPress={() => handleCardPress(item)}
-          onLongPress={() => handleSubscriptionLongPress(item.id)}
-          delayLongPress={250}
-        >
-          <View style={styles.cardTop}>
-            <Text style={styles.cardTitle}>{item.serviceName}</Text>
-            <View
-              style={[
-                styles.statusDot,
-                item.status === 'active'
-                  ? styles.statusActive
-                  : item.status === 'paused'
-                    ? styles.statusPaused
-                    : styles.statusCancelled,
-              ]}
-            />
-          </View>
-          <Text style={[styles.cardCategory, styles.cardCountdownChip]} numberOfLines={1}>
-            {formatSubCategory(item.category)}
-          </Text>
-          <Text style={styles.cardPricingLine}>
-            <Text style={styles.cardPrice}>{formatPrice(item.price, item.currency)}</Text>
-            <Text style={styles.cardCycle}>
-              {' '}
-              / {formatBillingCycle(item.billingCycle, item.billingCycleCustomDays)}
-            </Text>
-          </Text>
-          {item.status === 'active' && (
-            <View
-              style={[
-                styles.cardCountdownChip,
-                countdownTone === 'ok' &&
-                  (isDarkMode ? styles.cardCountdownOkDark : styles.cardCountdownOk),
-                countdownTone === 'warning' &&
-                  (isDarkMode ? styles.cardCountdownWarningDark : styles.cardCountdownWarning),
-                (countdownTone === 'urgent' || countdownTone === 'overdue') &&
-                  (isDarkMode ? styles.cardCountdownUrgentDark : styles.cardCountdownUrgent),
-              ]}
-            >
-              <Text
-                style={[
-                  styles.cardCountdownText,
-                  countdownTone === 'ok' &&
-                    (isDarkMode ? styles.cardCountdownTextOkDark : styles.cardCountdownTextOk),
-                  countdownTone === 'warning' &&
-                    (isDarkMode
-                      ? styles.cardCountdownTextWarningDark
-                      : styles.cardCountdownTextWarning),
-                  (countdownTone === 'urgent' || countdownTone === 'overdue') &&
-                    (isDarkMode
-                      ? styles.cardCountdownTextUrgentDark
-                      : styles.cardCountdownTextUrgent),
-                ]}
-              >
-                Next billing: {nextBillingLabel}
-              </Text>
-            </View>
-          )}
-        </Pressable>
+          subscription={item}
+          variant={variant}
+          isSelected={selectedSubscriptionIds.has(item.id)}
+          selectionMode={selectionMode}
+          resolvedMode={resolvedMode}
+          onOpen={handleCardPress}
+          onToggleSelection={handleSubscriptionLongPress}
+        />
       );
     },
     [
@@ -624,33 +555,7 @@ export const SubscriptionsScreen = (props: SubscriptionsScreenProps) => {
       handleSubscriptionLongPress,
       resolvedMode,
       selectedSubscriptionIds,
-      styles.card,
-      styles.cardCategory,
-      styles.cardCountdownChip,
-      styles.cardCountdownOk,
-      styles.cardCountdownOkDark,
-      styles.cardCountdownText,
-      styles.cardCountdownTextOk,
-      styles.cardCountdownTextOkDark,
-      styles.cardCountdownTextUrgent,
-      styles.cardCountdownTextUrgentDark,
-      styles.cardCountdownTextWarning,
-      styles.cardCountdownTextWarningDark,
-      styles.cardCountdownUrgent,
-      styles.cardCountdownUrgentDark,
-      styles.cardCountdownWarning,
-      styles.cardCountdownWarningDark,
-      styles.cardCycle,
-      styles.cardGrid,
-      styles.cardPrice,
-      styles.cardPricingLine,
-      styles.cardSelected,
-      styles.cardTitle,
-      styles.cardTop,
-      styles.statusActive,
-      styles.statusCancelled,
-      styles.statusDot,
-      styles.statusPaused,
+      selectionMode,
     ],
   );
 
@@ -749,11 +654,7 @@ export const SubscriptionsScreen = (props: SubscriptionsScreenProps) => {
           </Text>
         </View>
       ) : (
-        <Pressable
-          style={styles.contentPressable}
-          onPress={clearSelection}
-          disabled={!selectionMode}
-        >
+        <View style={styles.contentPressable}>
           {viewMode === 'grid' ? (
             <FlatList
               key="grid"
@@ -779,7 +680,7 @@ export const SubscriptionsScreen = (props: SubscriptionsScreenProps) => {
               renderItem={({ item }) => renderSubscriptionCard(item, 'list')}
             />
           )}
-        </Pressable>
+        </View>
       )}
 
       <Animated.View style={[styles.fabContainer]}>

@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import {
   FlatList,
   StyleSheet,
@@ -76,9 +76,6 @@ interface NotesListProps {
   onNoteLongPress: (noteId: string) => void;
   selectionMode: boolean;
   selectedNoteIds: Set<string>;
-  onNoteDone?: (noteId: string) => void;
-  onNoteReschedule?: (noteId: string) => void;
-  onNoteDelete?: (noteId: string) => void;
   onRefresh?: () => void;
   refreshing?: boolean;
   searchQuery?: string;
@@ -95,9 +92,6 @@ export const NotesList: React.FC<NotesListProps> = ({
   onNoteLongPress,
   selectionMode,
   selectedNoteIds,
-  onNoteDone,
-  onNoteReschedule,
-  onNoteDelete,
   onRefresh,
   refreshing,
   searchQuery = '',
@@ -108,7 +102,6 @@ export const NotesList: React.FC<NotesListProps> = ({
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const isGrid = viewMode === 'grid';
-  const showActionButtons = selectedNoteIds.size < 2;
 
   const { pinnedNotes, otherNotes } = useMemo(() => {
     const pinned: Note[] = [];
@@ -134,23 +127,22 @@ export const NotesList: React.FC<NotesListProps> = ({
     return { pinnedLeft: left, pinnedRight: right };
   }, [pinnedNotes]);
 
-  const renderNote = (item: Note) => (
-    <NoteCard
-      key={item.id}
-      note={item}
-      variant={viewMode}
-      onPress={onNotePress}
-      onLongPress={onNoteLongPress}
-      selectionMode={selectionMode}
-      isSelected={selectedNoteIds.has(item.id)}
-      showActionButtons={showActionButtons}
-      onDonePress={onNoteDone}
-      onReschedulePress={onNoteReschedule}
-      onDeletePress={onNoteDelete}
-    />
+  const renderNote = useCallback(
+    (item: Note) => (
+      <NoteCard
+        key={item.id}
+        note={item}
+        variant={viewMode}
+        onPress={onNotePress}
+        onLongPress={onNoteLongPress}
+        selectionMode={selectionMode}
+        isSelected={selectedNoteIds.has(item.id)}
+      />
+    ),
+    [onNoteLongPress, onNotePress, selectedNoteIds, selectionMode, viewMode],
   );
 
-  const renderPinnedSection = () => {
+  const renderPinnedSection = useCallback(() => {
     if (pinnedNotes.length === 0) return null;
 
     if (isGrid) {
@@ -173,7 +165,10 @@ export const NotesList: React.FC<NotesListProps> = ({
         <Text style={styles.sectionHeader}>Others</Text>
       </View>
     );
-  };
+  }, [isGrid, pinnedLeft, pinnedNotes, pinnedRight, renderNote, styles]);
+
+  const renderListItem = useCallback(({ item }: { item: Note }) => renderNote(item), [renderNote]);
+  const keyExtractor = useCallback((item: Note) => item.id, []);
 
   if (notes.length === 0) {
     return (
@@ -214,8 +209,8 @@ export const NotesList: React.FC<NotesListProps> = ({
       key={viewMode}
       data={otherNotes}
       ListHeaderComponent={renderPinnedSection}
-      renderItem={({ item }) => renderNote(item)}
-      keyExtractor={(item) => item.id}
+      renderItem={renderListItem}
+      keyExtractor={keyExtractor}
       contentContainerStyle={styles.listContent}
       onRefresh={onRefresh}
       refreshing={refreshing}

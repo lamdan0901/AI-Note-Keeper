@@ -190,7 +190,6 @@ const NotesScreenContent = ({
     handleRefresh,
     saveNote: saveNoteAction,
     performDelete,
-    handleNoteDone,
   } = useNoteActions({
     userId: userId ?? '',
     notifyActionPending,
@@ -455,13 +454,6 @@ const NotesScreenContent = ({
     setShowRescheduleModal(true);
   }, []);
 
-  const handleNoteDelete = useCallback(
-    (noteId: string) => {
-      handleSelectionAwareDelete([noteId]);
-    },
-    [handleSelectionAwareDelete],
-  );
-
   const handleBulkDeleteSelected = useCallback(() => {
     handleSelectionAwareDelete(Array.from(selectedNoteIds));
   }, [handleSelectionAwareDelete, selectedNoteIds]);
@@ -640,6 +632,14 @@ const NotesScreenContent = ({
     });
   }, [debouncedSearchQuery, notes]);
 
+  const handleNotePress = useCallback(
+    (noteId: string) => {
+      const note = filteredNotes.find((candidate) => candidate.id === noteId);
+      editorModalRef.current?.openEditor(note);
+    },
+    [filteredNotes],
+  );
+
   return (
     <SafeAreaView style={styles.container}>
       {subscriptionsEnabled && onDueSubscriptionsChange && (
@@ -672,24 +672,14 @@ const NotesScreenContent = ({
           <ActivityIndicator size="large" color={theme.colors.primary} />
         </View>
       ) : (
-        <Pressable
-          style={styles.contentPressable}
-          onPress={clearSelection}
-          disabled={!selectionMode}
-        >
+        <View style={styles.contentPressable}>
           <NotesList
             notes={filteredNotes}
             viewMode={viewMode}
-            onNotePress={(id) => {
-              const note = filteredNotes.find((n) => n.id === id);
-              editorModalRef.current?.openEditor(note);
-            }}
+            onNotePress={handleNotePress}
             onNoteLongPress={handleNoteLongPress}
             selectionMode={selectionMode}
             selectedNoteIds={selectedNoteIds}
-            onNoteDone={handleNoteDone}
-            onNoteReschedule={handleNoteReschedule}
-            onNoteDelete={handleNoteDelete}
             onRefresh={handleRefresh}
             refreshing={refreshing}
             searchQuery={debouncedSearchQuery}
@@ -697,7 +687,7 @@ const NotesScreenContent = ({
             scrollEventThrottle={16}
             listRef={listRef}
           />
-        </Pressable>
+        </View>
       )}
 
       {/* FAB */}
