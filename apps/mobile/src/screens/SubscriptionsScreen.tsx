@@ -30,7 +30,6 @@ import {
   useUpdateSubscription,
 } from '../subscriptions/service';
 import {
-  SUBSCRIPTION_SELECTION_ACTION_BAR_HEIGHT,
   SubscriptionSelectionActionBar,
 } from '../components/subscriptions/SubscriptionSelectionActionBar';
 import { useSubscriptionSelection } from '../hooks/useSubscriptionSelection';
@@ -72,7 +71,11 @@ const formatSubCategory = (category: string): string => {
     .join(' ');
 };
 
-export const SubscriptionsScreen = () => {
+type SubscriptionsScreenProps = {
+  onSelectionModeChange?: (isActive: boolean) => void;
+};
+
+export const SubscriptionsScreen = (props: SubscriptionsScreenProps) => {
   const userId = useUserId();
   const { theme, resolvedMode } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
@@ -373,7 +376,7 @@ export const SubscriptionsScreen = () => {
     clearSelection,
     removeSelectedSubscriptionIds,
     handleSubscriptionLongPress,
-  } = useSubscriptionSelection(list);
+  } = useSubscriptionSelection(list, props.onSelectionModeChange);
   const existingCategories = useMemo(
     () =>
       Array.from(
@@ -779,21 +782,7 @@ export const SubscriptionsScreen = () => {
         </Pressable>
       )}
 
-      <Animated.View
-        style={[
-          styles.fabContainer,
-          {
-            transform: [
-              {
-                translateY: selectionHeaderAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [0, -SUBSCRIPTION_SELECTION_ACTION_BAR_HEIGHT + 16],
-                }),
-              },
-            ],
-          },
-        ]}
-      >
+      <Animated.View style={[styles.fabContainer]}>
         <Pressable
           style={styles.fab}
           onPress={handleOpenNew}

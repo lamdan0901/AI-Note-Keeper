@@ -13,6 +13,7 @@ type UseSubscriptionSelectionResult = {
 
 export const useSubscriptionSelection = (
   subscriptions: Subscription[],
+  onSelectionModeChange?: (isActive: boolean) => void,
 ): UseSubscriptionSelectionResult => {
   const [selectedSubscriptionIds, setSelectedSubscriptionIds] = useState<Set<string>>(new Set());
   const selectionHeaderAnim = useRef(new Animated.Value(0)).current;
@@ -23,8 +24,16 @@ export const useSubscriptionSelection = (
       toValue: selectionMode ? 1 : 0,
       duration: 240,
       useNativeDriver: true,
-    }).start();
-  }, [selectionHeaderAnim, selectionMode]);
+    }).start(({ finished }) => {
+      if (!selectionMode && finished) {
+        onSelectionModeChange?.(false);
+      }
+    });
+
+    if (selectionMode) {
+      onSelectionModeChange?.(true);
+    }
+  }, [selectionHeaderAnim, selectionMode, onSelectionModeChange]);
 
   useEffect(() => {
     if (selectedSubscriptionIds.size === 0) return;

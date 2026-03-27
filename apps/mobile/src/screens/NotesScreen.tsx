@@ -21,7 +21,7 @@ import { fetchNotes } from '../sync/fetchNotes';
 import { SyncProvider, useSyncState } from '../sync/syncManager';
 import { NotesList } from '../components/NotesList';
 import { NotesHeader } from '../components/NotesHeader';
-import { BOTTOM_ACTION_BAR_HEIGHT, SelectionActionBar } from '../components/SelectionActionBar';
+import { SelectionActionBar } from '../components/SelectionActionBar';
 import { NoteEditorModal, NoteEditorModalRef } from '../components/NoteEditorModal';
 import { ConflictResolutionModal } from '../components/ConflictResolutionModal';
 import { Toast } from '../components/Toast';
@@ -50,6 +50,7 @@ type NotesScreenProps = {
   viewMode: 'list' | 'grid';
   onViewModeChange: (mode: 'list' | 'grid') => void;
   onDueSubscriptionsChange?: (value: boolean) => void;
+  onSelectionModeChange?: (isActive: boolean) => void;
 };
 
 const DueSubscriptionsBridge = ({ onValue }: { onValue: (value: boolean) => void }) => {
@@ -148,6 +149,7 @@ const NotesScreenContent = ({
   viewMode,
   onViewModeChange,
   onDueSubscriptionsChange,
+  onSelectionModeChange,
 }: NotesScreenProps) => {
   const { theme } = useTheme();
   const realtimeReadEnabled = subscriptionsEnabled && isMobileNotesRealtimeV1Enabled();
@@ -216,7 +218,7 @@ const NotesScreenContent = ({
     selectionHeaderAnim,
     clearSelection,
     handleNoteLongPress,
-  } = useNoteSelection(notes);
+  } = useNoteSelection(notes, onSelectionModeChange);
 
   const saveNote = useCallback(
     (editorState: {
@@ -697,42 +699,14 @@ const NotesScreenContent = ({
       )}
 
       {/* FAB */}
-      <Animated.View
-        style={[
-          styles.fabContainer,
-          {
-            transform: [
-              {
-                translateY: selectionHeaderAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [0, -BOTTOM_ACTION_BAR_HEIGHT + 16], // Move up
-                }),
-              },
-            ],
-          },
-        ]}
-      >
+      <Animated.View style={[styles.fabContainer]}>
         <Pressable style={styles.fab} onPress={() => editorModalRef.current?.openEditor()}>
           <Ionicons name="add" size={26} color="white" />
         </Pressable>
       </Animated.View>
 
       {showScrollTop && (
-        <Animated.View
-          style={[
-            styles.scrollTopContainer,
-            {
-              transform: [
-                {
-                  translateY: selectionHeaderAnim.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [0, -BOTTOM_ACTION_BAR_HEIGHT + 16],
-                  }),
-                },
-              ],
-            },
-          ]}
-        >
+        <Animated.View style={[styles.scrollTopContainer]}>
           <Pressable
             style={styles.scrollTopButton}
             onPress={() => listRef.current?.scrollToOffset({ offset: 0, animated: true })}

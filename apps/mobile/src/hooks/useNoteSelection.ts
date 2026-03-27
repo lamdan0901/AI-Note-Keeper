@@ -10,7 +10,10 @@ type UseNoteSelectionResult = {
   handleNoteLongPress: (noteId: string) => void;
 };
 
-export const useNoteSelection = (notes: Note[]): UseNoteSelectionResult => {
+export const useNoteSelection = (
+  notes: Note[],
+  onSelectionModeChange?: (isActive: boolean) => void,
+): UseNoteSelectionResult => {
   const [selectedNoteIds, setSelectedNoteIds] = useState<Set<string>>(new Set());
   const selectionHeaderAnim = useRef(new Animated.Value(0)).current;
   const selectionMode = selectedNoteIds.size > 0;
@@ -20,8 +23,15 @@ export const useNoteSelection = (notes: Note[]): UseNoteSelectionResult => {
       toValue: selectionMode ? 1 : 0,
       duration: 240,
       useNativeDriver: true,
-    }).start();
-  }, [selectionHeaderAnim, selectionMode]);
+    }).start(({ finished }) => {
+      if (!selectionMode && finished) {
+        onSelectionModeChange?.(false);
+      }
+    });
+    if (selectionMode) {
+      onSelectionModeChange?.(true);
+    }
+  }, [selectionHeaderAnim, selectionMode, onSelectionModeChange]);
 
   useEffect(() => {
     if (selectedNoteIds.size === 0) return;

@@ -217,6 +217,7 @@ const AppContent = ({
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('grid');
   const [hasDueSubscriptions, setHasDueSubscriptions] = useState(false);
   const [welcomeState, setWelcomeState] = useState<'checking' | 'showing' | 'done'>('checking');
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
 
   useEffect(() => {
     if (!hasConvexClient || !userId) return;
@@ -348,6 +349,7 @@ const AppContent = ({
             viewMode={viewMode}
             onViewModeChange={setViewMode}
             onDueSubscriptionsChange={hasConvexClient ? setHasDueSubscriptions : undefined}
+            onSelectionModeChange={setIsSelectionMode}
           />
         </View>
 
@@ -372,7 +374,7 @@ const AppContent = ({
             style={currentScreen === 'subscriptions' ? styles.screenVisible : styles.screenHidden}
             pointerEvents={currentScreen === 'subscriptions' ? 'auto' : 'none'}
           >
-            <SubscriptionsScreen />
+            <SubscriptionsScreen onSelectionModeChange={setIsSelectionMode} />
           </View>
         )}
 
@@ -425,12 +427,14 @@ const AppContent = ({
         onClose={cancelPendingMerge}
       />
 
-      <BottomTabBar
-        activeTab={currentScreen}
-        onTabPress={setCurrentScreen}
-        hasConvexClient={hasConvexClient}
-        showDueSubscriptionsIndicator={hasDueSubscriptions}
-      />
+      {!isSelectionMode && (
+        <BottomTabBar
+          activeTab={currentScreen}
+          onTabPress={setCurrentScreen}
+          hasConvexClient={hasConvexClient}
+          showDueSubscriptionsIndicator={hasDueSubscriptions}
+        />
+      )}
     </View>
   );
 };

@@ -43,7 +43,7 @@ export const NotesHeader: React.FC<NotesHeaderProps> = ({
   };
 
   return (
-    <View style={[styles.header, selectionMode && styles.headerHidden]}>
+    <View style={styles.header}>
       <View style={styles.headerLeft}>
         {!isSearchExpanded && <Text style={styles.headerTitle}>My Notes</Text>}
       </View>
@@ -166,8 +166,5 @@ const createStyles = (theme: Theme) =>
       borderRadius: 14,
       alignItems: 'center',
       justifyContent: 'center',
-    },
-    headerHidden: {
-      opacity: 0,
     },
   });
