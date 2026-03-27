@@ -21,6 +21,13 @@ import { ThemeProvider, useTheme } from './src/theme';
 import { AuthProvider, useAuth } from './src/auth/AuthContext';
 import { LoginScreen } from './src/screens/LoginScreen';
 import { RegisterScreen } from './src/screens/RegisterScreen';
+import { WelcomeScreen } from './src/screens/WelcomeScreen';
+import { AccountMergeModal } from './src/components/AccountMergeModal';
+import {
+  hasCompletedMobileWelcome,
+  markMobileWelcomeCompleted,
+  seedWelcomeSampleNoteIfNeeded,
+} from './src/auth/localMode';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -191,7 +198,17 @@ const AppContent = ({
   onEditHandled: () => void;
   hasConvexClient: boolean;
 }) => {
-  const { userId, isAuthenticated, username, logout, isLoading: authLoading } = useAuth();
+  const {
+    userId,
+    isAuthenticated,
+    username,
+    logout,
+    isLoading: authLoading,
+    transitionState,
+    pendingMerge,
+    resolvePendingMerge,
+    cancelPendingMerge,
+  } = useAuth();
   const { theme, resolvedMode } = useTheme();
   const [currentScreen, setCurrentScreen] = useState<
     'notes' | 'trash' | 'subscriptions' | 'settings'
@@ -199,6 +216,7 @@ const AppContent = ({
   const [authScreen, setAuthScreen] = useState<'login' | 'register' | null>(null);
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('grid');
   const [hasDueSubscriptions, setHasDueSubscriptions] = useState(false);
+  const [welcomeState, setWelcomeState] = useState<'checking' | 'showing' | 'done'>('checking');
 
   useEffect(() => {
     if (!hasConvexClient || !userId) return;
@@ -213,8 +231,96 @@ const AppContent = ({
     }
   }, [theme.colors.background, resolvedMode]);
 
+  useEffect(() => {
+    if (authLoading) return;
+
+    if (isAuthenticated) {
+      void markMobileWelcomeCompleted();
+      setWelcomeState('done');
+      return;
+    }
+
+    let cancelled = false;
+    const loadWelcomeState = async () => {
+      const hasCompleted = await hasCompletedMobileWelcome();
+      if (cancelled) return;
+      setWelcomeState(hasCompleted ? 'done' : 'showing');
+    };
+    void loadWelcomeState();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, isAuthenticated]);
+
   if (authLoading) {
     return <View style={styles.loadingContainer} />;
+  }
+
+  if (welcomeState === 'checking') {
+    return <View style={styles.loadingContainer} />;
+  }
+
+  const handleContinueLocal = async () => {
+    await seedWelcomeSampleNoteIfNeeded(userId);
+    await markMobileWelcomeCompleted();
+    setWelcomeState('done');
+  };
+
+  const handleResolveMerge = async (strategy: 'cloud' | 'local' | 'both') => {
+    const result = await resolvePendingMerge(strategy);
+    if (result.success) {
+      setAuthScreen(null);
+      return;
+    }
+  };
+
+  if (welcomeState === 'showing') {
+    return (
+      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+        <WelcomeScreen
+          onContinueLocal={() => {
+            void handleContinueLocal();
+          }}
+          onOpenLogin={() => setAuthScreen('login')}
+          onOpenRegister={() => setAuthScreen('register')}
+        />
+
+        {authScreen === 'login' && (
+          <View style={styles.authOverlay}>
+            <LoginScreen
+              onDismiss={() => setAuthScreen(null)}
+              onNavigateToRegister={() => setAuthScreen('register')}
+            />
+          </View>
+        )}
+
+        {authScreen === 'register' && (
+          <View style={styles.authOverlay}>
+            <RegisterScreen
+              onDismiss={() => setAuthScreen(null)}
+              onNavigateToLogin={() => setAuthScreen('login')}
+            />
+          </View>
+        )}
+
+        <AccountMergeModal
+          visible={Boolean(pendingMerge)}
+          summary={pendingMerge?.summary ?? null}
+          loading={transitionState === 'applying'}
+          onChooseCloud={() => {
+            void handleResolveMerge('cloud');
+          }}
+          onChooseLocal={() => {
+            void handleResolveMerge('local');
+          }}
+          onChooseBoth={() => {
+            void handleResolveMerge('both');
+          }}
+          onClose={cancelPendingMerge}
+        />
+      </View>
+    );
   }
 
   return (
@@ -302,6 +408,22 @@ const AppContent = ({
           />
         </View>
       )}
+
+      <AccountMergeModal
+        visible={Boolean(pendingMerge)}
+        summary={pendingMerge?.summary ?? null}
+        loading={transitionState === 'applying'}
+        onChooseCloud={() => {
+          void handleResolveMerge('cloud');
+        }}
+        onChooseLocal={() => {
+          void handleResolveMerge('local');
+        }}
+        onChooseBoth={() => {
+          void handleResolveMerge('both');
+        }}
+        onClose={cancelPendingMerge}
+      />
 
       <BottomTabBar
         activeTab={currentScreen}

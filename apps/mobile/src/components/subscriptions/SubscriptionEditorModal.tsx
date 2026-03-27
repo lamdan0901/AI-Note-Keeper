@@ -30,6 +30,7 @@ type SubscriptionEditorModalProps = {
   existingCategories: SubscriptionCategory[];
   saving: boolean;
   onClose: () => void;
+  onDelete: () => void | Promise<void>;
   onSave: (data: SubscriptionCreate | SubscriptionUpdate) => Promise<void>;
 };
 
@@ -101,6 +102,7 @@ export const SubscriptionEditorModal: React.FC<SubscriptionEditorModalProps> = (
   existingCategories,
   saving,
   onClose,
+  onDelete,
   onSave,
 }) => {
   const { theme, resolvedMode } = useTheme();
@@ -284,9 +286,17 @@ export const SubscriptionEditorModal: React.FC<SubscriptionEditorModalProps> = (
             <View style={styles.sheetHandle} />
             <View style={styles.header}>
               <Text style={styles.title}>{isNew ? 'New Subscription' : 'Edit Subscription'}</Text>
-              <Pressable onPress={onClose} disabled={saving} hitSlop={8}>
-                <Ionicons name="close" size={24} color={theme.colors.text} />
-              </Pressable>
+              <View style={styles.headerActions}>
+                <Pressable
+                  style={styles.iconButton}
+                  onPress={onClose}
+                  disabled={saving}
+                  hitSlop={8}
+                  accessibilityLabel="Close subscription editor"
+                >
+                  <Ionicons name="close" size={24} color={theme.colors.text} />
+                </Pressable>
+              </View>
             </View>
 
             <ScrollView
@@ -550,6 +560,22 @@ export const SubscriptionEditorModal: React.FC<SubscriptionEditorModalProps> = (
             </ScrollView>
 
             <View style={styles.footer}>
+              {!isNew && (
+                <Pressable
+                  style={[
+                    styles.secondaryButton,
+                    styles.footerIconButton,
+                    styles.footerDeleteButton,
+                  ]}
+                  onPress={onDelete}
+                  disabled={saving}
+                  hitSlop={8}
+                  accessibilityLabel="Delete subscription"
+                >
+                  <Ionicons name="trash-outline" size={20} color={theme.colors.error} />
+                </Pressable>
+              )}
+              <View style={styles.footerSpacer} />
               <Pressable style={styles.secondaryButton} onPress={onClose} disabled={saving}>
                 <Text style={styles.secondaryButtonText}>Cancel</Text>
               </Pressable>
@@ -616,6 +642,14 @@ const createStyles = (theme: Theme) =>
       alignItems: 'center',
       justifyContent: 'space-between',
       gap: theme.spacing.sm,
+    },
+    headerActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+    },
+    iconButton: {
+      padding: theme.spacing.xs,
     },
     title: {
       color: theme.colors.text,
@@ -791,12 +825,15 @@ const createStyles = (theme: Theme) =>
     },
     footer: {
       flexDirection: 'row',
-      justifyContent: 'flex-end',
+      alignItems: 'center',
       gap: theme.spacing.sm,
       paddingTop: theme.spacing.sm,
       paddingBottom: theme.spacing.xs,
       borderTopWidth: 1,
       borderTopColor: theme.colors.border,
+    },
+    footerSpacer: {
+      flex: 1,
     },
     secondaryButton: {
       borderWidth: 1,
@@ -808,6 +845,14 @@ const createStyles = (theme: Theme) =>
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: theme.colors.surface,
+    },
+    footerIconButton: {
+      paddingHorizontal: theme.spacing.md,
+      minWidth: 44,
+    },
+    footerDeleteButton: {
+      backgroundColor: '#fee2e2',
+      borderColor: '#fecaca',
     },
     secondaryButtonText: {
       color: theme.colors.text,

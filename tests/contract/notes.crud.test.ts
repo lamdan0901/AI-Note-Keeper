@@ -298,6 +298,34 @@ describe('syncNotes Contract – update', () => {
     );
   });
 
+  test('should not patch another users note when ids collide across users', async () => {
+    mockQuery.first.mockResolvedValue(null);
+
+    const handler = (syncNotes as unknown as { _handler: Handler })._handler;
+    await handler(mockCtx, {
+      userId: 'user-2',
+      changes: [
+        {
+          id: 'note-1',
+          userId: 'user-2',
+          title: 'Cross-user safe insert',
+          active: true,
+          updatedAt: 4000,
+          createdAt: 2000,
+          operation: 'update',
+          deviceId: 'device-2',
+        },
+      ],
+      lastSyncAt: 0,
+    });
+
+    expect(mockDb.patch).not.toHaveBeenCalled();
+    expect(mockDb.insert).toHaveBeenCalledWith(
+      'notes',
+      expect.objectContaining({ id: 'note-1', userId: 'user-2' }),
+    );
+  });
+
   test('should clear canonical recurrence fields when explicit null is provided', async () => {
     mockQuery.first.mockResolvedValue({
       ...existingNote,

@@ -24,6 +24,7 @@ import {
 import { computeTotalMonthlyCost, formatPrice } from '../services/subscriptionUtils';
 import { SubscriptionCard } from '../components/subscriptions/SubscriptionCard';
 import { SubscriptionEditorModal } from '../components/subscriptions/SubscriptionEditorModal';
+import { useWebAuth } from '../auth/AuthContext';
 
 interface SubscriptionsPageProps {
   viewMode: 'grid' | 'list';
@@ -40,6 +41,7 @@ export default function SubscriptionsPage({
   newSubTrigger,
   onTrashCountChange,
 }: SubscriptionsPageProps): JSX.Element {
+  const { userId } = useWebAuth();
   const subscriptions = useSubscriptions();
   const deletedSubscriptions = useDeletedSubscriptions();
   const createMutate = useCreateSubscription();
@@ -112,8 +114,8 @@ export default function SubscriptionsPage({
     if (!window.confirm(`Permanently delete ${count} subscription(s)? This cannot be undone.`)) {
       return;
     }
-    await emptySubscriptionTrash(emptyTrashMutate);
-  }, [deletedSubscriptions?.length, emptyTrashMutate]);
+    await emptySubscriptionTrash(emptyTrashMutate, userId);
+  }, [deletedSubscriptions?.length, emptyTrashMutate, userId]);
 
   const list = subscriptions ?? [];
   const existingCategories = Array.from(
@@ -185,6 +187,7 @@ export default function SubscriptionsPage({
       {editorOpen && (
         <SubscriptionEditorModal
           subscription={editingSubscription}
+          userId={userId}
           existingCategories={existingCategories}
           onSave={handleSave}
           onClose={handleClose}

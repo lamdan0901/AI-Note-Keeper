@@ -19,10 +19,7 @@ type RegisterScreenProps = {
   onDismiss: () => void;
 };
 
-export const RegisterScreen: React.FC<RegisterScreenProps> = ({
-  onNavigateToLogin,
-  onDismiss,
-}) => {
+export const RegisterScreen: React.FC<RegisterScreenProps> = ({ onNavigateToLogin, onDismiss }) => {
   const { theme } = useTheme();
   const { register } = useAuth();
   const styles = useMemo(() => createStyles(theme), [theme]);
@@ -59,7 +56,9 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({
     setLoading(true);
     try {
       const result = await register(username.trim(), password);
-      if (!result.success) {
+      if (result.requiresMerge) {
+        onDismiss();
+      } else if (!result.success) {
         setError(result.error || 'Registration failed');
       } else {
         onDismiss();
@@ -83,9 +82,7 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({
           <View style={styles.header}>
             <Ionicons name="person-add-outline" size={64} color={theme.colors.primary} />
             <Text style={styles.title}>Create Account</Text>
-            <Text style={styles.subtitle}>
-              Create an account to sync your notes across devices
-            </Text>
+            <Text style={styles.subtitle}>Create an account to sync your notes across devices</Text>
           </View>
 
           {error && (

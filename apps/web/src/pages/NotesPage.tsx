@@ -10,7 +10,6 @@ import {
   deleteNote,
   restoreNote,
   getResolvedTimezone,
-  USER_ID,
 } from '../services/notes';
 import { useDebouncedValue } from '../../../../packages/shared/hooks/useDebouncedValue';
 import type { NoteEditorDraft, NotesViewMode, WebNote } from '../services/notesTypes';
@@ -24,6 +23,7 @@ import {
 import { buildReminderSyncFields } from '../services/reminderUtils';
 import { NotesList } from '../components/NotesList';
 import { NoteEditorModal } from '../components/NoteEditorModal';
+import { useWebAuth } from '../auth/AuthContext';
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
@@ -44,6 +44,7 @@ export default function NotesPage({
   onSaveStatusChange,
   onTrashCountChange,
 }: NotesPageProps): JSX.Element {
+  const { userId } = useWebAuth();
   const allNotes = useNotes();
   const sync = useSyncNotes();
   const permanentlyDeleteNoteMutation = usePermanentlyDeleteNote();
@@ -139,7 +140,7 @@ export default function NotesPage({
         const now = Date.now();
         const optimisticNote: WebNote = {
           id: newId,
-          userId: 'local-user',
+          userId,
           title: effectiveDraft.title || null,
           content: effectiveDraft.content || null,
           color: effectiveDraft.color,
@@ -190,9 +191,9 @@ export default function NotesPage({
 
       try {
         if (isNew) {
-          await createNote(sync, draftForMutation);
+          await createNote(sync, userId, draftForMutation);
         } else {
-          await updateNote(sync, effectiveDraft, editingNote!);
+          await updateNote(sync, userId, effectiveDraft, editingNote!);
         }
         setOptimisticNotes(null);
         setSaveStatus('saved');
@@ -203,7 +204,7 @@ export default function NotesPage({
         setTimeout(() => setSaveStatus('idle'), 3000);
       }
     },
-    [draft, editingNote, optimisticNotes, serverNotes, sync],
+    [draft, editingNote, optimisticNotes, serverNotes, sync, userId],
   );
 
   const handleDelete = useCallback(async () => {
@@ -214,7 +215,7 @@ export default function NotesPage({
     setSaveStatus('saving');
 
     try {
-      await deleteNote(sync, editingNote.id);
+      await deleteNote(sync, userId, editingNote.id);
       setOptimisticNotes(null);
       setSaveStatus('saved');
       setTimeout(() => setSaveStatus('idle'), 2000);
@@ -223,7 +224,7 @@ export default function NotesPage({
       setSaveStatus('error');
       setTimeout(() => setSaveStatus('idle'), 3000);
     }
-  }, [editingNote, optimisticNotes, serverNotes, sync]);
+  }, [editingNote, optimisticNotes, serverNotes, sync, userId]);
 
   const handleToggleDone = useCallback(
     async (note: WebNote) => {
@@ -264,7 +265,7 @@ export default function NotesPage({
       };
 
       try {
-        await updateNote(sync, toggleDraft, note);
+        await updateNote(sync, userId, toggleDraft, note);
         setOptimisticNotes(null);
         setSaveStatus('saved');
         setTimeout(() => setSaveStatus('idle'), 2000);
@@ -274,7 +275,7 @@ export default function NotesPage({
         setTimeout(() => setSaveStatus('idle'), 3000);
       }
     },
-    [optimisticNotes, serverNotes, sync],
+    [optimisticNotes, serverNotes, sync, userId],
   );
 
   const handleTogglePin = useCallback(
@@ -304,7 +305,7 @@ export default function NotesPage({
       };
 
       try {
-        await updateNote(sync, toggleDraft, note);
+        await updateNote(sync, userId, toggleDraft, note);
         setOptimisticNotes(null);
         setSaveStatus('saved');
         setTimeout(() => setSaveStatus('idle'), 2000);
@@ -314,7 +315,7 @@ export default function NotesPage({
         setTimeout(() => setSaveStatus('idle'), 3000);
       }
     },
-    [optimisticNotes, serverNotes, sync],
+    [optimisticNotes, serverNotes, sync, userId],
   );
 
   const handleDeleteFromCard = useCallback(
@@ -324,7 +325,7 @@ export default function NotesPage({
       setSaveStatus('saving');
 
       try {
-        await deleteNote(sync, note.id);
+        await deleteNote(sync, userId, note.id);
         setOptimisticNotes(null);
         setSaveStatus('saved');
         setTimeout(() => setSaveStatus('idle'), 2000);
@@ -334,7 +335,7 @@ export default function NotesPage({
         setTimeout(() => setSaveStatus('idle'), 3000);
       }
     },
-    [optimisticNotes, serverNotes, sync],
+    [optimisticNotes, serverNotes, sync, userId],
   );
 
   useEffect(() => {
@@ -360,7 +361,7 @@ export default function NotesPage({
     async (note: WebNote) => {
       setSaveStatus('saving');
       try {
-        await restoreNote(sync, note);
+        await restoreNote(sync, userId, note);
         setSaveStatus('saved');
         setTimeout(() => setSaveStatus('idle'), 2000);
       } catch {
@@ -368,14 +369,14 @@ export default function NotesPage({
         setTimeout(() => setSaveStatus('idle'), 3000);
       }
     },
-    [sync],
+    [sync, userId],
   );
 
   const handlePermanentDelete = useCallback(
     async (note: WebNote) => {
       setSaveStatus('saving');
       try {
-        await permanentlyDeleteNoteMutation({ userId: USER_ID, noteId: note.id });
+        await permanentlyDeleteNoteMutation({ userId, noteId: note.id });
         setSaveStatus('saved');
         setTimeout(() => setSaveStatus('idle'), 2000);
       } catch {
@@ -383,7 +384,7 @@ export default function NotesPage({
         setTimeout(() => setSaveStatus('idle'), 3000);
       }
     },
-    [permanentlyDeleteNoteMutation],
+    [permanentlyDeleteNoteMutation, userId],
   );
 
   const handleEmptyTrash = useCallback(async () => {
@@ -391,14 +392,14 @@ export default function NotesPage({
       return;
     setSaveStatus('saving');
     try {
-      await emptyTrashMutation({ userId: USER_ID });
+      await emptyTrashMutation({ userId });
       setSaveStatus('saved');
       setTimeout(() => setSaveStatus('idle'), 2000);
     } catch {
       setSaveStatus('error');
       setTimeout(() => setSaveStatus('idle'), 3000);
     }
-  }, [emptyTrashMutation, trashNotes.length]);
+  }, [emptyTrashMutation, trashNotes.length, userId]);
 
   return (
     <main className="notes-page">

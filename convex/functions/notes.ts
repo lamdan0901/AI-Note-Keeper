@@ -76,7 +76,7 @@ export const syncNotes = mutation({
 
       const existing = await ctx.db
         .query('notes')
-        .filter((q) => q.eq(q.field('id'), id))
+        .filter((q) => q.and(q.eq(q.field('id'), id), q.eq(q.field('userId'), userId)))
         .first();
 
       // Conflict Resolution: Last Write Wins (based on updatedAt usually, but here simple overwrite)

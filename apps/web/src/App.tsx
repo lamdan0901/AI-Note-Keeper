@@ -1,9 +1,24 @@
-import React, { useEffect, useState } from 'react';
-import { LayoutGrid, List, Moon, Plus, Sun, Trash2, X } from 'lucide-react';
+import React, { useEffect, useState, useRef } from 'react';
+import {
+  LayoutGrid,
+  List,
+  LogIn,
+  LogOut,
+  Moon,
+  Plus,
+  Sun,
+  Trash2,
+  User,
+  UserPlus,
+  X,
+} from 'lucide-react';
 import NotesPage from './pages/NotesPage';
 import SubscriptionsPage from './pages/SubscriptionsPage';
 import { useSubscriptions } from './services/subscriptions';
 import { SubscriptionReminderBanner } from './components/subscriptions/SubscriptionReminderBanner';
+import { useWebAuth } from './auth/AuthContext';
+import { AuthDialog } from './components/auth/AuthDialog';
+import { AccountMergeDialog } from './components/auth/AccountMergeDialog';
 import {
   getStoredThemeMode,
   getSystemPrefersDark,
@@ -30,6 +45,18 @@ const SAVE_STATUS_LABELS: Record<SaveStatus, string | null> = {
 };
 
 export default function App(): JSX.Element {
+  const {
+    username,
+    isAuthenticated,
+    isLoading: authLoading,
+    pendingMerge,
+    transitionState,
+    login,
+    register,
+    resolvePendingMerge,
+    cancelPendingMerge,
+    logout,
+  } = useWebAuth();
   const [themeMode, setThemeMode] = useState<ThemeMode | null>(getStoredThemeMode);
   const [resolvedTheme, setResolvedTheme] = useState<ThemeMode>(() =>
     resolveThemeMode(getStoredThemeMode(), getSystemPrefersDark()),
@@ -48,6 +75,22 @@ export default function App(): JSX.Element {
   const [notesSearchQuery, setNotesSearchQuery] = useState('');
   const [subsSearchQuery, setSubsSearchQuery] = useState('');
   const [notesSaveStatus, setNotesSaveStatus] = useState<SaveStatus>('idle');
+  const [authDialog, setAuthDialog] = useState<'login' | 'register' | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const accountMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (accountMenuRef.current && !accountMenuRef.current.contains(event.target as Node)) {
+        setAccountMenuOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   useEffect(() => {
     if (themeMode == null) {
@@ -91,6 +134,28 @@ export default function App(): JSX.Element {
         : 'Search subscriptions';
   const hasSearch = activeSearchQuery.trim().length > 0;
   const notesStatusLabel = SAVE_STATUS_LABELS[notesSaveStatus];
+  const authBusy =
+    authLoading ||
+    transitionState === 'preflight' ||
+    transitionState === 'applying' ||
+    transitionState === 'logout-snapshot';
+
+  const handleAuthSubmit = async (
+    mode: 'login' | 'register',
+    enteredUsername: string,
+    password: string,
+  ) => {
+    setAuthError(null);
+    const result =
+      mode === 'login'
+        ? await login(enteredUsername, password)
+        : await register(enteredUsername, password);
+    if (result.success || result.requiresMerge) {
+      setAuthDialog(null);
+      return;
+    }
+    setAuthError(result.error ?? 'Authentication failed');
+  };
 
   return (
     <>
@@ -171,7 +236,10 @@ export default function App(): JSX.Element {
             ))}
           </div>
 
-          <div className="app-nav__actions" style={{ display: activeTab === 'notes' ? undefined : 'none' }}>
+          <div
+            className="app-nav__actions"
+            style={{ display: activeTab === 'notes' ? undefined : 'none' }}
+          >
             {notesStatusLabel && (
               <span className={`notes-header__status notes-header__status--${notesSaveStatus}`}>
                 {notesStatusLabel}
@@ -217,7 +285,10 @@ export default function App(): JSX.Element {
               )}
             </button>
           </div>
-          <div className="app-nav__actions" style={{ display: activeTab === 'subscriptions' ? undefined : 'none' }}>
+          <div
+            className="app-nav__actions"
+            style={{ display: activeTab === 'subscriptions' ? undefined : 'none' }}
+          >
             <div className="notes-header__view-toggle" role="group" aria-label="View mode">
               <button
                 className={`notes-header__view-btn${subsViewMode === 'grid' ? ' notes-header__view-btn--active' : ''}`}
@@ -258,6 +329,74 @@ export default function App(): JSX.Element {
               )}
             </button>
           </div>
+
+          <div className="app-nav__account-dropdown-container" ref={accountMenuRef}>
+            <button
+              className={`app-nav__account-dropdown-trigger${accountMenuOpen ? ' app-nav__account-dropdown-trigger--active' : ''}`}
+              type="button"
+              onClick={() => setAccountMenuOpen((prev) => !prev)}
+              aria-expanded={accountMenuOpen}
+              aria-haspopup="menu"
+              title="Account menu"
+            >
+              <User size={16} />
+            </button>
+
+            {accountMenuOpen && (
+              <div className="app-nav__account-dropdown-menu" role="menu">
+                {isAuthenticated ? (
+                  <>
+                    <div className="app-nav__account-dropdown-header">
+                      <div className="app-nav__account-dropdown-label">Signed in as</div>
+                      <div className="app-nav__account-dropdown-value" title={username ?? ''}>
+                        {username}
+                      </div>
+                    </div>
+                    <button
+                      className="app-nav__account-dropdown-item"
+                      role="menuitem"
+                      onClick={() => {
+                        setAccountMenuOpen(false);
+                        void logout();
+                      }}
+                      disabled={authBusy}
+                    >
+                      <LogOut size={16} style={{ marginRight: '8px' }} /> Log out
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <div className="app-nav__account-dropdown-header">
+                      <div className="app-nav__account-dropdown-label">Mode</div>
+                      <div className="app-nav__account-dropdown-value">Local only</div>
+                    </div>
+                    <button
+                      className="app-nav__account-dropdown-item"
+                      role="menuitem"
+                      onClick={() => {
+                        setAccountMenuOpen(false);
+                        setAuthError(null);
+                        setAuthDialog('login');
+                      }}
+                    >
+                      <LogIn size={16} style={{ marginRight: '8px' }} /> Sign in
+                    </button>
+                    <button
+                      className="app-nav__account-dropdown-item"
+                      role="menuitem"
+                      onClick={() => {
+                        setAccountMenuOpen(false);
+                        setAuthError(null);
+                        setAuthDialog('register');
+                      }}
+                    >
+                      <UserPlus size={16} style={{ marginRight: '8px' }} /> Create account
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </nav>
 
@@ -286,6 +425,33 @@ export default function App(): JSX.Element {
           onTrashCountChange={setSubsTrashCount}
         />
       </div>
+
+      {authDialog && (
+        <AuthDialog
+          mode={authDialog}
+          loading={authBusy}
+          error={authError}
+          onClose={() => setAuthDialog(null)}
+          onSwitchMode={() => {
+            setAuthError(null);
+            setAuthDialog(authDialog === 'login' ? 'register' : 'login');
+          }}
+          onSubmit={(enteredUsername, password) =>
+            handleAuthSubmit(authDialog, enteredUsername, password)
+          }
+        />
+      )}
+
+      {pendingMerge && (
+        <AccountMergeDialog
+          summary={pendingMerge.summary}
+          loading={transitionState === 'applying'}
+          onClose={cancelPendingMerge}
+          onChoose={(strategy) => {
+            void resolvePendingMerge(strategy);
+          }}
+        />
+      )}
     </>
   );
 }

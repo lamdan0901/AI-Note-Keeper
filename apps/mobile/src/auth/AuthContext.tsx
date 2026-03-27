@@ -1,9 +1,18 @@
-import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ConvexHttpClient } from 'convex/browser';
 
 import { api } from '../../../../convex/_generated/api';
 import { getDb } from '../db/bootstrap';
+import { syncNotes } from '../sync/noteSync';
 import {
   AuthSession,
   clearAuthSession,
@@ -14,8 +23,14 @@ import {
 } from './session';
 import {
   backfillMissingLocalUserId as backfillUserIdInDb,
+  clearLocalUserData as clearLocalUserDataInDb,
   migrateLocalUserData as migrateLocalUserDataInDb,
 } from './localUserData';
+import {
+  MergeStrategy,
+  MergeSummary,
+  resolveMergeResolution,
+} from '../../../../packages/shared/auth/userDataMerge';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const authApi = (api.functions as any).auth;
@@ -24,17 +39,43 @@ const migrationApi = (api.functions as any).userDataMigration;
 
 const DEFAULT_LEGACY_USER_ID = 'local-user';
 
+type AuthTransitionState =
+  | 'idle'
+  | 'preflight'
+  | 'awaiting-strategy'
+  | 'applying'
+  | 'logout-snapshot';
+
+type PendingMerge = {
+  summary: MergeSummary;
+  fromUserId: string;
+  targetUserId: string;
+  username: string;
+  password: string;
+  accountUsername: string;
+};
+
 type AuthState = {
   isLoading: boolean;
   isAuthenticated: boolean;
   userId: string;
   username: string | null;
   deviceId: string;
+  transitionState: AuthTransitionState;
+  pendingMerge: PendingMerge | null;
+};
+
+type AuthResult = {
+  success: boolean;
+  error?: string;
+  requiresMerge?: boolean;
 };
 
 type AuthContextType = AuthState & {
-  login: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
-  register: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  login: (username: string, password: string) => Promise<AuthResult>;
+  register: (username: string, password: string) => Promise<AuthResult>;
+  resolvePendingMerge: (strategy: MergeStrategy) => Promise<AuthResult>;
+  cancelPendingMerge: () => void;
   logout: () => Promise<void>;
 };
 
@@ -44,8 +85,12 @@ const AuthContext = createContext<AuthContextType>({
   userId: '',
   username: null,
   deviceId: '',
+  transitionState: 'idle',
+  pendingMerge: null,
   login: async () => ({ success: false }),
   register: async () => ({ success: false }),
+  resolvePendingMerge: async () => ({ success: false }),
+  cancelPendingMerge: () => {},
   logout: async () => {},
 });
 
@@ -57,24 +102,33 @@ const getConvexClient = (): ConvexHttpClient | null => {
   return new ConvexHttpClient(url);
 };
 
-const migrateLocalUserData = async (fromUserId: string, toUserId: string): Promise<boolean> => {
-  try {
-    const db = await getDb();
-    return await migrateLocalUserDataInDb(db, fromUserId, toUserId);
-  } catch (error) {
-    console.warn('[Auth] Local migration failed:', error);
-    return false;
+const migrateLocalUserData = async (fromUserId: string, toUserId: string): Promise<void> => {
+  if (!fromUserId || !toUserId || fromUserId === toUserId) return;
+  const db = await getDb();
+  const migrated = await migrateLocalUserDataInDb(db, fromUserId, toUserId);
+  if (!migrated) {
+    throw new Error('Local user migration failed');
+  }
+};
+
+const clearLocalUserData = async (userId: string): Promise<void> => {
+  if (!userId) return;
+  const db = await getDb();
+  const cleared = await clearLocalUserDataInDb(db, userId);
+  if (!cleared) {
+    throw new Error('Clearing local user data failed');
   }
 };
 
 const backfillMissingLocalUserId = async (userId: string): Promise<void> => {
   if (!userId) return;
-  try {
-    const db = await getDb();
-    await backfillUserIdInDb(db, userId);
-  } catch (error) {
-    console.warn('[Auth] Backfill missing userId failed:', error);
-  }
+  const db = await getDb();
+  await backfillUserIdInDb(db, userId);
+};
+
+const syncNotesForUser = async (userId: string): Promise<void> => {
+  const db = await getDb();
+  await syncNotes(db, userId);
 };
 
 type AuthProviderProps = {
@@ -88,7 +142,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     userId: '',
     username: null,
     deviceId: '',
+    transitionState: 'idle',
+    pendingMerge: null,
   });
+  const currentSecretRef = useRef<{ username: string; password: string } | null>(null);
 
   const runLegacyMigrationIfNeeded = useCallback(async () => {
     const envUserId = process.env.EXPO_PUBLIC_USER_ID;
@@ -97,8 +154,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const done = await AsyncStorage.getItem(LEGACY_MIGRATION_DONE_KEY);
     if (done === '1') return;
 
-    let backendSuccess = true;
-    let backendSkippedByPolicy = false;
     const client = getConvexClient();
     if (client && migrationApi?.migrateUserData) {
       try {
@@ -107,22 +162,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           toUserId: envUserId,
         });
       } catch (error) {
-        backendSuccess = false;
         const message = error instanceof Error ? error.message : String(error);
-        if (message.includes('Migration target must be a valid account user')) {
-          backendSkippedByPolicy = true;
+        if (!message.includes('Migration target must be a valid account user')) {
+          throw error;
         }
-        console.warn('[Auth] Legacy backend migration failed:', error);
       }
     }
 
-    const localSuccess = await migrateLocalUserData(DEFAULT_LEGACY_USER_ID, envUserId);
-    if ((backendSuccess || backendSkippedByPolicy) && localSuccess) {
-      await AsyncStorage.setItem(LEGACY_MIGRATION_DONE_KEY, '1');
-    }
+    await migrateLocalUserData(DEFAULT_LEGACY_USER_ID, envUserId);
+    await AsyncStorage.setItem(LEGACY_MIGRATION_DONE_KEY, '1');
   }, []);
 
-  // Rehydrate session on mount
   useEffect(() => {
     const init = async () => {
       const deviceId = await getOrCreateDeviceId();
@@ -130,7 +180,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const session = await loadAuthSession();
 
       if (session) {
-        // Validate session with Convex
         const client = getConvexClient();
         if (!client || !authApi?.validateSession) {
           await backfillMissingLocalUserId(session.userId);
@@ -140,6 +189,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             userId: session.userId,
             username: session.username,
             deviceId,
+            transitionState: 'idle',
+            pendingMerge: null,
           });
           return;
         }
@@ -154,12 +205,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
               userId: user.userId,
               username: user.username,
               deviceId,
+              transitionState: 'idle',
+              pendingMerge: null,
             });
             return;
           }
           await clearAuthSession();
-        } catch (e) {
-          console.warn('[Auth] Session validation failed, using cached session:', e);
+        } catch {
           await backfillMissingLocalUserId(session.userId);
           setState({
             isLoading: false,
@@ -167,12 +219,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             userId: session.userId,
             username: session.username,
             deviceId,
+            transitionState: 'idle',
+            pendingMerge: null,
           });
           return;
         }
       }
 
-      // Anonymous mode: use device UUID as userId
       await backfillMissingLocalUserId(deviceId);
       setState({
         isLoading: false,
@@ -180,14 +233,167 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         userId: deviceId,
         username: null,
         deviceId,
+        transitionState: 'idle',
+        pendingMerge: null,
       });
     };
 
     void init();
   }, [runLegacyMigrationIfNeeded]);
 
+  const finalizeAuthenticatedState = useCallback(
+    async ({
+      fromUserId,
+      session,
+      strategy,
+    }: {
+      fromUserId: string;
+      session: AuthSession;
+      strategy: MergeStrategy | 'cloud';
+    }) => {
+      await saveAuthSession(session);
+      if (currentSecretRef.current) {
+        currentSecretRef.current = {
+          username: session.username,
+          password: currentSecretRef.current.password,
+        };
+      }
+
+      if (fromUserId && fromUserId !== session.userId) {
+        if (strategy === 'cloud') {
+          await clearLocalUserData(fromUserId);
+        } else {
+          await migrateLocalUserData(fromUserId, session.userId);
+        }
+      }
+
+      await backfillMissingLocalUserId(session.userId);
+      setState((prev) => ({
+        ...prev,
+        isAuthenticated: true,
+        userId: session.userId,
+        username: session.username,
+        transitionState: 'idle',
+        pendingMerge: null,
+      }));
+      await syncNotesForUser(session.userId);
+    },
+    [],
+  );
+
+  const applyResolvedMerge = useCallback(
+    async (pendingMerge: PendingMerge, strategy: MergeStrategy): Promise<AuthResult> => {
+      const client = getConvexClient();
+      if (!client) {
+        return { success: false, error: 'No backend configured' };
+      }
+
+      setState((prev) => ({ ...prev, transitionState: 'applying' }));
+
+      try {
+        currentSecretRef.current = {
+          username: pendingMerge.username,
+          password: pendingMerge.password,
+        };
+
+        if (strategy !== 'cloud' && migrationApi?.applyUserDataMerge) {
+          await client.mutation(migrationApi.applyUserDataMerge, {
+            fromUserId: pendingMerge.fromUserId,
+            toUserId: pendingMerge.targetUserId,
+            username: pendingMerge.username,
+            password: pendingMerge.password,
+            strategy,
+          });
+        }
+
+        await finalizeAuthenticatedState({
+          fromUserId: pendingMerge.fromUserId,
+          session: {
+            userId: pendingMerge.targetUserId,
+            username: pendingMerge.accountUsername,
+          },
+          strategy,
+        });
+
+        return { success: true };
+      } catch (error) {
+        setState((prev) => ({ ...prev, transitionState: 'idle' }));
+        const message = error instanceof Error ? error.message : 'Merge failed';
+        return { success: false, error: message };
+      }
+    },
+    [finalizeAuthenticatedState],
+  );
+
+  const handleAuthSuccess = useCallback(
+    async ({
+      accountUserId,
+      accountUsername,
+      username,
+      password,
+    }: {
+      accountUserId: string;
+      accountUsername: string;
+      username: string;
+      password: string;
+    }): Promise<AuthResult> => {
+      const client = getConvexClient();
+      const fromUserId = state.userId;
+
+      currentSecretRef.current = { username, password };
+
+      if (!client || !migrationApi?.preflightUserDataMerge || fromUserId === accountUserId) {
+        await finalizeAuthenticatedState({
+          fromUserId,
+          session: { userId: accountUserId, username: accountUsername },
+          strategy: 'local',
+        });
+        return { success: true };
+      }
+
+      setState((prev) => ({ ...prev, transitionState: 'preflight' }));
+
+      const summary = (await client.mutation(migrationApi.preflightUserDataMerge, {
+        fromUserId,
+        toUserId: accountUserId,
+        username,
+        password,
+      })) as MergeSummary;
+
+      const resolution = resolveMergeResolution(summary);
+      if (resolution === 'prompt') {
+        setState((prev) => ({
+          ...prev,
+          transitionState: 'awaiting-strategy',
+          pendingMerge: {
+            summary,
+            fromUserId,
+            targetUserId: accountUserId,
+            username,
+            password,
+            accountUsername,
+          },
+        }));
+        return { success: false, requiresMerge: true };
+      }
+
+      return applyResolvedMerge(
+        {
+          summary,
+          fromUserId,
+          targetUserId: accountUserId,
+          username,
+          password,
+          accountUsername,
+        },
+        resolution,
+      );
+    },
+    [applyResolvedMerge, finalizeAuthenticatedState, state.userId],
+  );
+
   const login = useCallback(
-    async (username: string, password: string): Promise<{ success: boolean; error?: string }> => {
+    async (username: string, password: string): Promise<AuthResult> => {
       const client = getConvexClient();
       if (!client || !authApi?.login) {
         return { success: false, error: 'No backend configured' };
@@ -199,48 +405,23 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           password,
         });
 
-        const session: AuthSession = {
-          userId: result.userId,
-          username: result.username,
-        };
-        await saveAuthSession(session);
-
-        // Migrate anonymous data to authenticated account
-        const fromUserId = state.userId;
-        if (fromUserId && fromUserId !== result.userId && migrationApi?.migrateUserData) {
-          try {
-            await client.mutation(migrationApi.migrateUserData, {
-              fromUserId,
-              toUserId: result.userId,
-              username: result.username,
-              password,
-            });
-            await migrateLocalUserData(fromUserId, result.userId);
-          } catch (e) {
-            console.warn('[Auth] Data migration after login failed:', e);
-          }
-        }
-
-        await backfillMissingLocalUserId(result.userId);
-
-        setState((prev) => ({
-          ...prev,
-          isAuthenticated: true,
-          userId: result.userId,
-          username: result.username,
-        }));
-
-        return { success: true };
-      } catch (e) {
-        const message = e instanceof Error ? e.message : 'Login failed';
+        return await handleAuthSuccess({
+          accountUserId: result.userId,
+          accountUsername: result.username,
+          username,
+          password,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Login failed';
+        setState((prev) => ({ ...prev, transitionState: 'idle' }));
         return { success: false, error: message };
       }
     },
-    [state.userId],
+    [handleAuthSuccess],
   );
 
   const register = useCallback(
-    async (username: string, password: string): Promise<{ success: boolean; error?: string }> => {
+    async (username: string, password: string): Promise<AuthResult> => {
       const client = getConvexClient();
       if (!client || !authApi?.register) {
         return { success: false, error: 'No backend configured' };
@@ -252,62 +433,96 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           password,
         });
 
-        const session: AuthSession = {
-          userId: result.userId,
-          username: result.username,
-        };
-        await saveAuthSession(session);
-
-        // Migrate anonymous data to new account
-        const fromUserId = state.userId;
-        if (fromUserId && fromUserId !== result.userId && migrationApi?.migrateUserData) {
-          try {
-            await client.mutation(migrationApi.migrateUserData, {
-              fromUserId,
-              toUserId: result.userId,
-              username: result.username,
-              password,
-            });
-            await migrateLocalUserData(fromUserId, result.userId);
-          } catch (e) {
-            console.warn('[Auth] Data migration after register failed:', e);
-          }
-        }
-
-        await backfillMissingLocalUserId(result.userId);
-
-        setState((prev) => ({
-          ...prev,
-          isAuthenticated: true,
-          userId: result.userId,
-          username: result.username,
-        }));
-
-        return { success: true };
-      } catch (e) {
-        const message = e instanceof Error ? e.message : 'Registration failed';
+        return await handleAuthSuccess({
+          accountUserId: result.userId,
+          accountUsername: result.username,
+          username,
+          password,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Registration failed';
+        setState((prev) => ({ ...prev, transitionState: 'idle' }));
         return { success: false, error: message };
       }
     },
-    [state.userId],
+    [handleAuthSuccess],
   );
 
+  const resolvePendingMerge = useCallback(
+    async (strategy: MergeStrategy): Promise<AuthResult> => {
+      if (!state.pendingMerge) {
+        return { success: false, error: 'No pending merge' };
+      }
+      return applyResolvedMerge(state.pendingMerge, strategy);
+    },
+    [applyResolvedMerge, state.pendingMerge],
+  );
+
+  const cancelPendingMerge = useCallback(() => {
+    setState((prev) => ({
+      ...prev,
+      transitionState: 'idle',
+      pendingMerge: null,
+    }));
+  }, []);
+
   const logout = useCallback(async () => {
-    await clearAuthSession();
     const deviceId = await getOrCreateDeviceId();
+    const previousUserId = state.userId;
+    const previousUsername = state.username;
+    const currentSecret = currentSecretRef.current;
+
+    setState((prev) => ({ ...prev, transitionState: 'logout-snapshot' }));
+
+    if (
+      state.isAuthenticated &&
+      previousUsername &&
+      currentSecret?.password &&
+      previousUserId !== deviceId
+    ) {
+      const client = getConvexClient();
+      if (client && migrationApi?.applyUserDataMerge) {
+        await client.mutation(migrationApi.applyUserDataMerge, {
+          fromUserId: previousUserId,
+          toUserId: deviceId,
+          username: currentSecret.username,
+          password: currentSecret.password,
+          strategy: 'local',
+        });
+      }
+    }
+
+    if (previousUserId && previousUserId !== deviceId) {
+      await clearLocalUserData(deviceId);
+      await migrateLocalUserData(previousUserId, deviceId);
+    }
+
+    await clearAuthSession();
+    currentSecretRef.current = null;
     await backfillMissingLocalUserId(deviceId);
+
     setState({
       isLoading: false,
       isAuthenticated: false,
       userId: deviceId,
       username: null,
       deviceId,
+      transitionState: 'idle',
+      pendingMerge: null,
     });
-  }, []);
+  }, [state.isAuthenticated, state.userId, state.username]);
 
-  return (
-    <AuthContext.Provider value={{ ...state, login, register, logout }}>
-      {children}
-    </AuthContext.Provider>
+  const value = useMemo(
+    () => ({
+      ...state,
+      login,
+      register,
+      resolvePendingMerge,
+      cancelPendingMerge,
+      logout,
+    }),
+    [cancelPendingMerge, login, logout, register, resolvePendingMerge, state],
   );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };

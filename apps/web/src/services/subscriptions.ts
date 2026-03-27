@@ -5,12 +5,11 @@ import type {
   SubscriptionCreate,
   SubscriptionUpdate,
 } from '../../../../packages/shared/types/subscription';
+import { useWebAuth } from '../auth/AuthContext';
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
-
-export const USER_ID = 'local-user';
 
 // ---------------------------------------------------------------------------
 // Raw Convex document → Subscription mapper
@@ -51,13 +50,15 @@ export function mapDocToWebSubscription(doc: any): Subscription {
  * Returns all active subscriptions for the current user, or `undefined` while loading.
  */
 export function useSubscriptions(): Subscription[] | undefined {
-  const raw = useQuery(api.functions.subscriptions.listSubscriptions, { userId: USER_ID });
+  const { userId } = useWebAuth();
+  const raw = useQuery(api.functions.subscriptions.listSubscriptions, { userId });
   if (raw === undefined) return undefined;
   return raw.map(mapDocToWebSubscription);
 }
 
 export function useDeletedSubscriptions(): Subscription[] | undefined {
-  const raw = useQuery(api.functions.subscriptions.listDeletedSubscriptions, { userId: USER_ID });
+  const { userId } = useWebAuth();
+  const raw = useQuery(api.functions.subscriptions.listDeletedSubscriptions, { userId });
   if (raw === undefined) return undefined;
   return raw.map(mapDocToWebSubscription);
 }
@@ -144,6 +145,6 @@ export async function permanentlyDeleteSubscription(
   await mutate({ id: id as any });
 }
 
-export async function emptySubscriptionTrash(mutate: EmptyTrashFn): Promise<void> {
-  await mutate({ userId: USER_ID });
+export async function emptySubscriptionTrash(mutate: EmptyTrashFn, userId: string): Promise<void> {
+  await mutate({ userId });
 }

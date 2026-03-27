@@ -2,12 +2,11 @@ import { useMutation, useQuery } from 'convex/react';
 import { api } from '../../../../convex/_generated/api';
 import type { NoteEditorDraft, WebNote } from './notesTypes';
 import { buildReminderSyncFields } from './reminderUtils';
+import { useWebAuth } from '../auth/AuthContext';
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
-
-export const USER_ID = 'local-user';
 
 export function getResolvedTimezone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
@@ -63,7 +62,8 @@ function mapDocToWebNote(doc: any): WebNote {
  * user, or `undefined` while the query is loading.
  */
 export function useNotes(): WebNote[] | undefined {
-  const raw = useQuery(api.functions.notes.getNotes, { userId: USER_ID });
+  const { userId } = useWebAuth();
+  const raw = useQuery(api.functions.notes.getNotes, { userId });
   if (raw === undefined) return undefined;
   return raw.map(mapDocToWebNote);
 }
@@ -98,7 +98,7 @@ function toLegacySyncChange(change: SyncChange): SyncChange {
 /**
  * Create a new note from a draft.
  */
-export async function createNote(sync: SyncFn, draft: NoteEditorDraft) {
+export async function createNote(sync: SyncFn, userId: string, draft: NoteEditorDraft) {
   const now = Date.now();
   const id = draft.id ?? crypto.randomUUID();
   const reminderFields = buildReminderSyncFields(
@@ -109,12 +109,12 @@ export async function createNote(sync: SyncFn, draft: NoteEditorDraft) {
     getResolvedTimezone(),
   );
   return sync({
-    userId: USER_ID,
+    userId,
     lastSyncAt: now,
     changes: [
       toLegacySyncChange({
         id,
-        userId: USER_ID,
+        userId,
         title: draft.title || undefined,
         content: draft.content || undefined,
         contentType: draft.contentType === 'checklist' ? 'checklist' : undefined,
@@ -136,7 +136,12 @@ export async function createNote(sync: SyncFn, draft: NoteEditorDraft) {
  * Update an existing note from a draft, preserving series anchor when
  * recurrence is unchanged.
  */
-export async function updateNote(sync: SyncFn, draft: NoteEditorDraft, existingNote: WebNote) {
+export async function updateNote(
+  sync: SyncFn,
+  userId: string,
+  draft: NoteEditorDraft,
+  existingNote: WebNote,
+) {
   const now = Date.now();
   const id = draft.id ?? existingNote.id;
   const reminderFields = buildReminderSyncFields(
@@ -148,12 +153,12 @@ export async function updateNote(sync: SyncFn, draft: NoteEditorDraft, existingN
     existingNote,
   );
   return sync({
-    userId: USER_ID,
+    userId,
     lastSyncAt: now,
     changes: [
       toLegacySyncChange({
         id,
-        userId: USER_ID,
+        userId,
         title: draft.title || undefined,
         content: draft.content || undefined,
         contentType: draft.contentType === 'checklist' ? 'checklist' : undefined,
@@ -175,15 +180,15 @@ export async function updateNote(sync: SyncFn, draft: NoteEditorDraft, existingN
 /**
  * Soft-delete a note by ID (sets `active: false`).
  */
-export async function deleteNote(sync: SyncFn, id: string) {
+export async function deleteNote(sync: SyncFn, userId: string, id: string) {
   const now = Date.now();
   return sync({
-    userId: USER_ID,
+    userId,
     lastSyncAt: now,
     changes: [
       {
         id,
-        userId: USER_ID,
+        userId,
         active: false,
         deletedAt: now,
         operation: 'delete',
@@ -200,7 +205,8 @@ export async function deleteNote(sync: SyncFn, id: string) {
 // ---------------------------------------------------------------------------
 
 export function useAllNotes(): WebNote[] | undefined {
-  const raw = useQuery(api.functions.notes.getNotes, { userId: USER_ID });
+  const { userId } = useWebAuth();
+  const raw = useQuery(api.functions.notes.getNotes, { userId });
   if (raw === undefined) return undefined;
   return raw.map(mapDocToWebNote);
 }
@@ -216,15 +222,15 @@ export function useEmptyTrash() {
 /**
  * Restore a soft-deleted note (sets active: true, clears reminder fields).
  */
-export async function restoreNote(sync: SyncFn, note: WebNote) {
+export async function restoreNote(sync: SyncFn, userId: string, note: WebNote) {
   const now = Date.now();
   return sync({
-    userId: USER_ID,
+    userId,
     lastSyncAt: now,
     changes: [
       toLegacySyncChange({
         id: note.id,
-        userId: USER_ID,
+        userId,
         title: note.title || undefined,
         content: note.content || undefined,
         contentType: note.contentType === 'checklist' ? 'checklist' : undefined,

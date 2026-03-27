@@ -206,13 +206,15 @@ export const SubscriptionsScreen = () => {
 
   const handleSelectionAwareDelete = useCallback(
     async (ids: string[]) => {
-      if (ids.length === 0) return;
+      if (ids.length === 0) return true;
       if (selectionMode && ids.some((id) => selectedSubscriptionIds.has(id))) clearSelection();
 
       try {
         await Promise.all(ids.map((id) => deleteSubscription(deleteMutate, id)));
+        return true;
       } catch {
         Alert.alert('Delete failed', 'Unable to delete selected subscriptions. Please try again.');
+        return false;
       }
     },
     [clearSelection, deleteMutate, selectedSubscriptionIds, selectionMode],
@@ -221,6 +223,21 @@ export const SubscriptionsScreen = () => {
   const handleBulkDeleteSelected = useCallback(() => {
     void handleSelectionAwareDelete(Array.from(selectedSubscriptionIds));
   }, [handleSelectionAwareDelete, selectedSubscriptionIds]);
+
+  const handleDeleteEditingSubscription = useCallback(async () => {
+    if (!editingSubscription || savingSubscription) return;
+
+    setSavingSubscription(true);
+    try {
+      const deleted = await handleSelectionAwareDelete([editingSubscription.id]);
+      if (deleted) {
+        setEditorVisible(false);
+        setEditingSubscription(null);
+      }
+    } finally {
+      setSavingSubscription(false);
+    }
+  }, [editingSubscription, handleSelectionAwareDelete, savingSubscription]);
 
   const handleCardPress = useCallback(
     (subscription: Subscription) => {
@@ -506,6 +523,7 @@ export const SubscriptionsScreen = () => {
         existingCategories={existingCategories}
         saving={savingSubscription}
         onClose={handleCloseEditor}
+        onDelete={handleDeleteEditingSubscription}
         onSave={handleSaveSubscription}
       />
     </SafeAreaView>

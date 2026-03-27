@@ -39,7 +39,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onNavigateToRegister, 
     setLoading(true);
     try {
       const result = await login(username.trim(), password);
-      if (!result.success) {
+      if (result.requiresMerge) {
+        onDismiss();
+      } else if (!result.success) {
         setError(result.error || 'Login failed');
       } else {
         onDismiss();

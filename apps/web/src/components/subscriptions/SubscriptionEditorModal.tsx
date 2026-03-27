@@ -10,10 +10,10 @@ import type {
   SubscriptionStatus,
 } from '../../../../../packages/shared/types/subscription';
 import { SERVICE_PRESETS } from '../../constants/servicePresets';
-import { USER_ID } from '../../services/subscriptions';
 
 interface SubscriptionEditorModalProps {
   subscription: Subscription | null;
+  userId: string;
   existingCategories: SubscriptionCategory[];
   onSave: (data: SubscriptionCreate | SubscriptionUpdate) => void;
   onClose: () => void;
@@ -137,6 +137,7 @@ function todayDateInput(): string {
 
 export function SubscriptionEditorModal({
   subscription,
+  userId,
   existingCategories,
   onSave,
   onClose,
@@ -240,7 +241,7 @@ export function SubscriptionEditorModal({
     };
 
     if (isNew) {
-      onSave({ ...base, userId: USER_ID } as SubscriptionCreate);
+      onSave({ ...base, userId } as SubscriptionCreate);
     } else {
       onSave(base as SubscriptionUpdate);
     }

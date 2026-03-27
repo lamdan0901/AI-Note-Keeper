@@ -18,6 +18,17 @@ export const migrateLocalUserData = async (
   }
 };
 
+export const clearLocalUserData = async (db: SQLiteDatabase, userId: string): Promise<boolean> => {
+  if (!userId) return true;
+  try {
+    await db.runAsync(`DELETE FROM note_outbox WHERE userId = ?`, [userId]);
+    await db.runAsync(`DELETE FROM notes WHERE userId = ?`, [userId]);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 export const backfillMissingLocalUserId = async (
   db: SQLiteDatabase,
   userId: string,
