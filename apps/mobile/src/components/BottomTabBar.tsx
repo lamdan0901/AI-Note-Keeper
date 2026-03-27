@@ -72,7 +72,7 @@ export const BottomTabBar: React.FC<BottomTabBarProps> = ({
               >
                 <View style={styles.tabIconContainer}>
                   <Ionicons
-                    name={(isActive ? tab.iconActive : tab.icon) as any}
+                    name={(isActive ? tab.iconActive : tab.icon) as keyof typeof Ionicons.glyphMap}
                     size={26}
                     color={isActive ? theme.colors.primary : theme.colors.text}
                   />

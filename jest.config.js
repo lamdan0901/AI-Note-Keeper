@@ -2,7 +2,12 @@
 module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'node',
-  modulePathIgnorePatterns: ['<rootDir>/dist/', '<rootDir>/build/'],
+  modulePathIgnorePatterns: [
+    '<rootDir>/dist/',
+    '<rootDir>/build/',
+    '<rootDir>/apps/mobile/.eas-inspect/',
+  ],
+  testPathIgnorePatterns: ['<rootDir>/apps/mobile/.eas-inspect/'],
   testMatch: ['**/*.test.ts'],
   transform: {
     '^.+\\.tsx?$': [

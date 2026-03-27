@@ -7,6 +7,7 @@ import { type Theme, useTheme } from '../../theme';
 import { saveNoteOffline } from '../../notes/editor';
 import { getNoteById, Note } from '../../db/notesRepo';
 import { syncNotes } from '../../sync/noteSync';
+import { resolveCurrentUserId } from '../../auth/session';
 
 const convexUrl = process.env.EXPO_PUBLIC_CONVEX_URL;
 const convexClient = convexUrl ? new ConvexReactClient(convexUrl) : undefined;
@@ -80,6 +81,7 @@ export const RescheduleOverlay = (props: { noteId?: string }) => {
       try {
         const db = await getDb();
         const note = await getNoteById(db, noteId);
+        const userId = note?.userId ?? (await resolveCurrentUserId());
 
         if (note) {
           const updatedNote: Note = {
@@ -93,10 +95,10 @@ export const RescheduleOverlay = (props: { noteId?: string }) => {
             updatedAt: Date.now(),
           };
 
-          await saveNoteOffline(db, updatedNote, 'update');
+          await saveNoteOffline(db, updatedNote, 'update', userId);
           // Try to sync, but don't block exit too long if it fails?
           // Since it's in outbox, it's safe.
-          syncNotes(db).catch((err) => console.error('Background sync failed', err));
+          syncNotes(db, userId).catch((err) => console.error('Background sync failed', err));
         }
       } catch (e) {
         console.error('Failed to save reschedule', e);

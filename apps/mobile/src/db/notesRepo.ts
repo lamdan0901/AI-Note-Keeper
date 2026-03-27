@@ -4,6 +4,7 @@ export { Note };
 
 export type NoteRow = {
   id: string;
+  userId: string | null;
   title: string | null;
   content: string | null;
   contentType: string | null;
@@ -37,6 +38,7 @@ export type NoteRow = {
 
 export const mapNoteRow = (row: NoteRow): Note => ({
   id: row.id,
+  userId: row.userId || undefined,
   title: row.title,
   content: row.content,
   contentType: (row.contentType as Note['contentType']) || undefined,
@@ -74,6 +76,7 @@ export const upsertNote = async (db: SQLiteDatabase, note: Note): Promise<void> 
   await db.runAsync(
     `INSERT INTO notes (
         id,
+      userId,
         title,
         content,
         contentType,
@@ -97,8 +100,9 @@ export const upsertNote = async (db: SQLiteDatabase, note: Note): Promise<void> 
         deletedAt,
         updatedAt,
         createdAt
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
+        userId = excluded.userId,
         title = excluded.title,
         content = excluded.content,
         contentType = excluded.contentType,
@@ -124,6 +128,7 @@ export const upsertNote = async (db: SQLiteDatabase, note: Note): Promise<void> 
         createdAt = excluded.createdAt`,
     [
       note.id,
+      note.userId || null,
       note.title,
       note.content,
       note.contentType || null,
@@ -156,11 +161,20 @@ export const getNoteById = async (db: SQLiteDatabase, noteId: string): Promise<N
   return row ? mapNoteRow(row) : null;
 };
 
-export const listNotes = async (db: SQLiteDatabase, limit: number = 50): Promise<Note[]> => {
-  const rows = await db.getAllAsync<NoteRow>(
-    `SELECT * FROM notes WHERE active = 1 ORDER BY isPinned DESC, done ASC, updatedAt DESC LIMIT ?`,
-    [limit],
-  );
+export const listNotes = async (
+  db: SQLiteDatabase,
+  limit: number = 50,
+  userId?: string,
+): Promise<Note[]> => {
+  const rows = userId
+    ? await db.getAllAsync<NoteRow>(
+        `SELECT * FROM notes WHERE active = 1 AND userId = ? ORDER BY isPinned DESC, done ASC, updatedAt DESC LIMIT ?`,
+        [userId, limit],
+      )
+    : await db.getAllAsync<NoteRow>(
+        `SELECT * FROM notes WHERE active = 1 ORDER BY isPinned DESC, done ASC, updatedAt DESC LIMIT ?`,
+        [limit],
+      );
   return rows.map(mapNoteRow);
 };
 
@@ -173,10 +187,15 @@ export const deleteNote = async (db: SQLiteDatabase, noteId: string): Promise<No
   return updated;
 };
 
-export const listDeletedNotes = async (db: SQLiteDatabase): Promise<Note[]> => {
-  const rows = await db.getAllAsync<NoteRow>(
-    `SELECT * FROM notes WHERE active = 0 ORDER BY deletedAt DESC, updatedAt DESC`,
-  );
+export const listDeletedNotes = async (db: SQLiteDatabase, userId?: string): Promise<Note[]> => {
+  const rows = userId
+    ? await db.getAllAsync<NoteRow>(
+        `SELECT * FROM notes WHERE active = 0 AND userId = ? ORDER BY deletedAt DESC, updatedAt DESC`,
+        [userId],
+      )
+    : await db.getAllAsync<NoteRow>(
+        `SELECT * FROM notes WHERE active = 0 ORDER BY deletedAt DESC, updatedAt DESC`,
+      );
   return rows.map(mapNoteRow);
 };
 
@@ -184,6 +203,10 @@ export const hardDeleteNote = async (db: SQLiteDatabase, noteId: string): Promis
   await db.runAsync(`DELETE FROM notes WHERE id = ?`, [noteId]);
 };
 
-export const hardDeleteAllInactive = async (db: SQLiteDatabase): Promise<void> => {
+export const hardDeleteAllInactive = async (db: SQLiteDatabase, userId?: string): Promise<void> => {
+  if (userId) {
+    await db.runAsync(`DELETE FROM notes WHERE active = 0 AND userId = ?`, [userId]);
+    return;
+  }
   await db.runAsync(`DELETE FROM notes WHERE active = 0`);
 };

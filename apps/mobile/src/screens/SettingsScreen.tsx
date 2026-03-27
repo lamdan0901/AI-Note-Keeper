@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { Alert } from 'react-native';
 import { Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { type Theme, useTheme } from '../theme';
@@ -9,9 +10,38 @@ const themeOptions = [
   { key: 'auto', label: 'Auto', icon: 'desktop-outline' },
 ] as const;
 
-export const SettingsScreen: React.FC = () => {
+type SettingsScreenProps = {
+  isAuthenticated: boolean;
+  username: string | null;
+  hasConvexClient: boolean;
+  onOpenLogin: () => void;
+  onOpenRegister: () => void;
+  onSignOut: () => Promise<void>;
+};
+
+export const SettingsScreen: React.FC<SettingsScreenProps> = ({
+  isAuthenticated,
+  username,
+  hasConvexClient,
+  onOpenLogin,
+  onOpenRegister,
+  onSignOut,
+}) => {
   const { theme, mode, setMode } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
+
+  const handleSignOut = () => {
+    Alert.alert('Sign Out', 'Sign out and switch back to local device account?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Sign Out',
+        style: 'destructive',
+        onPress: () => {
+          void onSignOut();
+        },
+      },
+    ]);
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -19,6 +49,41 @@ export const SettingsScreen: React.FC = () => {
         <Text style={styles.headerTitle}>Settings</Text>
       </View>
       <View style={styles.content}>
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Account</Text>
+          {hasConvexClient ? (
+            <View style={styles.accountCard}>
+              {isAuthenticated ? (
+                <>
+                  <Text style={styles.accountPrimary}>Signed in as {username}</Text>
+                  <Pressable style={styles.signOutButton} onPress={handleSignOut}>
+                    <Text style={styles.signOutButtonText}>Sign Out</Text>
+                  </Pressable>
+                </>
+              ) : (
+                <>
+                  <Text style={styles.accountPrimary}>Local account</Text>
+                  <View style={styles.accountActions}>
+                    <Pressable style={styles.accountActionButton} onPress={onOpenLogin}>
+                      <Text style={styles.accountActionText}>Sign In</Text>
+                    </Pressable>
+                    <Pressable style={styles.accountActionButton} onPress={onOpenRegister}>
+                      <Text style={styles.accountActionText}>Create Account</Text>
+                    </Pressable>
+                  </View>
+                </>
+              )}
+            </View>
+          ) : (
+            <View style={styles.accountCard}>
+              <Text style={styles.accountPrimary}>Local account</Text>
+              <Text style={styles.accountSecondary}>
+                Connect a Convex backend to enable sign in.
+              </Text>
+            </View>
+          )}
+        </View>
+
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Theme</Text>
           <View style={styles.themeOptions}>
@@ -76,6 +141,54 @@ const createStyles = (theme: Theme) =>
     },
     section: {
       gap: theme.spacing.md,
+    },
+    accountCard: {
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      borderRadius: theme.borderRadius.md,
+      backgroundColor: theme.colors.surface,
+      padding: theme.spacing.md,
+      gap: theme.spacing.sm,
+    },
+    accountPrimary: {
+      fontSize: theme.typography.sizes.md,
+      color: theme.colors.text,
+      fontWeight: '600',
+    },
+    accountSecondary: {
+      fontSize: theme.typography.sizes.sm,
+      color: theme.colors.textMuted,
+    },
+    accountActions: {
+      flexDirection: 'row',
+      gap: theme.spacing.sm,
+    },
+    accountActionButton: {
+      flex: 1,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      borderRadius: theme.borderRadius.md,
+      paddingVertical: theme.spacing.sm,
+      alignItems: 'center',
+      backgroundColor: theme.colors.background,
+    },
+    accountActionText: {
+      color: theme.colors.text,
+      fontWeight: '600',
+      fontSize: theme.typography.sizes.sm,
+    },
+    signOutButton: {
+      borderWidth: 1,
+      borderColor: theme.colors.error,
+      borderRadius: theme.borderRadius.md,
+      paddingVertical: theme.spacing.sm,
+      alignItems: 'center',
+      backgroundColor: theme.colors.background,
+    },
+    signOutButtonText: {
+      color: theme.colors.error,
+      fontWeight: '600',
+      fontSize: theme.typography.sizes.sm,
     },
     sectionTitle: {
       fontSize: theme.typography.sizes.sm,

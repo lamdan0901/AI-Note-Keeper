@@ -11,10 +11,10 @@ export const saveNoteOffline = async (
   db: SQLiteDatabase,
   note: Note,
   operation: 'create' | 'update',
-  userId: string = 'local-user', // Default until we have auth
+  userId: string,
 ): Promise<void> => {
   const now = nowMs();
-  const updatedNote = { ...note, updatedAt: now };
+  const updatedNote = { ...note, userId, updatedAt: now };
 
   // 1. Write to local DB
   await upsertNote(db, updatedNote);
@@ -25,7 +25,7 @@ export const saveNoteOffline = async (
   // 3. Schedule notification if note has reminder
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await scheduleNoteReminderNotification(db as any, updatedNote);
+    await scheduleNoteReminderNotification(db as any, updatedNote, userId);
   } catch (e) {
     // Log but don't fail the save - notification is non-critical
     console.warn('[editor] Failed to schedule notification:', e);
@@ -35,7 +35,7 @@ export const saveNoteOffline = async (
 export const deleteNoteOffline = async (
   db: SQLiteDatabase,
   note: Note,
-  userId: string = 'local-user',
+  userId: string,
 ): Promise<void> => {
   const now = nowMs();
   const deletedNote = { ...note, active: false, deletedAt: now, updatedAt: now };
@@ -59,11 +59,12 @@ export const deleteNoteOffline = async (
 export const restoreNoteOffline = async (
   db: SQLiteDatabase,
   note: Note,
-  userId: string = 'local-user',
+  userId: string,
 ): Promise<void> => {
   const now = nowMs();
   const restoredNote: Note = {
     ...note,
+    userId,
     active: true,
     deletedAt: undefined,
     // Clear all reminder/recurrence fields (stale reminders shouldn't fire)

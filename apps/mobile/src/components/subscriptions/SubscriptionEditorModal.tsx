@@ -21,11 +21,11 @@ import {
   type SubscriptionStatus,
   type SubscriptionUpdate,
 } from '../../../../../packages/shared/types/subscription';
-import { USER_ID } from '../../subscriptions/service';
 import { type Theme, useTheme } from '../../theme';
 
 type SubscriptionEditorModalProps = {
   visible: boolean;
+  userId: string;
   subscription: Subscription | null;
   existingCategories: SubscriptionCategory[];
   saving: boolean;
@@ -96,6 +96,7 @@ function normalizeDate(date: Date): Date {
 
 export const SubscriptionEditorModal: React.FC<SubscriptionEditorModalProps> = ({
   visible,
+  userId,
   subscription,
   existingCategories,
   saving,
@@ -264,7 +265,7 @@ export const SubscriptionEditorModal: React.FC<SubscriptionEditorModalProps> = (
     };
 
     if (isNew) {
-      await onSave({ ...payload, userId: USER_ID } as SubscriptionCreate);
+      await onSave({ ...payload, userId } as SubscriptionCreate);
       return;
     }
 

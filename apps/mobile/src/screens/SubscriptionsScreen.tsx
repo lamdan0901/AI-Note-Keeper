@@ -40,6 +40,7 @@ import {
   formatPrice,
   getDaysUntilBilling,
 } from '../../../../packages/shared/utils/subscription';
+import { useUserId } from '../auth/useUserId';
 
 type ViewMode = 'grid' | 'list';
 
@@ -71,6 +72,7 @@ const formatSubCategory = (category: string): string => {
 };
 
 export const SubscriptionsScreen = () => {
+  const userId = useUserId();
   const { theme, resolvedMode } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const subscriptions = useSubscriptions();
@@ -499,6 +501,7 @@ export const SubscriptionsScreen = () => {
 
       <SubscriptionEditorModal
         visible={editorVisible}
+        userId={userId}
         subscription={editingSubscription}
         existingCategories={existingCategories}
         saving={savingSubscription}

@@ -21,6 +21,7 @@ type EditorState = {
 };
 
 type UseNoteActionsParams = {
+  userId: string;
   notifyActionPending: () => void;
   notifyActionSuccess: () => void;
   notifyActionError: (message: string) => void;
@@ -42,6 +43,7 @@ type UseNoteActionsResult = {
 };
 
 export const useNoteActions = ({
+  userId,
   notifyActionPending,
   notifyActionSuccess,
   notifyActionError,
@@ -56,7 +58,7 @@ export const useNoteActions = ({
   const loadNotes = useCallback(async () => {
     try {
       const db = await getDb();
-      const loadedNotes = await listNotes(db);
+      const loadedNotes = await listNotes(db, 50, userId);
       setNotes(loadedNotes);
     } catch (e) {
       console.error(e);
@@ -65,7 +67,7 @@ export const useNoteActions = ({
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [userId]);
 
   useEffect(() => {
     loadNotes();
@@ -82,12 +84,12 @@ export const useNoteActions = ({
     setRefreshing(true);
     try {
       const db = await getDb();
-      await syncNotes(db);
+      await syncNotes(db, userId);
     } catch (e) {
       console.error('Sync failed:', e);
     }
     loadNotes();
-  }, [loadNotes]);
+  }, [loadNotes, userId]);
 
   const saveNote = useCallback(
     async (editorState: EditorState) => {
@@ -104,6 +106,7 @@ export const useNoteActions = ({
 
       const noteToSave: Note = {
         id: editingNote ? editingNote.id : uuid.v4().toString(),
+        userId,
         title: title.trim(),
         content: content.trim(),
         contentType: contentType === 'checklist' ? 'checklist' : undefined,
@@ -145,8 +148,8 @@ export const useNoteActions = ({
       notifyActionPending();
       try {
         const db = await getDb();
-        await saveNoteOffline(db, noteToSave, editingNote ? 'update' : 'create');
-        await syncNotes(db);
+        await saveNoteOffline(db, noteToSave, editingNote ? 'update' : 'create', userId);
+        await syncNotes(db, userId);
         await loadNotes();
         notifyActionSuccess();
       } catch (e) {
@@ -155,7 +158,15 @@ export const useNoteActions = ({
         loadNotes();
       }
     },
-    [closeEditor, loadNotes, notifyActionError, notifyActionPending, notifyActionSuccess, setNotes],
+    [
+      closeEditor,
+      loadNotes,
+      notifyActionError,
+      notifyActionPending,
+      notifyActionSuccess,
+      setNotes,
+      userId,
+    ],
   );
 
   const performDelete = useCallback(
@@ -172,11 +183,11 @@ export const useNoteActions = ({
           for (const id of ids) {
             const noteToDelete = await getNoteById(db, id);
             if (noteToDelete) {
-              await deleteNoteOffline(db, noteToDelete);
+              await deleteNoteOffline(db, noteToDelete, userId);
             }
           }
 
-          await syncNotes(db);
+          await syncNotes(db, userId);
           notifyActionSuccess();
         } catch (e) {
           console.error(e);
@@ -185,7 +196,7 @@ export const useNoteActions = ({
         }
       })();
     },
-    [loadNotes, notifyActionError, notifyActionPending, notifyActionSuccess, showToast],
+    [loadNotes, notifyActionError, notifyActionPending, notifyActionSuccess, showToast, userId],
   );
 
   const handleNoteDone = useCallback(
@@ -222,8 +233,8 @@ export const useNoteActions = ({
       void (async () => {
         try {
           const db = await getDb();
-          await saveNoteOffline(db, updated, 'update');
-          await syncNotes(db);
+          await saveNoteOffline(db, updated, 'update', userId);
+          await syncNotes(db, userId);
           notifyActionSuccess();
         } catch (e) {
           console.error(e);
@@ -232,7 +243,15 @@ export const useNoteActions = ({
         }
       })();
     },
-    [loadNotes, notes, notifyActionError, notifyActionPending, notifyActionSuccess, showToast],
+    [
+      loadNotes,
+      notes,
+      notifyActionError,
+      notifyActionPending,
+      notifyActionSuccess,
+      showToast,
+      userId,
+    ],
   );
 
   return {

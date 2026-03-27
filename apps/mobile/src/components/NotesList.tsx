@@ -84,6 +84,7 @@ interface NotesListProps {
   searchQuery?: string;
   onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
   scrollEventThrottle?: number;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   listRef?: React.RefObject<FlatList<any>>;
 }
 

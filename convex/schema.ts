@@ -2,6 +2,18 @@ import { defineSchema, defineTable } from 'convex/server';
 import { v } from 'convex/values';
 
 export default defineSchema({
+  users: defineTable({
+    username: v.string(),
+    passwordHash: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index('by_username', ['username']),
+  migrationAttempts: defineTable({
+    key: v.string(),
+    attempts: v.number(),
+    lastAttemptAt: v.number(),
+    blockedUntil: v.optional(v.number()),
+  }).index('by_key', ['key']),
   devicePushTokens: defineTable({
     id: v.string(),
     userId: v.string(),

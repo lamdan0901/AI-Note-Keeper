@@ -7,16 +7,11 @@ import uuid from 'react-native-uuid';
 
 import { api } from '../../../../convex/_generated/api';
 import { logSyncEvent } from '../reminders/logging';
+import { resolveCurrentUserId } from '../auth/session';
 
 const DEVICE_ID_KEY = 'DEVICE_UNIQUE_ID';
 const PUSH_PERMISSION_DENIED_LOG_TS_KEY = 'PUSH_PERMISSION_DENIED_LOG_TS';
 const PUSH_PERMISSION_DENIED_LOG_INTERVAL_MS = 24 * 60 * 60 * 1000;
-
-/**
- * Default userId for this single-user app.
- * Must match the value used when creating notes.
- */
-const DEFAULT_USER_ID = 'local-user';
 
 type RegisterDeviceTokenOptions = {
   convexUrl?: string;
@@ -44,16 +39,11 @@ const resolveConvexUrl = (override?: string): string | null => {
   return null;
 };
 
-const resolveUserId = (override?: string): string => {
+const resolveUserId = async (override?: string): Promise<string> => {
   if (override) {
     return override;
   }
-  // Direct access – babel inlines this at build time
-  const envUser = process.env.EXPO_PUBLIC_USER_ID;
-  if (envUser) {
-    return envUser;
-  }
-  return DEFAULT_USER_ID;
+  return await resolveCurrentUserId();
 };
 
 /**
@@ -123,7 +113,7 @@ export const registerDevicePushToken = async (
     return;
   }
 
-  const userId = resolveUserId(options.userId);
+  const userId = await resolveUserId(options.userId);
   console.log('[PushToken] UserId:', userId);
 
   const permissions = await Notifications.getPermissionsAsync();

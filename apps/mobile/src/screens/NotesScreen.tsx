@@ -36,15 +36,10 @@ import { isMobileNotesRealtimeV1Enabled } from '../constants/featureFlags';
 import { RepeatRule } from '../../../../packages/shared/types/reminder';
 import { NoteContentType } from '../../../../packages/shared/types/note';
 import { useDebouncedValue } from '../../../../packages/shared/hooks/useDebouncedValue';
-
-const DEFAULT_USER_ID = 'local-user';
-
-function resolveUserId(): string {
-  const envUser = process.env.EXPO_PUBLIC_USER_ID;
-  return envUser || DEFAULT_USER_ID;
-}
+import { useUserId } from '../auth/useUserId';
 
 type NotesScreenProps = {
+  userId?: string;
   rescheduleNoteId?: string | null;
   onRescheduleHandled?: () => void;
   editNoteId?: string | null;
@@ -67,8 +62,14 @@ const DueSubscriptionsBridge = ({ onValue }: { onValue: (value: boolean) => void
   return null;
 };
 
-const RealtimeNotesBridge = ({ onValue }: { onValue: (notes: Note[] | undefined) => void }) => {
-  const notes = useRealtimeNotes(true);
+const RealtimeNotesBridge = ({
+  userId,
+  onValue,
+}: {
+  userId: string;
+  onValue: (notes: Note[] | undefined) => void;
+}) => {
+  const notes = useRealtimeNotes(userId, true);
 
   useEffect(() => {
     onValue(notes);
@@ -138,12 +139,11 @@ const mergeRealtimeWithLocal = (localNotes: Note[], realtimeNotes: Note[]): Note
 };
 
 const NotesScreenContent = ({
+  userId,
   rescheduleNoteId,
   onRescheduleHandled,
   editNoteId,
   onEditHandled,
-  onNavigateToTrash,
-  onNavigateToSubscriptions,
   subscriptionsEnabled = false,
   viewMode,
   onViewModeChange,
@@ -189,6 +189,7 @@ const NotesScreenContent = ({
     performDelete,
     handleNoteDone,
   } = useNoteActions({
+    userId: userId ?? '',
     notifyActionPending,
     notifyActionSuccess,
     notifyActionError,
@@ -316,7 +317,7 @@ const NotesScreenContent = ({
           return;
         }
 
-        const fetched = await fetchNotes(resolveUserId());
+        const fetched = await fetchNotes(userId ?? '');
         if (fetched.status === 'ok') {
           const match = fetched.notes.find((candidate) => candidate.id === note.id) ?? null;
           setConflictServerNote(match);
@@ -328,7 +329,7 @@ const NotesScreenContent = ({
         setConflictLoading(false);
       }
     },
-    [realtimeNotes, showToast],
+    [realtimeNotes, showToast, userId],
   );
 
   const closeConflictModal = useCallback(
@@ -362,8 +363,8 @@ const NotesScreenContent = ({
         updatedAt: Date.now(),
       };
 
-      await saveNoteOffline(db, pendingLocal, 'update');
-      await syncNotes(db);
+      await saveNoteOffline(db, pendingLocal, 'update', userId ?? '');
+      await syncNotes(db, userId ?? '');
       setNotes((prev) =>
         prev.map((note) =>
           note.id === conflictLocalNote.id ? { ...note, syncStatus: 'synced' } : note,
@@ -390,6 +391,7 @@ const NotesScreenContent = ({
     notifyActionPending,
     notifyActionSuccess,
     setNotes,
+    userId,
   ]);
 
   const handleUseServerConflict = useCallback(async () => {
@@ -514,8 +516,10 @@ const NotesScreenContent = ({
 
     try {
       const db = await getDb();
-      await Promise.all(updatedNotes.map((note) => saveNoteOffline(db, note, 'update')));
-      await syncNotes(db);
+      await Promise.all(
+        updatedNotes.map((note) => saveNoteOffline(db, note, 'update', userId ?? '')),
+      );
+      await syncNotes(db, userId ?? '');
       notifyActionSuccess();
     } catch (e) {
       console.error(e);
@@ -532,6 +536,7 @@ const NotesScreenContent = ({
     selectedNoteIds,
     setNotes,
     showToast,
+    userId,
   ]);
 
   const closeReschedule = useCallback(() => {
@@ -605,8 +610,8 @@ const NotesScreenContent = ({
           updatedAt: now,
         };
 
-        await saveNoteOffline(db, updatedNote, 'update');
-        await syncNotes(db);
+        await saveNoteOffline(db, updatedNote, 'update', userId ?? '');
+        await syncNotes(db, userId ?? '');
         notifyActionSuccess();
 
         loadNotes();
@@ -636,7 +641,9 @@ const NotesScreenContent = ({
       {subscriptionsEnabled && onDueSubscriptionsChange && (
         <DueSubscriptionsBridge onValue={onDueSubscriptionsChange} />
       )}
-      {realtimeReadEnabled && <RealtimeNotesBridge onValue={handleRealtimeNotesChange} />}
+      {realtimeReadEnabled && userId && (
+        <RealtimeNotesBridge userId={userId} onValue={handleRealtimeNotesChange} />
+      )}
 
       <NotesHeader
         viewMode={viewMode}
@@ -771,9 +778,10 @@ const NotesScreenContent = ({
 };
 
 export const NotesScreen = (props: NotesScreenProps) => {
+  const userId = useUserId();
   return (
-    <SyncProvider>
-      <NotesScreenContent {...props} />
+    <SyncProvider userId={userId}>
+      <NotesScreenContent {...props} userId={userId} />
     </SyncProvider>
   );
 };

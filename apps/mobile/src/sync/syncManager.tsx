@@ -48,10 +48,10 @@ export const useSyncState = () => useContext(SyncContext);
 
 type SyncProviderProps = {
   children: React.ReactNode;
-  userId?: string;
+  userId: string;
 };
 
-export const SyncProvider: React.FC<SyncProviderProps> = ({ children, userId = 'local-user' }) => {
+export const SyncProvider: React.FC<SyncProviderProps> = ({ children, userId }) => {
   const [syncState, setSyncState] = useState<SyncState>(defaultSyncState);
   const syncInProgressRef = useRef(false);
   const pendingSyncRef = useRef(false);

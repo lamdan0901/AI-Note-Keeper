@@ -52,7 +52,7 @@ export type SyncResult = {
 
 export const syncNotes = async (
   db: SQLiteDatabase,
-  userId: string = 'local-user',
+  userId: string,
 ): Promise<SyncResult> => {
   const startTime = Date.now();
   let pullCount = 0;

@@ -1,188 +1,161 @@
-# Plan: Subscription Tracking & Reminder Feature (Web Only)
+Multi-User Auth Support Plan
 
-## Summary
+Context
+The app is currently single-user with a hardcoded userId = 'local-user'. The goal is to add optional username/password authentication for cross-device syncing. By default, each device operates anonymously with a device UUID as the userId. Login is only needed for syncing across devices. Existing local-user data must be migrated to the env-specified user (EXPO_PUBLIC_USER_ID).
 
-Add a dedicated Subscriptions screen to the web app that lets users track third-party service subscriptions (Netflix, Spotify, custom, etc.) with billing reminders. New Convex `subscriptions` table; nav tab switcher in App.tsx; reminders fire both as in-app banners AND through the existing Convex push pipeline.
+Phase 1: Convex Backend (Schema + Auth Functions)
+1.1 Add users table to schema
+File: convex/schema.ts
 
----
+ts
+users: defineTable({
+username: v.string(),
+passwordHash: v.string(), // format: "salt_hex:hash_hex"
+createdAt: v.number(),
+updatedAt: v.number(),
+}).index("by_username", ["username"])
+1.2 Create auth functions
+New file: convex/functions/auth.ts
 
-## Decisions
+register (mutation): Validate username (3-30 chars, alphanumeric+underscore), check uniqueness via index, hash password with SHA-256 + random salt, create user record. Return { userId, username }.
+login (mutation): Look up by username, verify password hash. Return { userId, username } or throw error.
+validateSession (query): Verify userId exists, return user info or null.
+Password hashing: Use a JS SHA-256 implementation (add js-sha256 to convex deps) with per-user 16-byte hex salt. Convex runtime doesn't support bcrypt.
 
-- Web only; mobile deferred
-- Storage: new Convex `subscriptions` table (not reusing notes table)
-- Reminders: in-app banner + Convex cron → push notifications via existing push.ts pipeline
-- Reminder timing: [1, 3, 7] days before, configurable per subscription
-- Navigation: simple top-level tab switcher (no React Router added)
-- Preset catalog (static list in `servicePresets.ts`) + free-form custom entry
-- Fields: name, price, billingCycle, nextBillingDate, category, notes, trialEndDate, status
-- Total summary: monthly-equivalent cost for active subscriptions shown in header
-- Auto-advance nextBillingDate via Convex cron after billing date passes
-- userId hardcoded to 'local-user' (same as notes)
+1.3 Create data migration function
+New file: convex/functions/userDataMigration.ts
 
----
+migrateUserData (mutation): Takes fromUserId, toUserId. Updates userId on all notes, subscriptions, devicePushTokens, noteChangeEvents records.
+Phase 2: Mobile Auth Infrastructure
+2.1 Auth storage
+Use expo-secure-store (add to deps) for persisting auth session: { userId, username }.
 
-## Phase 1 — Convex Backend
+2.2 Auth Context
+New file: apps/mobile/src/auth/AuthContext.tsx
 
-### Step 1: Schema — `convex/schema.ts`
+ts
+type AuthState = {
+isLoading: boolean;
+isAuthenticated: boolean;
+userId: string; // device UUID (anon) or Convex user \_id (authenticated)
+username: string | null;
+deviceId: string;
+};
+Behaviors:
 
-Add `subscriptions` table:
+On mount: Read session from SecureStore → validate with Convex → set state
+No session: Use device UUID from AsyncStorage (DEVICE_UNIQUE_ID) as userId
+Login: Persist session to SecureStore, merge anonymous data, trigger sync
+Logout: Clear SecureStore, revert to device UUID
+Export useAuth() hook
+2.3 useUserId() hook
+New file: apps/mobile/src/auth/useUserId.ts
 
-```
-id, userId, serviceName, category, price, currency, billingCycle,
-billingCycleCustomDays?, nextBillingDate, notes?, trialEndDate?,
-status ('active'|'cancelled'|'paused'), reminderDaysBefore (number[]),
-nextReminderAt?, lastNotifiedBillingDate?, active (soft delete), createdAt, updatedAt
-```
+Simple wrapper: const { userId } = useAuth(); return userId;
 
-### Step 2: Convex functions — `convex/functions/subscriptions.ts`
+Phase 3: Auth Screens
+3.1 Login Screen
+New file: apps/mobile/src/screens/LoginScreen.tsx
 
-Queries:
+Username + password inputs, Login button, "Create account" link, "Skip" button
+Uses useAuth().login()
+3.2 Register Screen
+New file: apps/mobile/src/screens/RegisterScreen.tsx
 
-- `listSubscriptions(userId)` — all active subscriptions for user
-- `getSubscription(id)` — single record
+Username + password + confirm password inputs, Register button, "Already have account?" link
+Input validation (min lengths, password match)
+Uses useAuth().register()
+3.3 Navigation
+Auth screens rendered as full-screen modals in AppContent (same opacity-toggle pattern). State: authScreen: 'login' | 'register' | null.
 
-Mutations:
+Phase 4: Wire Auth Into Existing Code
+4.1 Update App.tsx
+Wrap app with AuthProvider (above or beside ThemeProvider)
+Pass userId from AuthContext into SyncProvider and screen components
+Add auth screen modal rendering
+4.2 Replace all hardcoded 'local-user' references
+File Change
+src/sync/syncManager.tsx:54 Remove default, require userId prop
+src/sync/noteSync.ts:55 Remove default param
+src/notes/editor.ts:14 Remove default param
+src/sync/registerDeviceToken.ts:19 Use userId from AuthContext
+src/subscriptions/service.ts:9 Accept userId parameter in hooks
+src/notes/realtimeService.ts Accept userId parameter
+src/screens/NotesScreen.tsx Use useUserId()
+src/screens/TrashScreen.tsx Use useUserId()
+src/reminders/headless.ts Read from SecureStore (no React context in headless)
+src/reminders/scheduleNoteReminder.ts Accept userId parameter
+For headless tasks, add helper:
 
-- `createSubscription(args)` — create + compute nextReminderAt
-- `updateSubscription(id, patch)` — update + recompute nextReminderAt
-- `deleteSubscription(id)` — soft delete (active: false)
+ts
+async function resolveCurrentUserId(): Promise<string> {
+const session = await SecureStore.getItemAsync('AUTH_SESSION');
+if (session) return JSON.parse(session).userId;
+const deviceId = await AsyncStorage.getItem('DEVICE_UNIQUE_ID');
+return deviceId || uuid.v4();
+}
+Phase 5: SQLite Migration
+5.1 Migration 014 — add userId to notes
+File: apps/mobile/src/db/migrations.ts
 
-Internal helpers:
+sql
+ALTER TABLE notes ADD COLUMN userId TEXT DEFAULT NULL;
+CREATE INDEX IF NOT EXISTS idx_notes_userId ON notes (userId);
+5.2 Backfill on startup
+After migration runs, update all NULL userId rows with current userId.
 
-- `computeNextReminderAt(nextBillingDate, reminderDaysBefore[])` — returns earliest future reminder timestamp
-- `advanceBillingDate(nextBillingDate, billingCycle, customDays?)` — adds 1 period
+Phase 6: Data Migration
+6.1 Legacy local-user → env user (one-time)
+On startup, if EXPO_PUBLIC_USER_ID is set and != 'local-user':
 
-### Step 3: Cron — `convex/crons.ts`
+Call Convex migrateUserData('local-user', envUserId)
+Update local SQLite: UPDATE notes SET userId = ? WHERE userId = 'local-user'
+Update outbox similarly
+Set AsyncStorage flag LEGACY_MIGRATION_DONE to prevent re-running
+6.2 Anonymous → authenticated (on login)
+When user logs in and device has anonymous data:
 
-Add `check-subscription-reminders` cron (every hour, same as existing reminder cron):
+Call Convex migrateUserData(deviceUUID, authenticatedUserId)
+Update local SQLite userId columns
+Trigger full sync
+6.3 Logout
+Revert userId to device UUID
+Keep local data (don't delete)
+New notes use device UUID
+On re-login, merge again
+Phase 7: Settings Screen Update
+File: apps/mobile/src/screens/SettingsScreen.tsx
 
-- Query subscriptions where `nextReminderAt <= now`
-- For each: call `push.ts` pipeline to send notification
-- Recompute `nextReminderAt` (next reminder in the array, or next billing cycle's reminder)
-- Auto-advance `nextBillingDate` when `nextBillingDate <= now` (after billing date passes)
+Add "Account" section above "Theme":
 
----
-
-## Phase 2 — Shared Types
-
-### Step 4: `packages/shared/types/subscription.ts`
-
-Define `Subscription`, `SubscriptionCreate`, `SubscriptionUpdate` types.
-Define `BillingCycle`, `SubscriptionCategory`, `SubscriptionStatus` enums.
-
----
-
-## Phase 3 — Web Service Layer
-
-### Step 5: `apps/web/src/services/subscriptions.ts`
-
-Hooks mirroring `services/notes.ts` pattern:
-
-- `useSubscriptions()` — `useQuery(api.functions.subscriptions.listSubscriptions, { userId })`
-- `useCreateSubscription()`, `useUpdateSubscription()`, `useDeleteSubscription()` — useMutation wrappers
-- `mapDocToWebSubscription()` converter
-
-### Step 6: `apps/web/src/services/subscriptionUtils.ts`
-
-Pure utilities:
-
-- `computeMonthlyCost(price, billingCycle)` — normalizes to monthly
-- `computeTotalMonthlyCost(subscriptions[])` — sums active only
-- `getDaysUntilBilling(nextBillingDate)` — days remaining
-- `isReminderDue(subscription)` — checks if billing is within reminderDaysBefore window
-- `formatBillingCycle(billingCycle)` — display string
-
-### Step 7: `apps/web/src/constants/servicePresets.ts`
-
-Static array of ~20 preset services:
-`{ name, category, defaultColor }` — e.g. Netflix/streaming, Spotify/music, GitHub/tools, etc.
-
----
-
-## Phase 4 — Web UI
-
-### Step 8: `apps/web/src/pages/SubscriptionsPage.tsx`
-
-Main page component:
-
-- Fetches subscriptions via `useSubscriptions()`
-- Local state: searchQuery, editorOpen, editingSubscription, viewMode (grid/list)
-- Renders: `<SubscriptionReminderBanner>`, `<SubscriptionsHeader>`, `<SubscriptionsList>`
-- Passes CRUD handlers down
-
-### Step 9: `apps/web/src/components/subscriptions/SubscriptionCard.tsx`
-
-Card showing:
-
-- Service name + category badge + status indicator
-- Price + billing cycle
-- "Next billing: X days" countdown (color: green/yellow/red)
-- Trial end badge (if applicable)
-- Edit / Delete action buttons
-- CSS styling reusing existing card patterns
-
-### Step 10: `apps/web/src/components/subscriptions/SubscriptionEditorModal.tsx`
-
-Create/edit modal:
-
-- Service name input with preset autocomplete dropdown (servicePresets.ts)
-- Category select
-- Price + billing cycle select
-- Next billing date input (date picker)
-- Status select (active/cancelled/paused)
-- Trial end date input (optional)
-- Reminder settings: checkboxes for [1, 3, 7] days
-- Notes textarea
-- Save / Cancel buttons
-- Reuses modal overlay pattern from NoteEditorModal
-
-### Step 11: `apps/web/src/components/subscriptions/SubscriptionReminderBanner.tsx`
-
-Top-of-page alert banner:
-
-- Computes which subscriptions have upcoming billing (within reminderDaysBefore window)
-- Shows dismissible banner per subscription or grouped summary
-- Uses `isReminderDue()` from subscriptionUtils
-
-### Step 12: Update `apps/web/src/App.tsx`
-
-- Add `activeTab: 'notes' | 'subscriptions'` state
-- Render `<NavTabs>` at top (two buttons: Notes | Subscriptions)
-- Conditionally render `<NotesPage>` or `<SubscriptionsPage>`
-
----
-
-## Relevant Files
-
-- `apps/web/src/App.tsx` — add tab state + NavTabs
-- `apps/web/src/pages/NotesPage.tsx` — reference for page structure pattern
-- `apps/web/src/services/notes.ts` — reference for Convex hook pattern
-- `apps/web/src/services/reminderUtils.ts` — reference for utility pattern
-- `apps/web/src/components/NoteEditorModal.tsx` — reference for modal pattern
-- `apps/web/src/components/NoteCard.tsx` — reference for card pattern
-- `convex/schema.ts` — add subscriptions table
-- `convex/crons.ts` — add subscription reminder cron
-- `convex/functions/reminders.ts` — reference for Convex function patterns
-- `convex/_generated/` — regenerated after schema changes (automatic)
-- `packages/shared/types/note.ts` — reference for type structure
-
----
-
-## Verification
-
-1. Run `npx convex dev` — verify schema deploys without errors
-2. Create a subscription via the editor modal → confirm it appears in the list
-3. Set nextBillingDate = today+2 days → confirm ReminderBanner shows it
-4. Set nextBillingDate = past → confirm cron advances it on next tick (test via Convex dashboard)
-5. Run `npm test` in root → existing tests still pass
-6. Run `npm run lint` in `apps/web/` → no new TS errors
-
----
-
-## Excluded Scope
-
-- Mobile (deferred)
-- Currency conversion (price stored as-is, user selects currency label)
-- Import/export (CSV, etc.)
-- Shared subscriptions between users
-- Webhook integrations to detect actual billing events
+Anonymous: "Local account" label + "Sign In" / "Create Account" buttons
+Authenticated: "Signed in as {username}" + "Sign Out" button with confirmation
+Verification
+Fresh install: App starts with device UUID as userId, notes save locally
+Register: Create account → userId switches to Convex ID → new notes sync
+Login on same device: Anonymous notes merged to account
+Login on new device: See synced notes from other device
+Logout: Reverts to device UUID, local data preserved
+Legacy migration: Start with EXPO_PUBLIC_USER_ID=someuser → local-user data migrates
+Headless tasks: Reminders still fire with correct userId after login/logout
+Files to Create
+convex/functions/auth.ts
+convex/functions/userDataMigration.ts
+apps/mobile/src/auth/AuthContext.tsx
+apps/mobile/src/auth/useUserId.ts
+apps/mobile/src/screens/LoginScreen.tsx
+apps/mobile/src/screens/RegisterScreen.tsx
+Files to Modify
+convex/schema.ts — add users table
+apps/mobile/App.tsx — AuthProvider + auth screen modals
+apps/mobile/src/db/migrations.ts — migration 014
+apps/mobile/src/screens/SettingsScreen.tsx — account section
+apps/mobile/src/sync/syncManager.tsx — dynamic userId
+apps/mobile/src/sync/noteSync.ts — remove default
+apps/mobile/src/notes/editor.ts — remove default
+apps/mobile/src/sync/registerDeviceToken.ts — use AuthContext
+apps/mobile/src/subscriptions/service.ts — parameterize userId
+apps/mobile/src/hooks/useNoteActions.ts — pass userId through
+apps/mobile/src/reminders/headless.ts — SecureStore userId resolution
+apps/mobile/src/screens/NotesScreen.tsx — useUserId()
+apps/mobile/src/screens/TrashScreen.tsx — useUserId()

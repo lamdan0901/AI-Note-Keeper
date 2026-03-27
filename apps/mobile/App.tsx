@@ -18,6 +18,9 @@ import { SubscriptionsScreen } from './src/screens/SubscriptionsScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
 import { BottomTabBar } from './src/components/BottomTabBar';
 import { ThemeProvider, useTheme } from './src/theme';
+import { AuthProvider, useAuth } from './src/auth/AuthContext';
+import { LoginScreen } from './src/screens/LoginScreen';
+import { RegisterScreen } from './src/screens/RegisterScreen';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -159,12 +162,18 @@ export default function App(): JSX.Element | null {
   );
 
   if (!convexClient) {
-    return <ThemeProvider>{content}</ThemeProvider>;
+    return (
+      <ThemeProvider>
+        <AuthProvider>{content}</AuthProvider>
+      </ThemeProvider>
+    );
   }
 
   return (
     <ThemeProvider>
-      <ConvexProvider client={convexClient}>{content}</ConvexProvider>
+      <ConvexProvider client={convexClient}>
+        <AuthProvider>{content}</AuthProvider>
+      </ConvexProvider>
     </ThemeProvider>
   );
 }
@@ -182,12 +191,20 @@ const AppContent = ({
   onEditHandled: () => void;
   hasConvexClient: boolean;
 }) => {
+  const { userId, isAuthenticated, username, logout, isLoading: authLoading } = useAuth();
   const { theme, resolvedMode } = useTheme();
   const [currentScreen, setCurrentScreen] = useState<
     'notes' | 'trash' | 'subscriptions' | 'settings'
   >('notes');
+  const [authScreen, setAuthScreen] = useState<'login' | 'register' | null>(null);
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('grid');
   const [hasDueSubscriptions, setHasDueSubscriptions] = useState(false);
+
+  useEffect(() => {
+    if (!hasConvexClient || !userId) return;
+
+    void registerDevicePushToken({ userId });
+  }, [hasConvexClient, userId]);
 
   useEffect(() => {
     if (Platform.OS === 'android') {
@@ -195,6 +212,10 @@ const AppContent = ({
       NavigationBar.setButtonStyleAsync(resolvedMode === 'dark' ? 'light' : 'dark');
     }
   }, [theme.colors.background, resolvedMode]);
+
+  if (authLoading) {
+    return <View style={styles.loadingContainer} />;
+  }
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -229,6 +250,7 @@ const AppContent = ({
           pointerEvents={currentScreen === 'trash' ? 'auto' : 'none'}
         >
           <TrashScreen
+            userId={userId}
             viewMode={viewMode}
             onViewModeChange={setViewMode}
             onNavigateToNotes={() => setCurrentScreen('notes')}
@@ -252,9 +274,34 @@ const AppContent = ({
           style={currentScreen === 'settings' ? styles.screenVisible : styles.screenHidden}
           pointerEvents={currentScreen === 'settings' ? 'auto' : 'none'}
         >
-          <SettingsScreen />
+          <SettingsScreen
+            isAuthenticated={isAuthenticated}
+            username={username}
+            hasConvexClient={hasConvexClient}
+            onOpenLogin={() => setAuthScreen('login')}
+            onOpenRegister={() => setAuthScreen('register')}
+            onSignOut={logout}
+          />
         </View>
       </View>
+
+      {authScreen === 'login' && (
+        <View style={styles.authOverlay}>
+          <LoginScreen
+            onDismiss={() => setAuthScreen(null)}
+            onNavigateToRegister={() => setAuthScreen('register')}
+          />
+        </View>
+      )}
+
+      {authScreen === 'register' && (
+        <View style={styles.authOverlay}>
+          <RegisterScreen
+            onDismiss={() => setAuthScreen(null)}
+            onNavigateToLogin={() => setAuthScreen('login')}
+          />
+        </View>
+      )}
 
       <BottomTabBar
         activeTab={currentScreen}
@@ -279,6 +326,10 @@ const styles = StyleSheet.create({
   screenHidden: {
     ...StyleSheet.absoluteFillObject,
     opacity: 0,
+  },
+  authOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 2000,
   },
   loadingContainer: {
     flex: 1,

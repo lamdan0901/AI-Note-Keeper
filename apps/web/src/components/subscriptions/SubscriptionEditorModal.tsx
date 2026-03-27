@@ -170,13 +170,11 @@ export function SubscriptionEditorModal({
   const [showCategorySuggestions, setShowCategorySuggestions] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState('');
   const [serviceNameTouched, setServiceNameTouched] = useState(false);
-  const [priceTouched, setPriceTouched] = useState(false);
   const [nextBillingDateTouched, setNextBillingDateTouched] = useState(false);
   const [trialEndDateTouched, setTrialEndDateTouched] = useState(false);
 
   const serviceNameError =
     serviceNameTouched && !serviceName.trim() ? 'Service name is required.' : null;
-  const priceError = null;
   const nextBillingDateError =
     nextBillingDateTouched && !nextBillingDate
       ? 'Next billing date is required.'
@@ -416,7 +414,6 @@ export function SubscriptionEditorModal({
                   step="0.01"
                   value={price}
                   onChange={(e) => setPrice(e.target.value)}
-                  onBlur={() => setPriceTouched(true)}
                   placeholder="0.00"
                 />
               </div>

@@ -11,6 +11,7 @@
 import type * as crons from "../crons.js";
 import type * as functions__generated_api from "../functions/_generated/api.js";
 import type * as functions__generated_server from "../functions/_generated/server.js";
+import type * as functions_auth from "../functions/auth.js";
 import type * as functions_deviceTokens from "../functions/deviceTokens.js";
 import type * as functions_notes from "../functions/notes.js";
 import type * as functions_notesMigration from "../functions/notesMigration.js";
@@ -20,6 +21,7 @@ import type * as functions_reminderTriggers from "../functions/reminderTriggers.
 import type * as functions_reminders from "../functions/reminders.js";
 import type * as functions_subscriptionMigration from "../functions/subscriptionMigration.js";
 import type * as functions_subscriptions from "../functions/subscriptions.js";
+import type * as functions_userDataMigration from "../functions/userDataMigration.js";
 import type * as utils_uuid from "../utils/uuid.js";
 
 import type {
@@ -32,6 +34,7 @@ declare const fullApi: ApiFromModules<{
   crons: typeof crons;
   "functions/_generated/api": typeof functions__generated_api;
   "functions/_generated/server": typeof functions__generated_server;
+  "functions/auth": typeof functions_auth;
   "functions/deviceTokens": typeof functions_deviceTokens;
   "functions/notes": typeof functions_notes;
   "functions/notesMigration": typeof functions_notesMigration;
@@ -41,6 +44,7 @@ declare const fullApi: ApiFromModules<{
   "functions/reminders": typeof functions_reminders;
   "functions/subscriptionMigration": typeof functions_subscriptionMigration;
   "functions/subscriptions": typeof functions_subscriptions;
+  "functions/userDataMigration": typeof functions_userDataMigration;
   "utils/uuid": typeof utils_uuid;
 }>;
 

@@ -216,4 +216,11 @@ ALTER TABLE notes ADD COLUMN deletedAt INTEGER DEFAULT NULL;
 CREATE INDEX IF NOT EXISTS idx_notes_deletedAt ON notes (deletedAt);
     `.trim(),
   },
+  {
+    id: '014_add_user_id_to_notes',
+    sql: `
+ALTER TABLE notes ADD COLUMN userId TEXT DEFAULT NULL;
+CREATE INDEX IF NOT EXISTS idx_notes_userId ON notes (userId);
+    `.trim(),
+  },
 ];

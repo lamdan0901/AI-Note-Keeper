@@ -40,7 +40,19 @@ export const fetchNotes = async (userId: string): Promise<FetchNotesResult> => {
     )) as Note[];
 
     // Map Convex result to local Note type if needed (mostly same)
-    const mappedNotes: Note[] = notes.map((n) => {
+    const mappedNotes: Note[] = notes.flatMap((n) => {
+      const payloadUserId = typeof n.userId === 'string' ? n.userId : undefined;
+      if (payloadUserId && payloadUserId !== userId) {
+        console.warn('[Sync] Ignoring note with mismatched userId', {
+          noteId: n.id,
+          expectedUserId: userId,
+          payloadUserId,
+        });
+        return [];
+      }
+
+      const normalizedUserId = payloadUserId ?? userId;
+
       // Derive canonical repeat: prefer stored `repeat`, fall back to legacy fields
       const repeat = coerceRepeatRule({
         repeat: n.repeat,
@@ -51,6 +63,7 @@ export const fetchNotes = async (userId: string): Promise<FetchNotesResult> => {
 
       return {
         id: n.id,
+        userId: normalizedUserId,
         title: n.title ?? null,
         content: n.content ?? null,
         contentType:

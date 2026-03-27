@@ -5,8 +5,7 @@ import type {
   SubscriptionCreate,
   SubscriptionUpdate,
 } from '../../../../packages/shared/types/subscription';
-
-export const USER_ID = 'local-user';
+import { useUserId } from '../auth/useUserId';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const subscriptionsApi = api.functions.subscriptions as any;
 
@@ -38,7 +37,8 @@ export function mapDocToMobileSubscription(doc: any): Subscription {
 }
 
 export function useSubscriptions(): Subscription[] | undefined {
-  const raw = useQuery(api.functions.subscriptions.listSubscriptions, { userId: USER_ID });
+  const userId = useUserId();
+  const raw = useQuery(api.functions.subscriptions.listSubscriptions, { userId });
   if (raw === undefined) return undefined;
   return raw.map(mapDocToMobileSubscription);
 }
@@ -56,9 +56,10 @@ export function useDeleteSubscription() {
 }
 
 export function useDeletedSubscriptions(enabled = true): Subscription[] | undefined {
+  const userId = useUserId();
   const raw = useQuery(
     subscriptionsApi.listDeletedSubscriptions,
-    enabled ? { userId: USER_ID } : 'skip',
+    enabled ? { userId } : 'skip',
   );
   if (raw === undefined) return undefined;
   return raw.map(mapDocToMobileSubscription);
@@ -130,6 +131,6 @@ export async function permanentlyDeleteSubscription(
   await mutate({ id: id as any });
 }
 
-export async function emptySubscriptionTrash(mutate: EmptyTrashFn): Promise<void> {
-  await mutate({ userId: USER_ID });
+export async function emptySubscriptionTrash(mutate: EmptyTrashFn, userId: string): Promise<void> {
+  await mutate({ userId });
 }

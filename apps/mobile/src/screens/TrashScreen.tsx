@@ -38,9 +38,9 @@ import {
   useRestoreSubscription,
 } from '../subscriptions/service';
 import { formatPrice } from '../../../../packages/shared/utils/subscription';
+import { useUserId } from '../auth/useUserId';
 
 const FOURTEEN_DAYS_MS = 14 * 24 * 60 * 60 * 1000;
-const USER_ID = 'local-user';
 
 function getDaysRemaining(deletedAt: number | undefined): number {
   if (!deletedAt) return 14;
@@ -55,6 +55,7 @@ function getConvexClient(): ConvexHttpClient | null {
 }
 
 type TrashScreenProps = {
+  userId?: string;
   viewMode: 'list' | 'grid';
   onViewModeChange: (mode: 'list' | 'grid') => void;
   onNavigateToNotes?: () => void;
@@ -83,6 +84,7 @@ const SubscriptionTrashSection = React.memo(function SubscriptionTrashSection({
   onRegisterEmpty,
 }: SubscriptionTrashSectionProps) {
   const { theme } = useTheme();
+  const userId = useUserId();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const deletedSubscriptions = useDeletedSubscriptions(true);
   const restoreMutation = useRestoreSubscription();
@@ -148,7 +150,7 @@ const SubscriptionTrashSection = React.memo(function SubscriptionTrashSection({
           onPress: () => {
             void (async () => {
               try {
-                await emptySubscriptionTrash(emptyTrashMutation);
+                await emptySubscriptionTrash(emptyTrashMutation, userId);
               } catch (e) {
                 console.error('[Trash] Failed to empty subscription trash:', e);
                 Alert.alert('Error', 'Failed to empty subscription trash.');
@@ -158,7 +160,7 @@ const SubscriptionTrashSection = React.memo(function SubscriptionTrashSection({
         },
       ],
     );
-  }, [emptyTrashMutation, filtered.length]);
+  }, [emptyTrashMutation, filtered.length, userId]);
 
   useEffect(() => {
     onRegisterEmpty(handleEmptySubscriptionsTrash);
@@ -304,10 +306,9 @@ const NotesTrashSection = React.memo(function NotesTrashSection({
 NotesTrashSection.displayName = 'NotesTrashSection';
 
 const TrashScreenContent: React.FC<TrashScreenProps> = ({
+  userId,
   viewMode,
   onViewModeChange,
-  onNavigateToNotes,
-  onNavigateToSubscriptions,
   subscriptionsEnabled = false,
 }) => {
   const { theme } = useTheme();
@@ -346,14 +347,14 @@ const TrashScreenContent: React.FC<TrashScreenProps> = ({
   const loadTrash = useCallback(async () => {
     try {
       const db = await getDb();
-      const deleted = await listDeletedNotes(db);
+      const deleted = await listDeletedNotes(db, userId);
       setNotes(deleted);
     } catch (e) {
       console.error('[Trash] Failed to load:', e);
     } finally {
       setLoadingNotes(false);
     }
-  }, []);
+  }, [userId]);
 
   useEffect(() => {
     loadTrash();
@@ -366,8 +367,8 @@ const TrashScreenContent: React.FC<TrashScreenProps> = ({
       void (async () => {
         try {
           const db = await getDb();
-          await restoreNoteOffline(db, note);
-          await syncNotes(db);
+          await restoreNoteOffline(db, note, userId ?? '');
+          await syncNotes(db, userId ?? '');
         } catch (e) {
           console.error('[Trash] Restore failed:', e);
           Alert.alert('Error', 'Failed to restore note');
@@ -375,7 +376,7 @@ const TrashScreenContent: React.FC<TrashScreenProps> = ({
         }
       })();
     },
-    [loadTrash],
+    [loadTrash, userId],
   );
 
   const handleDeleteForever = useCallback(
@@ -387,7 +388,7 @@ const TrashScreenContent: React.FC<TrashScreenProps> = ({
           const client = getConvexClient();
           if (client) {
             await client.mutation(api.functions.notes.permanentlyDeleteNote, {
-              userId: USER_ID,
+              userId: userId ?? '',
               noteId: note.id,
             });
           }
@@ -400,7 +401,7 @@ const TrashScreenContent: React.FC<TrashScreenProps> = ({
         }
       })();
     },
-    [loadTrash],
+    [loadTrash, userId],
   );
 
   const handleEmptyNotesTrash = useCallback(() => {
@@ -420,10 +421,10 @@ const TrashScreenContent: React.FC<TrashScreenProps> = ({
               try {
                 const client = getConvexClient();
                 if (client) {
-                  await client.mutation(api.functions.notes.emptyTrash, { userId: USER_ID });
+                  await client.mutation(api.functions.notes.emptyTrash, { userId: userId ?? '' });
                 }
                 const db = await getDb();
-                await hardDeleteAllInactive(db);
+                await hardDeleteAllInactive(db, userId);
               } catch (e) {
                 console.error('[Trash] Empty trash failed:', e);
                 Alert.alert('Error', 'Failed to empty trash. Check your connection.');
@@ -434,7 +435,7 @@ const TrashScreenContent: React.FC<TrashScreenProps> = ({
         },
       ],
     );
-  }, [notes.length, loadTrash]);
+  }, [notes.length, loadTrash, userId]);
 
   const handleEmptyTrash = useCallback(() => {
     if (activeTab === 'notes') {
@@ -632,11 +633,14 @@ const TrashScreenContent: React.FC<TrashScreenProps> = ({
   );
 };
 
-export const TrashScreen: React.FC<TrashScreenProps> = (props) => (
-  <SyncProvider>
-    <TrashScreenContent {...props} />
-  </SyncProvider>
-);
+export const TrashScreen: React.FC<TrashScreenProps> = (props) => {
+  const userId = useUserId();
+  return (
+    <SyncProvider userId={userId}>
+      <TrashScreenContent {...props} userId={userId} />
+    </SyncProvider>
+  );
+};
 
 const createStyles = (theme: Theme) =>
   StyleSheet.create({

@@ -9,9 +9,9 @@ import { parseChecklist, checklistToPlainText } from '../../../../packages/share
 /**
  * Convert a Note with reminder fields to a Reminder-like object for scheduling.
  */
-const noteToReminder = (note: Note): Reminder => ({
+const noteToReminder = (note: Note, userId: string): Reminder => ({
   id: note.id,
-  userId: note.userId ?? 'local-user',
+  userId,
   title: note.title ?? null,
   triggerAt: note.triggerAt!,
   repeatRule: note.repeatRule ?? 'none',
@@ -42,6 +42,7 @@ const noteToReminder = (note: Note): Reminder => ({
 export const scheduleNoteReminderNotification = async (
   db: DbLike,
   note: Note,
+  userId: string,
 ): Promise<string[]> => {
   const now = Date.now();
 
@@ -74,7 +75,7 @@ export const scheduleNoteReminderNotification = async (
   }
 
   // Note has a valid future reminder, schedule it
-  const reminder = noteToReminder(note);
+  const reminder = noteToReminder(note, userId);
   const triggerAt = reminder.snoozedUntil ?? reminder.triggerAt;
 
   const desiredHash = computeScheduleHash({

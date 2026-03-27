@@ -3,12 +3,6 @@ import { api } from '../../../../convex/_generated/api';
 import { type Note } from '../db/notesRepo';
 import { coerceRepeatRule } from '../../../../packages/shared/utils/repeatCodec';
 
-const DEFAULT_USER_ID = 'local-user';
-
-function resolveUserId(): string {
-  const envUser = process.env.EXPO_PUBLIC_USER_ID;
-  return envUser || DEFAULT_USER_ID;
-}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapDocToMobileNote(doc: any): Note {
@@ -50,10 +44,10 @@ function mapDocToMobileNote(doc: any): Note {
   };
 }
 
-export function useRealtimeNotes(enabled = true): Note[] | undefined {
+export function useRealtimeNotes(userId: string, enabled = true): Note[] | undefined {
   const raw = useQuery(
     api.functions.notes.getNotes,
-    enabled ? { userId: resolveUserId() } : 'skip',
+    enabled ? { userId } : 'skip',
   );
   if (raw === undefined) return undefined;
   return raw.map(mapDocToMobileNote).filter((note) => note.active);

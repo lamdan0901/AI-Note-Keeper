@@ -12,6 +12,7 @@ import {
 import { logSyncEvent } from './logging';
 import { deleteNoteOffline } from '../notes/editor';
 import { syncNotes } from '../sync/noteSync';
+import { resolveCurrentUserId } from '../auth/session';
 
 const REMINDER_DONE_TASK = 'ReminderDone';
 const REMINDER_RESCHEDULE_TASK = 'ReminderReschedule';
@@ -172,11 +173,12 @@ const reminderDeleteTask = async (data: { reminderId: string }) => {
     }
 
     // 1. Local Delete + Outbox
-    await deleteNoteOffline(db, note, note.userId || 'local-user');
+    const currentUserId = note.userId ?? (await resolveCurrentUserId());
+    await deleteNoteOffline(db, note, currentUserId);
 
     // 2. Sync to Convex (Best effort)
     // We use syncNotes which picks up the deletion from the outbox
-    await syncNotes(db, note.userId || 'local-user');
+    await syncNotes(db, currentUserId);
 
     logSyncEvent('info', 'headless_delete_complete', { noteId });
   } catch (e) {
