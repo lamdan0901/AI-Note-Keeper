@@ -851,8 +851,8 @@ const createStyles = (theme: Theme) =>
       minWidth: 44,
     },
     footerDeleteButton: {
-      backgroundColor: '#fee2e2',
-      borderColor: '#fecaca',
+      backgroundColor: `${theme.colors.error}1a`,
+      borderColor: `${theme.colors.error}55`,
     },
     secondaryButtonText: {
       color: theme.colors.text,

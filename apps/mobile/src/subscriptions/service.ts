@@ -57,10 +57,7 @@ export function useDeleteSubscription() {
 
 export function useDeletedSubscriptions(enabled = true): Subscription[] | undefined {
   const userId = useUserId();
-  const raw = useQuery(
-    subscriptionsApi.listDeletedSubscriptions,
-    enabled ? { userId } : 'skip',
-  );
+  const raw = useQuery(subscriptionsApi.listDeletedSubscriptions, enabled ? { userId } : 'skip');
   if (raw === undefined) return undefined;
   return raw.map(mapDocToMobileSubscription);
 }
@@ -87,8 +84,8 @@ type EmptyTrashFn = ReturnType<typeof useEmptySubscriptionTrash>;
 export async function createSubscription(
   mutate: CreateFn,
   data: SubscriptionCreate,
-): Promise<void> {
-  await mutate({
+): Promise<string> {
+  const createdId = await mutate({
     userId: data.userId,
     serviceName: data.serviceName,
     category: data.category,
@@ -102,6 +99,8 @@ export async function createSubscription(
     status: data.status,
     reminderDaysBefore: data.reminderDaysBefore,
   });
+
+  return createdId as string;
 }
 
 export async function updateSubscription(

@@ -23,11 +23,13 @@ const mockDb: {
   patch: jest.Mock<(...args: unknown[]) => unknown>;
   delete: jest.Mock<(...args: unknown[]) => unknown>;
   get: jest.Mock<(...args: unknown[]) => Promise<unknown>>;
+  insert: jest.Mock<(...args: unknown[]) => Promise<string>>;
 } = {
   query: jest.fn(),
   patch: jest.fn(),
   delete: jest.fn(),
   get: jest.fn(),
+  insert: jest.fn(),
 };
 
 const mockCtx = {
@@ -109,8 +111,10 @@ jest.mock(
 );
 
 import {
+  createSubscription,
   deleteSubscription,
   emptySubscriptionTrash,
+  listSubscriptions,
   listDeletedSubscriptions,
   permanentlyDeleteSubscription,
   purgeExpiredSubscriptionTrash,
@@ -214,5 +218,70 @@ describe('subscriptions trash lifecycle contract', () => {
     expect(mockDb.delete).toHaveBeenNthCalledWith(1, 'sub-10');
     expect(mockDb.delete).toHaveBeenNthCalledWith(2, 'sub-11');
     expect(result).toEqual({ purged: 2 });
+  });
+
+  test('create-then-delete race ends with no active subscription', async () => {
+    const createHandler = (createSubscription as unknown as { _handler: Handler })._handler;
+    const deleteHandler = (deleteSubscription as unknown as { _handler: Handler })._handler;
+    const listHandler = (listSubscriptions as unknown as { _handler: Handler })._handler;
+
+    const userId = 'u-race';
+    const createdId = 'sub-race-1';
+    const docs = new Map<string, Record<string, unknown>>();
+    let releaseInsert: (() => void) | null = null;
+
+    mockDb.insert.mockImplementation(
+      async (_table: unknown, doc: unknown): Promise<string> =>
+        await new Promise<string>((resolve) => {
+          releaseInsert = () => {
+            docs.set(createdId, { ...(doc as Record<string, unknown>), _id: createdId });
+            resolve(createdId);
+          };
+        }),
+    );
+
+    mockDb.patch.mockImplementation((id: unknown, patch: unknown) => {
+      const existing = docs.get(id as string);
+      if (!existing) {
+        throw new Error('missing subscription');
+      }
+      docs.set(id as string, { ...existing, ...(patch as Record<string, unknown>) });
+    });
+
+    mockQuery.collect.mockImplementation(async () =>
+      Array.from(docs.values()).filter((doc) => doc.userId === userId && doc.active === true),
+    );
+
+    const createPromise = createHandler(mockCtx, {
+      userId,
+      serviceName: 'Race Sub',
+      category: 'tools',
+      price: 9.99,
+      currency: 'USD',
+      billingCycle: 'monthly',
+      nextBillingDate: Date.now() + 7 * 24 * 60 * 60 * 1000,
+      status: 'active',
+      reminderDaysBefore: [3],
+    }) as Promise<string>;
+
+    const deleteAfterAck = createPromise.then(async (id) => {
+      await deleteHandler(mockCtx, { id });
+      return id;
+    });
+
+    expect(releaseInsert).not.toBeNull();
+    releaseInsert?.();
+
+    const id = await deleteAfterAck;
+    const stored = docs.get(id);
+    expect(stored).toEqual(
+      expect.objectContaining({
+        _id: createdId,
+        active: false,
+      }),
+    );
+
+    const activeList = (await listHandler(mockCtx, { userId })) as Array<Record<string, unknown>>;
+    expect(activeList).toHaveLength(0);
   });
 });

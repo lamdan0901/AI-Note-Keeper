@@ -7,6 +7,7 @@ type UseSubscriptionSelectionResult = {
   selectionMode: boolean;
   selectionHeaderAnim: Animated.Value;
   clearSelection: () => void;
+  removeSelectedSubscriptionIds: (subscriptionIds: string[]) => void;
   handleSubscriptionLongPress: (subscriptionId: string) => void;
 };
 
@@ -44,6 +45,18 @@ export const useSubscriptionSelection = (
     setSelectedSubscriptionIds(new Set());
   }, []);
 
+  const removeSelectedSubscriptionIds = useCallback((subscriptionIds: string[]) => {
+    if (subscriptionIds.length === 0) return;
+
+    setSelectedSubscriptionIds((prev) => {
+      const next = new Set(prev);
+      subscriptionIds.forEach((id) => {
+        next.delete(id);
+      });
+      return next;
+    });
+  }, []);
+
   const handleSubscriptionLongPress = useCallback((subscriptionId: string) => {
     setSelectedSubscriptionIds((prev) => {
       const next = new Set(prev);
@@ -58,6 +71,7 @@ export const useSubscriptionSelection = (
     selectionMode,
     selectionHeaderAnim,
     clearSelection,
+    removeSelectedSubscriptionIds,
     handleSubscriptionLongPress,
   };
 };
