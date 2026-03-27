@@ -5,6 +5,7 @@ import { DbLike, getNoteScheduleState, upsertNoteScheduleState } from './noteSch
 import { computeScheduleHash } from './scheduleHash';
 import { logScheduleEvent } from './logging';
 import { parseChecklist, checklistToPlainText } from '../../../../packages/shared/utils/checklist';
+import { clearNoteNotificationState } from './noteNotificationCleanup';
 
 /**
  * Convert a Note with reminder fields to a Reminder-like object for scheduling.
@@ -45,38 +46,20 @@ export const scheduleNoteReminderNotification = async (
   userId: string,
 ): Promise<string[]> => {
   const now = Date.now();
+  const effectiveTriggerAt = note.snoozedUntil ?? note.nextTriggerAt ?? note.triggerAt;
 
-  // If note has no reminder or triggerAt is in the past, cancel any existing
-  if (!note.triggerAt || note.triggerAt <= now) {
-    const existing = await getNoteScheduleState(db, note.id);
-    if (existing?.notificationIds?.length) {
-      try {
-        await cancelReminderNotifications(existing.notificationIds);
-        logScheduleEvent('info', 'note_reminder_canceled', {
-          noteId: note.id,
-          reason: note.triggerAt ? 'past_time' : 'no_trigger',
-        });
-      } catch (e) {
-        logScheduleEvent('error', 'note_reminder_cancel_failed', {
-          noteId: note.id,
-          error: e instanceof Error ? e.message : String(e),
-        });
-      }
-      await upsertNoteScheduleState(db, {
-        noteId: note.id,
-        notificationIds: [],
-        lastScheduledHash: '',
-        status: 'canceled',
-        lastScheduledAt: now,
-        lastError: null,
-      });
-    }
+  if (!note.active || note.deletedAt != null || !effectiveTriggerAt || effectiveTriggerAt <= now) {
+    await clearNoteNotificationState(db, note.id);
+    logScheduleEvent('info', 'note_reminder_canceled', {
+      noteId: note.id,
+      reason: !note.active || note.deletedAt != null ? 'deleted_or_inactive' : 'no_future_trigger',
+    });
     return [];
   }
 
   // Note has a valid future reminder, schedule it
   const reminder = noteToReminder(note, userId);
-  const triggerAt = reminder.snoozedUntil ?? reminder.triggerAt;
+  const triggerAt = reminder.snoozedUntil ?? reminder.nextTriggerAt ?? reminder.triggerAt;
 
   const desiredHash = computeScheduleHash({
     triggerAt: reminder.triggerAt,
@@ -122,7 +105,6 @@ export const scheduleNoteReminderNotification = async (
         title: notificationTitle,
         body: notificationBody,
       },
-      db,
     );
 
     await upsertNoteScheduleState(db, {

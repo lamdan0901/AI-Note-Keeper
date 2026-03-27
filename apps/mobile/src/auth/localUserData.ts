@@ -1,4 +1,5 @@
 import type { SQLiteDatabase } from 'expo-sqlite/next';
+import { clearNoteNotificationState } from '../reminders/noteNotificationCleanup';
 
 export const migrateLocalUserData = async (
   db: SQLiteDatabase,
@@ -21,6 +22,10 @@ export const migrateLocalUserData = async (
 export const clearLocalUserData = async (db: SQLiteDatabase, userId: string): Promise<boolean> => {
   if (!userId) return true;
   try {
+    const noteRows = await db.getAllAsync<{ id: string }>(`SELECT id FROM notes WHERE userId = ?`, [userId]);
+    for (const row of noteRows) {
+      await clearNoteNotificationState(db, row.id);
+    }
     await db.runAsync(`DELETE FROM note_outbox WHERE userId = ?`, [userId]);
     await db.runAsync(`DELETE FROM notes WHERE userId = ?`, [userId]);
     return true;

@@ -1,5 +1,6 @@
 import { SQLiteDatabase } from 'expo-sqlite/next';
 import { Note } from '../../../../packages/shared/types/note';
+import { clearNoteNotificationState } from '../reminders/noteNotificationCleanup';
 export { Note };
 
 export type NoteRow = {
@@ -182,8 +183,10 @@ export const deleteNote = async (db: SQLiteDatabase, noteId: string): Promise<No
   const note = await getNoteById(db, noteId);
   if (!note) return null;
 
-  const updated = { ...note, active: false, updatedAt: Date.now() };
+  const now = Date.now();
+  const updated = { ...note, active: false, deletedAt: now, updatedAt: now };
   await upsertNote(db, updated);
+  await clearNoteNotificationState(db, noteId);
   return updated;
 };
 
@@ -200,10 +203,21 @@ export const listDeletedNotes = async (db: SQLiteDatabase, userId?: string): Pro
 };
 
 export const hardDeleteNote = async (db: SQLiteDatabase, noteId: string): Promise<void> => {
+  await clearNoteNotificationState(db, noteId);
   await db.runAsync(`DELETE FROM notes WHERE id = ?`, [noteId]);
 };
 
 export const hardDeleteAllInactive = async (db: SQLiteDatabase, userId?: string): Promise<void> => {
+  const rows = userId
+    ? await db.getAllAsync<{ id: string }>(`SELECT id FROM notes WHERE active = 0 AND userId = ?`, [
+        userId,
+      ])
+    : await db.getAllAsync<{ id: string }>(`SELECT id FROM notes WHERE active = 0`);
+
+  for (const row of rows) {
+    await clearNoteNotificationState(db, row.id);
+  }
+
   if (userId) {
     await db.runAsync(`DELETE FROM notes WHERE active = 0 AND userId = ?`, [userId]);
     return;

@@ -2,10 +2,8 @@ import { SQLiteDatabase } from 'expo-sqlite/next';
 import { Note, upsertNote } from '../db/notesRepo';
 import { enqueueNoteOperation } from '../sync/noteOutbox';
 import { nowMs } from '../../../../packages/shared/utils/time';
-import {
-  scheduleNoteReminderNotification,
-  cancelNoteReminderNotification,
-} from '../reminders/scheduleNoteReminder';
+import { scheduleNoteReminderNotification } from '../reminders/scheduleNoteReminder';
+import { clearNoteNotificationState } from '../reminders/noteNotificationCleanup';
 
 export const saveNoteOffline = async (
   db: SQLiteDatabase,
@@ -46,10 +44,9 @@ export const deleteNoteOffline = async (
   // 2. Enqueue to Outbox
   await enqueueNoteOperation(db, deletedNote, 'delete', userId, now);
 
-  // 3. Cancel any scheduled notification
+  // 3. Clear all local notification state for the deleted note
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await cancelNoteReminderNotification(db as any, note.id);
+    await clearNoteNotificationState(db, note.id);
   } catch (e) {
     // Log but don't fail the delete - notification is non-critical
     console.warn('[editor] Failed to cancel notification:', e);

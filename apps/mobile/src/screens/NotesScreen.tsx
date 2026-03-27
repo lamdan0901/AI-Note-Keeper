@@ -27,6 +27,7 @@ import { ConflictResolutionModal } from '../components/ConflictResolutionModal';
 import { Toast } from '../components/Toast';
 import { type Theme, useTheme } from '../theme';
 import { RescheduleModal } from '../reminders/ui/SnoozeModal';
+import { clearNoteNotificationState } from '../reminders/noteNotificationCleanup';
 import { useNoteActions } from '../hooks/useNoteActions';
 import { useNoteSelection } from '../hooks/useNoteSelection';
 import { useToast } from '../hooks/useToast';
@@ -421,6 +422,7 @@ const NotesScreenContent = ({
           syncStatus: 'synced',
           updatedAt: Date.now(),
         });
+        await clearNoteNotificationState(db, conflictLocalNote.id);
       }
 
       await db.runAsync('DELETE FROM note_outbox WHERE noteId = ?', [conflictLocalNote.id]);

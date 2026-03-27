@@ -4,7 +4,6 @@ import { logSyncEvent } from '../reminders/logging';
 import { getDb } from '../db/bootstrap';
 import { upsertNote, deleteNote } from '../db/notesRepo';
 import { fetchReminder } from './fetchReminder';
-import { cancelNoteWithLedger } from '../reminders/scheduler';
 import { Note } from '../db/notesRepo';
 import {
   hasNotificationSent,
@@ -113,9 +112,6 @@ export const handleFcmMessage = async (remoteMessage: FcmRemoteMessage): Promise
         // Let's soft delete to be safe or hard delete?
         // NoteRepo `deleteNote` does `DELETE FROM notes`. That's fine for "sync".
         await deleteNote(db, reminderId);
-
-        // 2. Cancel Alarm
-        await cancelNoteWithLedger(db, reminderId);
 
         logSyncEvent('info', 'fcm_sync_processed_delete', { reminderId });
       } else {

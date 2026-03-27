@@ -8,6 +8,7 @@ import android.os.Build
 import android.provider.Settings
 import android.net.Uri
 import android.util.Log
+import androidx.core.app.NotificationManagerCompat
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
@@ -116,7 +117,10 @@ class ReminderModule(reactContext: ReactApplicationContext) : ReactContextBaseJa
 
         if (pendingIntent != null) {
             alarmManager.cancel(pendingIntent)
+            pendingIntent.cancel()
         }
+
+        NotificationManagerCompat.from(context).cancel(id.hashCode())
     }
 
     /**

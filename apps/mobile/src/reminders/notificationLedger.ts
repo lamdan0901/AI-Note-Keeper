@@ -168,3 +168,10 @@ export const getNotificationsByReminder = async (
     createdAt: row.createdAt,
   }));
 };
+
+export const deleteNotificationsByReminderId = async (
+  db: DbLike,
+  reminderId: string,
+): Promise<void> => {
+  await db.runAsync(`DELETE FROM notification_ledger WHERE reminderId = ?`, [reminderId]);
+};
