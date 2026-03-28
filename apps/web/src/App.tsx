@@ -28,6 +28,10 @@ import {
   type ThemeMode,
 } from './services/theme';
 import type { NotesViewMode } from './services/notesTypes';
+import { LandingPage } from './components/LandingPage';
+import { AppFooter } from './components/AppFooter';
+
+const LANDING_DISMISSED_KEY = 'ai-note-keeper-landing-dismissed';
 
 const THEME_OPTIONS: Array<{ mode: ThemeMode; icon: React.ReactNode; label: string }> = [
   { mode: 'light', icon: <Sun size={16} />, label: 'Light' },
@@ -79,6 +83,26 @@ export default function App(): JSX.Element {
   const [authError, setAuthError] = useState<string | null>(null);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const accountMenuRef = useRef<HTMLDivElement>(null);
+  const [showLanding, setShowLanding] = useState(
+    () => !sessionStorage.getItem(LANDING_DISMISSED_KEY),
+  );
+
+  const dismissLanding = () => {
+    sessionStorage.setItem(LANDING_DISMISSED_KEY, '1');
+    setShowLanding(false);
+  };
+
+  const openLoginFromLanding = () => {
+    dismissLanding();
+    setAuthError(null);
+    setAuthDialog('login');
+  };
+
+  const openRegisterFromLanding = () => {
+    dismissLanding();
+    setAuthError(null);
+    setAuthDialog('register');
+  };
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -156,6 +180,33 @@ export default function App(): JSX.Element {
     }
     setAuthError(result.error ?? 'Authentication failed');
   };
+
+  if (showLanding) {
+    return (
+      <>
+        <LandingPage
+          onEnterApp={dismissLanding}
+          onOpenLogin={openLoginFromLanding}
+          onOpenRegister={openRegisterFromLanding}
+        />
+        {authDialog && (
+          <AuthDialog
+            mode={authDialog}
+            loading={authBusy}
+            error={authError}
+            onClose={() => setAuthDialog(null)}
+            onSwitchMode={() => {
+              setAuthError(null);
+              setAuthDialog(authDialog === 'login' ? 'register' : 'login');
+            }}
+            onSubmit={(enteredUsername, password) =>
+              handleAuthSubmit(authDialog, enteredUsername, password)
+            }
+          />
+        )}
+      </>
+    );
+  }
 
   return (
     <>
@@ -452,6 +503,8 @@ export default function App(): JSX.Element {
           }}
         />
       )}
+
+      <AppFooter />
     </>
   );
 }
