@@ -27,4 +27,6 @@ TypeScript (React for web, React Native/Expo for Android): Follow standard conve
 - 001-reminder-sync-service: Added TypeScript (React for web, React Native/Expo for Android) + React, React Native (Expo), Convex, Expo SQLite, Expo Notifications, FCM (react-native-firebase or Expo FCM support)
 
 <!-- MANUAL ADDITIONS START -->
+
+- Don't run build android to verify changes. just run lint, test (if needed) and typecheck
 <!-- MANUAL ADDITIONS END -->

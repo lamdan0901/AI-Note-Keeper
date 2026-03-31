@@ -16,8 +16,18 @@
       },
       "package": "com.andersonho.ainotekeeper",
       "googleServicesFile": "./google-services.json",
-      "permissions": ["SCHEDULE_EXACT_ALARM"]
+      "permissions": ["SCHEDULE_EXACT_ALARM", "RECORD_AUDIO"]
     },
+    "plugins": [
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Allow AI Note Keeper to access your microphone for hold-to-talk voice capture.",
+          "speechRecognitionPermission": "Allow AI Note Keeper to transcribe your speech for note capture.",
+          "androidSpeechServicePackages": ["com.google.android.googlequicksearchbox"]
+        }
+      ]
+    ],
     "assetBundlePatterns": ["**/*"],
     "splash": {
       "image": "./assets/splash.png",

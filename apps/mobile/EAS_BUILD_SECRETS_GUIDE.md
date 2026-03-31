@@ -14,9 +14,10 @@ This guide explains how to provide gitignored files (like `google-services.json`
 2. [Solution Overview](#solution-overview)
 3. [Method 1: File-Based Secrets (e.g., google-services.json)](#method-1-file-based-secrets)
 4. [Method 2: String-Based Secrets (e.g., .env variables)](#method-2-string-based-secrets)
-5. [Using Build Hooks](#using-build-hooks)
-6. [Complete Example](#complete-example)
-7. [Troubleshooting](#troubleshooting)
+5. [Android Speech Testing (Dev Client)](#android-speech-testing-dev-client)
+6. [Using Build Hooks](#using-build-hooks)
+7. [Complete Example](#complete-example)
+8. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -185,6 +186,62 @@ eas env:create --scope project --name EXPO_PUBLIC_API_KEY
 ```
 
 > **No build hook needed**: EAS automatically injects these as environment variables during the build.
+
+---
+
+## Android Speech Testing (Dev Client)
+
+Speech recognition modules require native code and config plugins, so this flow must be tested in a **custom development client** (local `expo run:android` build or EAS `development` profile). Expo Go is not sufficient for speech capture validation.
+
+### Required Environment Variables
+
+Set these for internal Android testing:
+
+```env
+EXPO_PUBLIC_MOBILE_VOICE_CAPTURE_V1=true
+EXPO_PUBLIC_MOBILE_VOICE_CLARIFICATION_V1=true
+```
+
+Leave both values unset or false for default-off behavior.
+
+### Reproducible Local Workflow
+
+1. Install dependencies from repo root:
+
+```bash
+npm install
+```
+
+2. Start Convex backend:
+
+```bash
+npx convex dev
+```
+
+3. From `apps/mobile`, run a native Android dev build:
+
+```bash
+npx expo run:android
+```
+
+4. Launch the app from the generated dev client and verify microphone permission prompt appears on first hold-to-talk attempt.
+
+### Reproducible EAS Workflow
+
+1. Add voice rollout flags as EAS secrets (only for internal profiles):
+
+```bash
+eas env:create --scope project --name EXPO_PUBLIC_MOBILE_VOICE_CAPTURE_V1 --value "true"
+eas env:create --scope project --name EXPO_PUBLIC_MOBILE_VOICE_CLARIFICATION_V1 --value "true"
+```
+
+2. Trigger development client build:
+
+```bash
+npx eas build --platform android --profile development
+```
+
+3. Install build on Android device and validate hold-to-talk speech behavior.
 
 ---
 
