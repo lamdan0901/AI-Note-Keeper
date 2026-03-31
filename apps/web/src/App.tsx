@@ -27,11 +27,15 @@ import {
   THEME_STORAGE_KEY,
   type ThemeMode,
 } from './services/theme';
+import {
+  dismissLandingForSession,
+  isLandingDismissedInSession,
+  getSessionStorageSafely,
+  shouldShowLanding,
+} from './services/landingSession';
 import type { NotesViewMode } from './services/notesTypes';
 import { LandingPage } from './components/LandingPage';
 import { AppFooter } from './components/AppFooter';
-
-const LANDING_DISMISSED_KEY = 'ai-note-keeper-landing-dismissed';
 
 const THEME_OPTIONS: Array<{ mode: ThemeMode; icon: React.ReactNode; label: string }> = [
   { mode: 'light', icon: <Sun size={16} />, label: 'Light' },
@@ -83,13 +87,13 @@ export default function App(): JSX.Element {
   const [authError, setAuthError] = useState<string | null>(null);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const accountMenuRef = useRef<HTMLDivElement>(null);
-  const [showLanding, setShowLanding] = useState(
-    () => !sessionStorage.getItem(LANDING_DISMISSED_KEY),
+  const [hasDismissedLanding, setHasDismissedLanding] = useState(() =>
+    isLandingDismissedInSession(getSessionStorageSafely()),
   );
 
   const dismissLanding = () => {
-    sessionStorage.setItem(LANDING_DISMISSED_KEY, '1');
-    setShowLanding(false);
+    dismissLandingForSession(getSessionStorageSafely());
+    setHasDismissedLanding(true);
   };
 
   const openLoginFromLanding = () => {
@@ -115,6 +119,12 @@ export default function App(): JSX.Element {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, []);
+
+  useEffect(() => {
+    if (isAuthenticated && !hasDismissedLanding) {
+      dismissLanding();
+    }
+  }, [hasDismissedLanding, isAuthenticated]);
 
   useEffect(() => {
     if (themeMode == null) {
@@ -181,7 +191,13 @@ export default function App(): JSX.Element {
     setAuthError(result.error ?? 'Authentication failed');
   };
 
-  if (showLanding) {
+  if (
+    shouldShowLanding({
+      hasDismissedLanding,
+      isAuthenticated,
+      isAuthLoading: authLoading,
+    })
+  ) {
     return (
       <>
         <LandingPage
