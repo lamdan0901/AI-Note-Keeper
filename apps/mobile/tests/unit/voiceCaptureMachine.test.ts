@@ -14,8 +14,10 @@ import type {
 
 type FakeSpeechOptions = {
   transcript?: string;
+  ensurePermissionsSignal?: Promise<void>;
   ensurePermissionsError?: VoiceSessionError;
   stopError?: VoiceSessionError;
+  startSignal?: Promise<void>;
 };
 
 class FakeSpeechRecognizer implements VoiceSpeechRecognizer {
@@ -23,7 +25,11 @@ class FakeSpeechRecognizer implements VoiceSpeechRecognizer {
 
   private readonly ensurePermissionsError?: VoiceSessionError;
 
+  private readonly ensurePermissionsSignal?: Promise<void>;
+
   private readonly stopError?: VoiceSessionError;
+
+  private readonly startSignal?: Promise<void>;
 
   private callbacks: VoiceSpeechCallbacks | null = null;
 
@@ -37,11 +43,17 @@ class FakeSpeechRecognizer implements VoiceSpeechRecognizer {
 
   constructor(options?: FakeSpeechOptions) {
     this.transcript = options?.transcript ?? 'draft note transcript';
+    this.ensurePermissionsSignal = options?.ensurePermissionsSignal;
     this.ensurePermissionsError = options?.ensurePermissionsError;
     this.stopError = options?.stopError;
+    this.startSignal = options?.startSignal;
   }
 
   async ensurePermissions(): Promise<void> {
+    if (this.ensurePermissionsSignal) {
+      await this.ensurePermissionsSignal;
+    }
+
     if (this.ensurePermissionsError) {
       throw this.ensurePermissionsError;
     }
@@ -51,6 +63,9 @@ class FakeSpeechRecognizer implements VoiceSpeechRecognizer {
     _options: VoiceSpeechStartOptions,
     callbacks: VoiceSpeechCallbacks,
   ): Promise<void> {
+    if (this.startSignal) {
+      await this.startSignal;
+    }
     this.callbacks = callbacks;
     callbacks.onPartialTranscript(this.transcript);
   }
@@ -85,6 +100,23 @@ function buildIntentResponse(overrides?: Partial<VoiceIntentResponseDto>): Voice
       missingFields: [],
     },
     ...overrides,
+  };
+}
+
+function createDeferred<T>(): {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+} {
+  let resolve: ((value: T) => void) | null = null;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+
+  return {
+    promise,
+    resolve: (value: T) => {
+      resolve?.(value);
+    },
   };
 }
 
@@ -240,5 +272,82 @@ describe('voice capture session controller', () => {
       throw new Error('Expected error state for timeout failure');
     }
     expect(timeoutState.error.category).toBe('timeout');
+  });
+
+  it('ignores late parse results after cancel during processing', async () => {
+    const onOpenReview = jest.fn();
+    const parseDeferred = createDeferred<VoiceIntentResponseDto>();
+
+    const intentClient: VoiceIntentClient = {
+      parseVoiceNoteIntent: jest.fn(async () => parseDeferred.promise),
+      continueVoiceClarification: jest.fn(async () => buildIntentResponse()),
+    };
+
+    const { controller } = buildController({ intentClient, onOpenReview });
+
+    await controller.beginHold();
+    const releasePromise = controller.releaseHold();
+
+    controller.cancel();
+    parseDeferred.resolve(buildIntentResponse());
+
+    await releasePromise;
+
+    expect(controller.getState()).toEqual({ status: 'idle', transcript: '' });
+    expect(onOpenReview).not.toHaveBeenCalled();
+  });
+
+  it('handles release fired before recognizer start resolves', async () => {
+    const startDeferred = createDeferred<void>();
+    const speech = new FakeSpeechRecognizer({ startSignal: startDeferred.promise });
+    const { controller, intentClient } = buildController({ speech });
+
+    const beginPromise = controller.beginHold();
+    expect(controller.getState().status).toBe('listening');
+
+    const releasePromise = controller.releaseHold();
+
+    startDeferred.resolve(undefined);
+    await beginPromise;
+    await releasePromise;
+
+    expect(intentClient.parseVoiceNoteIntent).toHaveBeenCalledTimes(1);
+    expect(controller.getState().status).toBe('review');
+  });
+
+  it('does not start listening if canceled while permission check is pending', async () => {
+    const permissionDeferred = createDeferred<void>();
+    const speech = new FakeSpeechRecognizer({
+      ensurePermissionsSignal: permissionDeferred.promise,
+    });
+    const startListeningSpy = jest.spyOn(speech, 'startListening');
+    const { controller } = buildController({ speech });
+
+    const beginPromise = controller.beginHold();
+    controller.cancel();
+
+    permissionDeferred.resolve(undefined);
+    await beginPromise;
+
+    expect(startListeningSpy).not.toHaveBeenCalled();
+    expect(controller.getState()).toEqual({ status: 'idle', transcript: '' });
+  });
+
+  it('handles release fired while permission check is still pending', async () => {
+    const permissionDeferred = createDeferred<void>();
+    const speech = new FakeSpeechRecognizer({
+      ensurePermissionsSignal: permissionDeferred.promise,
+    });
+    const { controller, intentClient } = buildController({ speech });
+
+    const beginPromise = controller.beginHold();
+    const releasePromise = controller.releaseHold();
+
+    permissionDeferred.resolve(undefined);
+    await beginPromise;
+    await releasePromise;
+
+    expect(intentClient.parseVoiceNoteIntent).toHaveBeenCalledTimes(1);
+    expect(controller.getState().status).toBe('review');
   });
 });

@@ -145,22 +145,22 @@ Phase 4 gate:
 
 ### apps/mobile/src/hooks/useNoteEditor.ts
 
-- [ ] Add helper to open editor from AI draft payload.
-- [ ] Ensure reminder and repeat are set consistently with existing editor state behavior.
-- [ ] Preserve current openEditor(note?) behavior for manual and existing flows.
+- [x] Add helper to open editor from AI draft payload.
+- [x] Ensure reminder and repeat are set consistently with existing editor state behavior.
+- [x] Preserve current openEditor(note?) behavior for manual and existing flows.
 
 ### apps/mobile/src/components/NoteEditorModal.tsx
 
-- [ ] Add prefill entrypoint for AI draft review mode.
-- [ ] Surface transcript fallback content without blocking edits.
-- [ ] Keep existing save and delete behavior unchanged.
+- [x] Add prefill entrypoint for AI draft review mode.
+- [x] Surface transcript fallback content without blocking edits.
+- [x] Keep existing save and delete behavior unchanged.
 
 ### apps/mobile/src/screens/NotesScreen.tsx
 
-- [ ] Replace direct FAB Pressable usage with HoldToTalkFab.
-- [ ] Keep tap-to-open-editor behavior unchanged.
-- [ ] Wire voice session lifecycle to overlay, clarification, and review-open handlers.
-- [ ] Gate entry with isMobileVoiceCaptureV1Enabled() and Android platform check.
+- [x] Replace direct FAB Pressable usage with HoldToTalkFab.
+- [x] Keep tap-to-open-editor behavior unchanged.
+- [x] Wire voice session lifecycle to overlay, clarification, and review-open handlers.
+- [x] Gate entry with isMobileVoiceCaptureV1Enabled() and Android platform check.
 
 Phase 5 gate:
 
@@ -182,12 +182,12 @@ Phase 5 gate:
 
 ### tests/mobile/noteCardInteractions.test.ts
 
-- [ ] Add regression case to ensure existing hold interaction utility behavior is unchanged.
+- [x] Add regression case to ensure existing hold interaction utility behavior is unchanged.
 
 ### apps/mobile/tests/integration/voiceCaptureToSave.test.ts
 
-- [ ] Cover transcript -> parse -> clarification -> review -> save flow.
-- [ ] Verify saved note goes through existing offline outbox and reminder scheduling path.
+- [x] Cover transcript -> parse -> clarification -> review -> save flow.
+- [x] Verify saved note goes through existing offline outbox and reminder scheduling path.
 
 Phase 6 gate:
 

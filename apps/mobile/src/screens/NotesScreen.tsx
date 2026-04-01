@@ -23,6 +23,7 @@ import { NotesList } from '../components/NotesList';
 import { NotesHeader } from '../components/NotesHeader';
 import { SelectionActionBar } from '../components/SelectionActionBar';
 import { NoteEditorModal, NoteEditorModalRef } from '../components/NoteEditorModal';
+import { HoldToTalkFab } from '../components/HoldToTalkFab';
 import { ConflictResolutionModal } from '../components/ConflictResolutionModal';
 import { Toast } from '../components/Toast';
 import { type Theme, useTheme } from '../theme';
@@ -33,11 +34,58 @@ import { useNoteSelection } from '../hooks/useNoteSelection';
 import { useToast } from '../hooks/useToast';
 import { useHasDueSubscriptions } from '../subscriptions/useHasDueSubscriptions';
 import { useRealtimeNotes } from '../notes/realtimeService';
-import { isMobileNotesRealtimeV1Enabled } from '../constants/featureFlags';
+import {
+  isMobileNotesRealtimeV1Enabled,
+  isMobileVoiceCaptureV1Enabled,
+} from '../constants/featureFlags';
 import { RepeatRule } from '../../../../packages/shared/types/reminder';
 import { NoteContentType } from '../../../../packages/shared/types/note';
 import { useDebouncedValue } from '../../../../packages/shared/hooks/useDebouncedValue';
 import { useUserId } from '../auth/useUserId';
+import { VoiceCaptureOverlay } from '../voice/ui/VoiceCaptureOverlay';
+import { VoiceClarificationSheet } from '../voice/ui/VoiceClarificationSheet';
+import { useVoiceCaptureSession } from '../voice/useVoiceCaptureSession';
+import { AndroidSpeechRecognizer } from '../voice/androidSpeechRecognizer';
+import { ConvexVoiceIntentClient } from '../voice/aiIntentClient';
+import {
+  type VoiceDraftMappingResult,
+  type VoiceIntentClient,
+  type VoiceSessionError,
+  type VoiceSpeechRecognizer,
+} from '../voice/types';
+
+const UNSUPPORTED_VOICE_ACTION_ERROR = {
+  category: 'unsupported-platform',
+  message: 'Voice capture v1 is disabled.',
+  recoverable: false,
+} satisfies VoiceSessionError;
+
+const NOOP_SPEECH_RECOGNIZER: VoiceSpeechRecognizer = {
+  ensurePermissions: async () => {
+    throw UNSUPPORTED_VOICE_ACTION_ERROR;
+  },
+  startListening: async () => {
+    throw UNSUPPORTED_VOICE_ACTION_ERROR;
+  },
+  stopListening: async () => {
+    throw UNSUPPORTED_VOICE_ACTION_ERROR;
+  },
+  cancelListening: () => {
+    return;
+  },
+  dispose: () => {
+    return;
+  },
+};
+
+const NOOP_INTENT_CLIENT: VoiceIntentClient = {
+  parseVoiceNoteIntent: async () => {
+    throw UNSUPPORTED_VOICE_ACTION_ERROR;
+  },
+  continueVoiceClarification: async () => {
+    throw UNSUPPORTED_VOICE_ACTION_ERROR;
+  },
+};
 
 type NotesScreenProps = {
   userId?: string;
@@ -171,15 +219,205 @@ const NotesScreenContent = ({
   const [conflictLocalNote, setConflictLocalNote] = useState<Note | null>(null);
   const [conflictServerNote, setConflictServerNote] = useState<Note | null>(null);
   const [conflictLoading, setConflictLoading] = useState(false);
+  const [clarificationSubmitting, setClarificationSubmitting] = useState(false);
   const scrollTopVisibleRef = useRef(false);
+  const resetVoiceSessionRef = useRef<() => void>(() => undefined);
+  const clarificationGenerationRef = useRef(0);
+  const clarificationStartPromiseRef = useRef<Promise<void> | null>(null);
   const editorModalRef = useRef<NoteEditorModalRef>(null);
   const listRef = useRef<FlatList<Note> | null>(null);
+  const voiceCaptureEnabled = isMobileVoiceCaptureV1Enabled();
+  const timezone = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', []);
+
+  const speechRecognizer = useMemo<VoiceSpeechRecognizer>(() => {
+    if (!voiceCaptureEnabled) {
+      return NOOP_SPEECH_RECOGNIZER;
+    }
+    return new AndroidSpeechRecognizer();
+  }, [voiceCaptureEnabled]);
+
+  const intentClient = useMemo<VoiceIntentClient>(() => {
+    if (!voiceCaptureEnabled) {
+      return NOOP_INTENT_CLIENT;
+    }
+    return new ConvexVoiceIntentClient();
+  }, [voiceCaptureEnabled]);
 
   // Get sync state and action helpers
   const { notifyActionPending, notifyActionSuccess, notifyActionError, lastSyncAt } =
     useSyncState();
 
   const { toast, showToast } = useToast();
+
+  const handleVoiceSessionError = useCallback(
+    (error: VoiceSessionError) => {
+      showToast(error.message, true);
+    },
+    [showToast],
+  );
+
+  const handleVoiceReviewOpen = useCallback(
+    (result: VoiceDraftMappingResult) => {
+      const modalRef = editorModalRef.current;
+      if (!modalRef) {
+        showToast('Unable to open voice review editor.', true);
+        return;
+      }
+
+      modalRef.openEditorFromVoiceDraft(result.editorDraft, result.warnings);
+      resetVoiceSessionRef.current();
+    },
+    [showToast],
+  );
+
+  const voiceSessionConfig = useMemo(
+    () => ({
+      speechRecognizer,
+      intentClient,
+      userId: userId ?? '',
+      timezone,
+      onOpenReview: handleVoiceReviewOpen,
+      onError: handleVoiceSessionError,
+    }),
+    [
+      handleVoiceReviewOpen,
+      handleVoiceSessionError,
+      intentClient,
+      speechRecognizer,
+      timezone,
+      userId,
+    ],
+  );
+
+  const voiceSession = useVoiceCaptureSession(voiceSessionConfig);
+
+  const {
+    state: voiceState,
+    beginHold: beginVoiceHold,
+    releaseHold: releaseVoiceHold,
+    submitClarification,
+    cancel: cancelVoiceSession,
+    reset: resetVoiceSession,
+  } = voiceSession;
+
+  const cancelClarificationCapture = useCallback(() => {
+    clarificationGenerationRef.current += 1;
+    clarificationStartPromiseRef.current = null;
+    speechRecognizer.cancelListening();
+  }, [speechRecognizer]);
+
+  useEffect(() => {
+    resetVoiceSessionRef.current = resetVoiceSession;
+  }, [resetVoiceSession]);
+
+  const handleVoiceHoldStart = useCallback(async () => {
+    await beginVoiceHold();
+  }, [beginVoiceHold]);
+
+  const handleVoiceHoldEnd = useCallback(async () => {
+    await releaseVoiceHold();
+  }, [releaseVoiceHold]);
+
+  const handleVoiceInteractionError = useCallback(
+    (error: unknown) => {
+      if (error && typeof error === 'object' && 'message' in error) {
+        const message = String((error as { message: unknown }).message);
+        showToast(message, true);
+        return;
+      }
+
+      showToast('Voice interaction failed.', true);
+    },
+    [showToast],
+  );
+
+  const handleVoiceCancel = useCallback(() => {
+    setClarificationSubmitting(false);
+    cancelClarificationCapture();
+    cancelVoiceSession();
+  }, [cancelClarificationCapture, cancelVoiceSession]);
+
+  const handleVoiceRetry = useCallback(() => {
+    setClarificationSubmitting(false);
+    cancelClarificationCapture();
+    resetVoiceSession();
+    void beginVoiceHold();
+  }, [beginVoiceHold, cancelClarificationCapture, resetVoiceSession]);
+
+  const handleClarificationSubmit = useCallback(
+    async (answer: string) => {
+      setClarificationSubmitting(true);
+      try {
+        await submitClarification(answer);
+      } finally {
+        setClarificationSubmitting(false);
+      }
+    },
+    [submitClarification],
+  );
+
+  const handleClarificationVoiceStart = useCallback(async () => {
+    const generation = clarificationGenerationRef.current + 1;
+    clarificationGenerationRef.current = generation;
+
+    const startPromise = (async () => {
+      await speechRecognizer.ensurePermissions();
+
+      if (clarificationGenerationRef.current !== generation) {
+        return;
+      }
+
+      await speechRecognizer.startListening(
+        {},
+        {
+          onPartialTranscript: () => {
+            return;
+          },
+          onError: handleVoiceSessionError,
+        },
+      );
+    })();
+
+    clarificationStartPromiseRef.current = startPromise;
+
+    try {
+      await startPromise;
+      if (clarificationGenerationRef.current !== generation) {
+        speechRecognizer.cancelListening();
+      }
+    } finally {
+      if (clarificationStartPromiseRef.current === startPromise) {
+        clarificationStartPromiseRef.current = null;
+      }
+    }
+  }, [handleVoiceSessionError, speechRecognizer]);
+
+  const handleClarificationVoiceEnd = useCallback(async () => {
+    const generation = clarificationGenerationRef.current;
+    const startPromise = clarificationStartPromiseRef.current;
+    if (startPromise) {
+      try {
+        await startPromise;
+      } catch {
+        return;
+      }
+    }
+
+    if (clarificationGenerationRef.current !== generation) {
+      return;
+    }
+
+    setClarificationSubmitting(true);
+    try {
+      const answer = await speechRecognizer.stopListening();
+      if (clarificationGenerationRef.current !== generation) {
+        return;
+      }
+      await submitClarification(answer);
+    } finally {
+      setClarificationSubmitting(false);
+    }
+  }, [speechRecognizer, submitClarification]);
 
   const {
     notes,
@@ -690,12 +928,14 @@ const NotesScreenContent = ({
         </View>
       )}
 
-      {/* FAB */}
-      <Animated.View style={[styles.fabContainer]}>
-        <Pressable style={styles.fab} onPress={() => editorModalRef.current?.openEditor()}>
-          <Ionicons name="add" size={26} color="white" />
-        </Pressable>
-      </Animated.View>
+      <HoldToTalkFab
+        voiceCaptureEnabled={voiceCaptureEnabled}
+        onManualPress={() => editorModalRef.current?.openEditor()}
+        onHoldStart={handleVoiceHoldStart}
+        onHoldEnd={handleVoiceHoldEnd}
+        onHoldCancel={handleVoiceCancel}
+        onInteractionError={handleVoiceInteractionError}
+      />
 
       {showScrollTop && (
         <Animated.View style={[styles.scrollTopContainer]}>
@@ -713,6 +953,41 @@ const NotesScreenContent = ({
         onSave={saveNote}
         onDelete={handleDelete}
         onResolveConflictPress={handleOpenConflictModal}
+      />
+
+      <VoiceCaptureOverlay
+        visible={
+          voiceState.status === 'listening' ||
+          voiceState.status === 'processing' ||
+          voiceState.status === 'error'
+        }
+        status={
+          voiceState.status === 'error'
+            ? 'error'
+            : voiceState.status === 'processing'
+              ? 'processing'
+              : 'listening'
+        }
+        transcript={voiceState.transcript}
+        errorMessage={voiceState.status === 'error' ? voiceState.error.message : undefined}
+        onCancel={handleVoiceCancel}
+        onRetry={handleVoiceRetry}
+      />
+
+      <VoiceClarificationSheet
+        visible={voiceState.status === 'clarifying'}
+        question={voiceState.status === 'clarifying' ? voiceState.question : ''}
+        turn={voiceState.status === 'clarifying' ? voiceState.turn : 1}
+        maxTurns={voiceState.status === 'clarifying' ? voiceState.maxTurns : 2}
+        unresolvedWarning={
+          voiceState.status === 'clarifying' && voiceState.turn >= voiceState.maxTurns
+        }
+        isSubmitting={clarificationSubmitting}
+        onCancel={handleVoiceCancel}
+        onSubmitText={handleClarificationSubmit}
+        onHoldVoiceStart={handleClarificationVoiceStart}
+        onHoldVoiceEnd={handleClarificationVoiceEnd}
+        onInteractionError={handleVoiceInteractionError}
       />
 
       <ConflictResolutionModal
@@ -765,21 +1040,6 @@ const createStyles = (theme: Theme) =>
     },
     contentPressable: {
       flex: 1,
-    },
-    fabContainer: {
-      position: 'absolute',
-      bottom: 100,
-      right: theme.spacing.xl,
-      zIndex: 900,
-    },
-    fab: {
-      backgroundColor: theme.colors.primary,
-      width: 46,
-      height: 46,
-      borderRadius: 23,
-      justifyContent: 'center',
-      alignItems: 'center',
-      ...theme.shadows.md,
     },
     scrollTopContainer: {
       position: 'absolute',

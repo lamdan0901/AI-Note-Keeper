@@ -114,6 +114,9 @@ export function createVoiceCaptureSessionController(
   let sessionId: string | null = null;
   let lastMappedResult: VoiceDraftMappingResult | null = null;
   let clarificationTurn = 0;
+  let activeGeneration = 0;
+  let pendingActivationPromise: Promise<void> | null = null;
+  let pendingStartPromise: Promise<void> | null = null;
 
   const listeners = new Set<StateListener>();
 
@@ -128,7 +131,20 @@ export function createVoiceCaptureSessionController(
     emit();
   };
 
-  const fail = (error: unknown): void => {
+  const nextGeneration = (): number => {
+    activeGeneration += 1;
+    return activeGeneration;
+  };
+
+  const isActiveGeneration = (generation: number): boolean => {
+    return generation === activeGeneration;
+  };
+
+  const fail = (error: unknown, generation?: number): void => {
+    if (generation !== undefined && !isActiveGeneration(generation)) {
+      return;
+    }
+
     const normalizedError = toVoiceSessionError(error);
     setState({
       status: 'error',
@@ -138,7 +154,15 @@ export function createVoiceCaptureSessionController(
     config.onError?.(normalizedError);
   };
 
-  const resolveReview = (mapped: VoiceDraftMappingResult, appendWarnings?: string[]): void => {
+  const resolveReview = (
+    mapped: VoiceDraftMappingResult,
+    appendWarnings?: string[],
+    generation?: number,
+  ): void => {
+    if (generation !== undefined && !isActiveGeneration(generation)) {
+      return;
+    }
+
     const warnings = appendWarnings
       ? [...mapped.warnings, ...appendWarnings]
       : [...mapped.warnings];
@@ -162,6 +186,8 @@ export function createVoiceCaptureSessionController(
       return;
     }
 
+    const generation = nextGeneration();
+
     sessionId = createSessionId();
     clarificationTurn = 0;
     lastMappedResult = null;
@@ -169,32 +195,55 @@ export function createVoiceCaptureSessionController(
     setState({ status: 'listening', transcript: '' });
 
     try {
-      await config.speechRecognizer.ensurePermissions();
-      await config.speechRecognizer.startListening(
-        {
-          locale: config.locale ?? undefined,
-        },
-        {
-          onPartialTranscript: (transcript) => {
-            const normalizedTranscript = normalizeText(transcript);
-            if (!normalizedTranscript) {
-              return;
-            }
+      const activationPromise = (async () => {
+        await config.speechRecognizer.ensurePermissions();
 
-            if (state.status === 'listening') {
-              setState({
-                status: 'listening',
-                transcript: normalizedTranscript,
-              });
-            }
+        if (!isActiveGeneration(generation)) {
+          return;
+        }
+
+        const startPromise = config.speechRecognizer.startListening(
+          {
+            locale: config.locale ?? undefined,
           },
-          onError: (speechError) => {
-            fail(speechError);
+          {
+            onPartialTranscript: (transcript) => {
+              if (!isActiveGeneration(generation)) {
+                return;
+              }
+
+              const normalizedTranscript = normalizeText(transcript);
+              if (!normalizedTranscript) {
+                return;
+              }
+
+              if (state.status === 'listening') {
+                setState({
+                  status: 'listening',
+                  transcript: normalizedTranscript,
+                });
+              }
+            },
+            onError: (speechError) => {
+              fail(speechError, generation);
+            },
           },
-        },
-      );
+        );
+        pendingStartPromise = startPromise;
+        await startPromise;
+
+        if (!isActiveGeneration(generation)) {
+          config.speechRecognizer.cancelListening();
+        }
+      })();
+
+      pendingActivationPromise = activationPromise;
+      await activationPromise;
     } catch (error) {
-      fail(error);
+      fail(error, generation);
+    } finally {
+      pendingActivationPromise = null;
+      pendingStartPromise = null;
     }
   };
 
@@ -203,16 +252,52 @@ export function createVoiceCaptureSessionController(
       return;
     }
 
+    const generation = activeGeneration;
+    const activationPromise = pendingActivationPromise;
+
+    if (activationPromise) {
+      try {
+        await activationPromise;
+      } catch {
+        return;
+      }
+
+      if (!isActiveGeneration(generation) || state.status !== 'listening') {
+        return;
+      }
+    }
+
+    const startPromise = pendingStartPromise;
+
+    if (startPromise) {
+      try {
+        await startPromise;
+      } catch {
+        return;
+      }
+
+      if (!isActiveGeneration(generation) || state.status !== 'listening') {
+        return;
+      }
+    }
+
     try {
       const transcript = await config.speechRecognizer.stopListening();
+      if (!isActiveGeneration(generation)) {
+        return;
+      }
+
       const normalizedTranscript = normalizeText(transcript);
 
       if (!normalizedTranscript) {
-        fail({
-          category: 'no-speech',
-          message: 'No speech was captured.',
-          recoverable: true,
-        } satisfies VoiceSessionError);
+        fail(
+          {
+            category: 'no-speech',
+            message: 'No speech was captured.',
+            recoverable: true,
+          } satisfies VoiceSessionError,
+          generation,
+        );
         return;
       }
 
@@ -231,6 +316,10 @@ export function createVoiceCaptureSessionController(
       };
 
       const parsed = await config.intentClient.parseVoiceNoteIntent(request);
+      if (!isActiveGeneration(generation)) {
+        return;
+      }
+
       const mapped = mapVoiceIntentDraftToEditor(parsed, { nowEpochMs: request.nowEpochMs });
       lastMappedResult = mapped;
 
@@ -246,9 +335,9 @@ export function createVoiceCaptureSessionController(
         return;
       }
 
-      resolveReview(mapped);
+      resolveReview(mapped, undefined, generation);
     } catch (error) {
-      fail(error);
+      fail(error, generation);
     }
   };
 
@@ -257,22 +346,30 @@ export function createVoiceCaptureSessionController(
       return;
     }
 
+    const generation = activeGeneration;
+
     if (!lastMappedResult || !sessionId) {
-      fail({
-        category: 'validation',
-        message: 'Missing clarification context.',
-        recoverable: true,
-      } satisfies VoiceSessionError);
+      fail(
+        {
+          category: 'validation',
+          message: 'Missing clarification context.',
+          recoverable: true,
+        } satisfies VoiceSessionError,
+        generation,
+      );
       return;
     }
 
     const normalizedAnswer = normalizeText(answer);
     if (!normalizedAnswer) {
-      fail({
-        category: 'validation',
-        message: 'Clarification answer cannot be empty.',
-        recoverable: true,
-      } satisfies VoiceSessionError);
+      fail(
+        {
+          category: 'validation',
+          message: 'Clarification answer cannot be empty.',
+          recoverable: true,
+        } satisfies VoiceSessionError,
+        generation,
+      );
       return;
     }
 
@@ -291,6 +388,10 @@ export function createVoiceCaptureSessionController(
       };
 
       const continued = await config.intentClient.continueVoiceClarification(request);
+      if (!isActiveGeneration(generation)) {
+        return;
+      }
+
       const mapped = mapVoiceIntentDraftToEditor(continued, {
         nowEpochMs: request.nowEpochMs,
       });
@@ -310,20 +411,25 @@ export function createVoiceCaptureSessionController(
           return;
         }
 
-        resolveReview(mapped, [
-          'Some details are still ambiguous after clarification. Please review before saving.',
-        ]);
+        resolveReview(
+          mapped,
+          ['Some details are still ambiguous after clarification. Please review before saving.'],
+          generation,
+        );
         return;
       }
 
-      resolveReview(mapped);
+      resolveReview(mapped, undefined, generation);
     } catch (error) {
-      fail(error);
+      fail(error, generation);
     }
   };
 
   const cancel = (): void => {
     config.speechRecognizer.cancelListening();
+    pendingActivationPromise = null;
+    pendingStartPromise = null;
+    nextGeneration();
     clarificationTurn = 0;
     lastMappedResult = null;
     sessionId = null;
@@ -334,6 +440,10 @@ export function createVoiceCaptureSessionController(
   };
 
   const reset = (): void => {
+    config.speechRecognizer.cancelListening();
+    pendingActivationPromise = null;
+    pendingStartPromise = null;
+    nextGeneration();
     clarificationTurn = 0;
     lastMappedResult = null;
     sessionId = null;
@@ -344,6 +454,9 @@ export function createVoiceCaptureSessionController(
   };
 
   const dispose = (): void => {
+    pendingActivationPromise = null;
+    pendingStartPromise = null;
+    nextGeneration();
     config.speechRecognizer.dispose();
     listeners.clear();
   };

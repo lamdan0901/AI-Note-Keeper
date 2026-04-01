@@ -26,6 +26,7 @@ import { formatReminder } from '../utils/formatReminder';
 import { type Theme, useTheme } from '../theme';
 import { RepeatRule } from '../../../../packages/shared/types/reminder';
 import { useNoteEditor } from '../hooks/useNoteEditor';
+import { type VoiceEditorDraft } from '../voice/types';
 import { ColorPicker } from './ColorPicker';
 import { ChecklistEditor } from './ChecklistEditor';
 import { toPresetId, hasCustomColor, resolveNoteColor } from '../constants/noteColors';
@@ -48,6 +49,7 @@ type NoteEditorModalProps = {
 
 export type NoteEditorModalRef = {
   openEditor: (note?: Note) => void;
+  openEditorFromVoiceDraft: (draft: VoiceEditorDraft, warnings?: string[]) => void;
   closeEditor: () => void;
   getEditorState: () => {
     editingNote: Note | null;
@@ -76,12 +78,14 @@ export const NoteEditorModal = forwardRef<NoteEditorModalRef, NoteEditorModalPro
       contentType,
       reminder,
       repeat,
+      reviewMessages,
       isPinned,
       color,
       showReminderModal,
       editorTranslateY,
       editorHeightAnim,
       openEditor,
+      openEditorFromDraft,
       closeEditor,
       handleReminderPress,
       handleReminderSave,
@@ -129,6 +133,16 @@ export const NoteEditorModal = forwardRef<NoteEditorModalRef, NoteEditorModalPro
 
     useImperativeHandle(ref, () => ({
       openEditor,
+      openEditorFromVoiceDraft: (draft, warnings = []) => {
+        openEditorFromDraft({
+          title: draft.title,
+          content: draft.content,
+          reminder: draft.reminder,
+          repeat: draft.repeat,
+          warnings,
+          keepTranscriptInContent: draft.keepTranscriptInContent,
+        });
+      },
       closeEditor,
       getEditorState: () => ({
         editingNote,
@@ -268,6 +282,17 @@ export const NoteEditorModal = forwardRef<NoteEditorModalRef, NoteEditorModalPro
                   </View>
                 </View>
 
+                {reviewMessages.length > 0 && (
+                  <View style={styles.reviewBanner}>
+                    <Ionicons
+                      name="information-circle-outline"
+                      size={18}
+                      color={theme.colors.primary}
+                    />
+                    <Text style={styles.reviewBannerText}>{reviewMessages.join(' ')}</Text>
+                  </View>
+                )}
+
                 <KeyboardAvoidingView
                   behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                   style={styles.keyboardAvoidingView}
@@ -394,6 +419,24 @@ const createStyles = (theme: Theme) =>
       justifyContent: 'space-between',
       alignItems: 'center',
       marginBottom: theme.spacing.lg,
+    },
+    reviewBanner: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: theme.spacing.xs,
+      borderWidth: 1,
+      borderColor: theme.colors.primary,
+      borderRadius: theme.borderRadius.md,
+      backgroundColor: theme.colors.background,
+      padding: theme.spacing.sm,
+      marginBottom: theme.spacing.md,
+    },
+    reviewBannerText: {
+      flex: 1,
+      color: theme.colors.text,
+      fontSize: theme.typography.sizes.sm,
+      lineHeight: 20,
+      fontFamily: theme.typography.fontFamily,
     },
     modalTitle: {
       fontSize: theme.typography.sizes.lg,

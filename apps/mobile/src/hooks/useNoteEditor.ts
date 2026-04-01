@@ -7,6 +7,30 @@ import { coerceRepeatRule } from '../../../../packages/shared/utils/repeatCodec'
 
 type EditorTouchStart = { x: number; y: number; timeMs: number } | null;
 
+type EditorDraftPrefill = {
+  title: string;
+  content: string;
+  reminder: Date | null;
+  repeat: RepeatRule | null;
+  warnings?: string[];
+  keepTranscriptInContent?: boolean;
+};
+
+const TRANSCRIPT_REVIEW_MESSAGE =
+  'Transcript was kept in content due to low confidence. Please review before saving.';
+
+function normalizeReviewMessages(draft: EditorDraftPrefill): string[] {
+  const normalizedWarnings = (draft.warnings ?? [])
+    .map((warning) => warning.trim())
+    .filter((warning) => warning.length > 0);
+
+  if (!draft.keepTranscriptInContent) {
+    return normalizedWarnings;
+  }
+
+  return Array.from(new Set([TRANSCRIPT_REVIEW_MESSAGE, ...normalizedWarnings]));
+}
+
 type UseNoteEditorResult = {
   modalVisible: boolean;
   editingNote: Note | null;
@@ -15,12 +39,14 @@ type UseNoteEditorResult = {
   contentType: NoteContentType;
   reminder: Date | null;
   repeat: RepeatRule | null;
+  reviewMessages: string[];
   isPinned: boolean;
   color: string | null;
   showReminderModal: boolean;
   editorTranslateY: Animated.Value;
   editorHeightAnim: Animated.Value;
   openEditor: (note?: Note) => void;
+  openEditorFromDraft: (draft: EditorDraftPrefill) => void;
   closeEditor: () => void;
   closeEditorFromGesture: () => void;
   handleReminderPress: () => void;
@@ -47,6 +73,7 @@ export const useNoteEditor = (): UseNoteEditorResult => {
   const [contentType, setContentType] = useState<NoteContentType>('text');
   const [reminder, setReminder] = useState<Date | null>(null);
   const [repeat, setRepeat] = useState<RepeatRule | null>(null);
+  const [reviewMessages, setReviewMessages] = useState<string[]>([]);
   const [isPinned, setIsPinned] = useState(false);
   const [color, setColor] = useState<string | null>(null);
   const [showReminderModal, setShowReminderModal] = useState(false);
@@ -59,6 +86,7 @@ export const useNoteEditor = (): UseNoteEditorResult => {
   const openEditor = useCallback((note?: Note) => {
     if (note) {
       setEditingNote(note);
+      setReviewMessages([]);
       setTitle(note.title || '');
       setContent(note.content || '');
       setContentType(note.contentType ?? 'text');
@@ -82,6 +110,7 @@ export const useNoteEditor = (): UseNoteEditorResult => {
       setColor(note.color || null);
     } else {
       setEditingNote(null);
+      setReviewMessages([]);
       setTitle('');
       setContent('');
       setContentType('text');
@@ -93,9 +122,26 @@ export const useNoteEditor = (): UseNoteEditorResult => {
     setModalVisible(true);
   }, []);
 
+  const openEditorFromDraft = useCallback((draft: EditorDraftPrefill) => {
+    const reminder = draft.reminder ?? null;
+    const repeat = reminder ? (draft.repeat ?? null) : null;
+
+    setEditingNote(null);
+    setReviewMessages(normalizeReviewMessages(draft));
+    setTitle(draft.title);
+    setContent(draft.content);
+    setContentType('text');
+    setReminder(reminder);
+    setRepeat(repeat);
+    setIsPinned(false);
+    setColor(null);
+    setModalVisible(true);
+  }, []);
+
   const closeEditor = useCallback(() => {
     setModalVisible(false);
     setEditingNote(null);
+    setReviewMessages([]);
     setTitle('');
     setContent('');
     setContentType('text');
@@ -220,12 +266,14 @@ export const useNoteEditor = (): UseNoteEditorResult => {
     contentType,
     reminder,
     repeat,
+    reviewMessages,
     isPinned,
     color,
     showReminderModal,
     editorTranslateY,
     editorHeightAnim,
     openEditor,
+    openEditorFromDraft,
     closeEditor,
     closeEditorFromGesture,
     handleReminderPress,

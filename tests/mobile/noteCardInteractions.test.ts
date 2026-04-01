@@ -73,6 +73,27 @@ describe('createHoldInteraction', () => {
     expect(hold.consumeHoldFired()).toBe(true);
     expect(hold.consumeHoldFired()).toBe(false);
   });
+
+  test('short presses never suppress the next tap action', () => {
+    const onHold = jest.fn();
+    const hold = createHoldInteraction({ delayMs: 250, onHold });
+
+    hold.start();
+    jest.advanceTimersByTime(120);
+    hold.end();
+    jest.advanceTimersByTime(200);
+
+    expect(onHold).toHaveBeenCalledTimes(0);
+    expect(hold.consumeHoldFired()).toBe(false);
+
+    hold.start();
+    jest.advanceTimersByTime(180);
+    hold.end();
+    jest.advanceTimersByTime(200);
+
+    expect(onHold).toHaveBeenCalledTimes(0);
+    expect(hold.consumeHoldFired()).toBe(false);
+  });
 });
 
 describe('note-card selection toggle flow', () => {
