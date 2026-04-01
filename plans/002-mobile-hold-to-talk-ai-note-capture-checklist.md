@@ -48,22 +48,22 @@ Phase 1 gate:
 
 ### convex/functions/aiSchemas.ts
 
-- [ ] Define strict schema for parse request and response.
-- [ ] Define clarification response schema and confidence shape.
-- [ ] Reuse shared RepeatRule-compatible validation structure.
+- [x] Define strict schema for parse request and response.
+- [x] Define clarification response schema and confidence shape.
+- [x] Reuse shared RepeatRule-compatible validation structure.
 
 ### convex/functions/aiPrompts.ts
 
-- [ ] Define system prompt template for transcript-to-draft extraction.
-- [ ] Define clarification prompt template for ambiguity resolution.
-- [ ] Include timezone and current time grounding rules in prompts.
+- [x] Define system prompt template for transcript-to-draft extraction.
+- [x] Define clarification prompt template for ambiguity resolution.
+- [x] Include timezone and current time grounding rules in prompts.
 
 ### convex/functions/aiNoteCapture.ts
 
-- [ ] Implement parseVoiceNoteIntent action.
-- [ ] Implement continueVoiceClarification action.
-- [ ] Enforce validation: future reminder time, repeat compatibility, non-empty fallback behavior.
-- [ ] Return deterministic response schema used by mobile mapper.
+- [x] Implement parseVoiceNoteIntent action.
+- [x] Implement continueVoiceClarification action.
+- [x] Enforce validation: future reminder time, repeat compatibility, non-empty fallback behavior.
+- [x] Return deterministic response schema used by mobile mapper.
 
 ### convex/functions/aiUsage.ts (optional)
 
@@ -83,63 +83,63 @@ Phase 2 gate:
 
 ### apps/mobile/src/voice/types.ts
 
-- [ ] Define voice session states: Idle, Listening, Processing, Clarifying, Review, Error.
-- [ ] Define parse request/response DTOs and clarification payload types.
-- [ ] Define draft model used to prefill note editor fields.
+- [x] Define voice session states: Idle, Listening, Processing, Clarifying, Review, Error.
+- [x] Define parse request/response DTOs and clarification payload types.
+- [x] Define draft model used to prefill note editor fields.
 
 ### apps/mobile/src/voice/androidSpeechRecognizer.ts
 
-- [ ] Implement Android speech permission checks and request flow.
-- [ ] Implement start, partial transcript updates, final transcript return, stop, and cancel.
-- [ ] Normalize recognizer errors into user-facing categories.
+- [x] Implement Android speech permission checks and request flow.
+- [x] Implement start, partial transcript updates, final transcript return, stop, and cancel.
+- [x] Normalize recognizer errors into user-facing categories.
 
 ### apps/mobile/src/voice/aiIntentClient.ts
 
-- [ ] Implement parseVoiceNoteIntent API call to Convex action.
-- [ ] Implement continueVoiceClarification API call.
-- [ ] Add timeout and retry policy with safe fallback.
+- [x] Implement parseVoiceNoteIntent API call to Convex action.
+- [x] Implement continueVoiceClarification API call.
+- [x] Add timeout and retry policy with safe fallback.
 
 ### apps/mobile/src/voice/intentDraftMapper.ts
 
-- [ ] Map AI draft output into editor-compatible fields (title, content, reminder Date, repeat).
-- [ ] Apply transcript retention policy when content extraction confidence is low.
-- [ ] Validate and sanitize reminder/repeat values before opening review.
+- [x] Map AI draft output into editor-compatible fields (title, content, reminder Date, repeat).
+- [x] Apply transcript retention policy when content extraction confidence is low.
+- [x] Validate and sanitize reminder/repeat values before opening review.
 
 ### apps/mobile/src/voice/useVoiceCaptureSession.ts
 
-- [ ] Implement state machine for hold start, transcript updates, release, parse call, clarification loop.
-- [ ] Enforce max clarification turns (2) and fallback to review with warning.
-- [ ] Expose callbacks for open review and error handling.
+- [x] Implement state machine for hold start, transcript updates, release, parse call, clarification loop.
+- [x] Enforce max clarification turns (2) and fallback to review with warning.
+- [x] Expose callbacks for open review and error handling.
 
 Phase 3 gate:
 
-- [ ] Voice domain layer works in isolation with mocked UI and mocked backend responses.
+- [x] Voice domain layer works in isolation with mocked UI and mocked backend responses.
 
 ## Phase 4: Voice UI Components
 
 ### apps/mobile/src/voice/ui/VoiceCaptureOverlay.tsx
 
-- [ ] Build listening UI with transcript preview and processing state.
-- [ ] Show clear controls for cancel and retry.
-- [ ] Add accessibility labels for recording and processing states.
-- [ ] Add shimmer loading treatment during parse and clarification requests.
+- [x] Build listening UI with transcript preview and processing state.
+- [x] Show clear controls for cancel and retry.
+- [x] Add accessibility labels for recording and processing states.
+- [x] Add shimmer loading treatment during parse and clarification requests.
 
 ### apps/mobile/src/voice/ui/VoiceClarificationSheet.tsx
 
-- [ ] Show clarification question and response input options.
-- [ ] Support voice response path and typed fallback response.
-- [ ] Display turn count and unresolved-warning state.
+- [x] Show clarification question and response input options.
+- [x] Support voice response path and typed fallback response.
+- [x] Display turn count and unresolved-warning state.
 
 ### apps/mobile/src/components/HoldToTalkFab.tsx
 
-- [ ] Implement FAB wrapper that preserves existing tap behavior for manual editor open.
-- [ ] Add hold threshold handling to enter voice flow only after long press.
-- [ ] Add Android-only behavior gate so non-Android keeps manual flow only.
-- [ ] Trigger haptic feedback on key transitions (listen start, listen stop, clarification prompt).
+- [x] Implement FAB wrapper that preserves existing tap behavior for manual editor open.
+- [x] Add hold threshold handling to enter voice flow only after long press.
+- [x] Add Android-only behavior gate so non-Android keeps manual flow only.
+- [x] Trigger haptic feedback on key transitions (listen start, listen stop, clarification prompt).
 
 Phase 4 gate:
 
-- [ ] Voice overlays and hold FAB render and behave correctly in component-level testing.
+- [x] Voice overlays and hold FAB render and behave correctly in component-level testing.
 
 ## Phase 5: Screen and Editor Integration
 
@@ -170,15 +170,15 @@ Phase 5 gate:
 
 ### apps/mobile/tests/unit/intentMapper.test.ts
 
-- [ ] Validate draft mapping for title/content/reminder/repeat.
-- [ ] Validate transcript retention when low confidence or empty content.
-- [ ] Validate invalid reminder/repeat fallback behavior.
+- [x] Validate draft mapping for title/content/reminder/repeat.
+- [x] Validate transcript retention when low confidence or empty content.
+- [x] Validate invalid reminder/repeat fallback behavior.
 
 ### apps/mobile/tests/unit/voiceCaptureMachine.test.ts
 
-- [ ] Cover tap path vs hold path and cancellation.
-- [ ] Cover processing, clarification loop, and max-turn fallback.
-- [ ] Cover error transitions (permission denied, recognizer failure, API timeout).
+- [x] Cover tap path vs hold path and cancellation.
+- [x] Cover processing, clarification loop, and max-turn fallback.
+- [x] Cover error transitions (permission denied, recognizer failure, API timeout).
 
 ### tests/mobile/noteCardInteractions.test.ts
 
