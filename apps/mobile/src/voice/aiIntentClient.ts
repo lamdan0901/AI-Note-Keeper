@@ -19,7 +19,7 @@ type VoiceIntentClientOptions = {
   client?: Pick<ConvexHttpClient, 'action'>;
 };
 
-const DEFAULT_TIMEOUT_MS = 12_000;
+const DEFAULT_TIMEOUT_MS = 30_000;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));

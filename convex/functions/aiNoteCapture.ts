@@ -1,5 +1,6 @@
 'use node';
 
+import OpenAI from 'openai';
 import { action } from '../_generated/server';
 import {
   continueVoiceClarificationArgsValidator,
@@ -17,18 +18,7 @@ import {
   buildParseVoiceNoteUserPrompt,
 } from './aiPrompts';
 
-type GeminiTextPart = {
-  text?: string;
-};
-
-type GeminiCandidate = {
-  content?: {
-    parts?: GeminiTextPart[];
-  };
-};
-
-const GEMINI_ENDPOINT_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
-const PROVIDER_TIMEOUT_MS = 12_000;
+const PROVIDER_TIMEOUT_MS = 25_000;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -60,99 +50,57 @@ function extractFirstJsonObject(text: string): unknown | null {
   }
 }
 
-function extractGeminiText(responseText: string): string | null {
-  const parsed = extractFirstJsonObject(responseText);
-  if (!isRecord(parsed)) {
-    return responseText;
-  }
-
-  const candidates = parsed.candidates;
-  if (!Array.isArray(candidates) || candidates.length === 0) {
-    return responseText;
-  }
-
-  const first = candidates[0] as GeminiCandidate | undefined;
-  const parts = first?.content?.parts;
-  if (!Array.isArray(parts) || parts.length === 0) {
-    return responseText;
-  }
-
-  const textPart = parts.find((part) => typeof part?.text === 'string');
-  return textPart?.text ?? responseText;
-}
-
-async function fetchWithTimeout(
-  url: string,
-  init: RequestInit,
-  timeoutMs: number,
-): Promise<Response> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-
-  try {
-    return await fetch(url, {
-      ...init,
-      signal: controller.signal,
-    });
-  } finally {
-    clearTimeout(timeoutId);
-  }
-}
-
-async function callGeminiForJson(input: {
+async function callNvidiaForJson(input: {
   model: string;
   apiKey: string;
   systemPrompt: string;
   userPrompt: string;
 }): Promise<unknown | null> {
-  const endpoint = `${GEMINI_ENDPOINT_BASE}/${encodeURIComponent(input.model)}:generateContent?key=${encodeURIComponent(input.apiKey)}`;
+  const openai = new OpenAI({
+    apiKey: input.apiKey,
+    baseURL: 'https://integrate.api.nvidia.com/v1',
+    timeout: PROVIDER_TIMEOUT_MS,
+    fetch: globalThis.fetch,
+  });
 
-  const response = await fetchWithTimeout(
-    endpoint,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        systemInstruction: {
-          role: 'system',
-          parts: [{ text: input.systemPrompt }],
-        },
-        contents: [
-          {
-            role: 'user',
-            parts: [{ text: input.userPrompt }],
-          },
-        ],
-        generationConfig: {
-          temperature: 0.1,
-          responseMimeType: 'application/json',
-        },
-      }),
-    },
-    PROVIDER_TIMEOUT_MS,
-  );
+  try {
+    const completion = await openai.chat.completions.create({
+      model: input.model,
+      messages: [
+        { role: 'system', content: input.systemPrompt },
+        { role: 'user', content: input.userPrompt },
+      ],
+      temperature: 1,
+      top_p: 0.95,
+      max_tokens: 8192,
+      // @ts-expect-error extra arg for nvidia api
+      chat_template_kwargs: { thinking: false },
+    });
 
-  if (!response.ok) {
+    const modelText = completion.choices[0]?.message?.content;
+    if (!modelText) {
+      return null;
+    }
+
+    const parsed = extractFirstJsonObject(modelText);
+    return parsed;
+  } catch (error) {
+    console.error('NVIDIA API error:', error);
     return null;
   }
-
-  const body = await response.text();
-  const modelText = extractGeminiText(body);
-  if (!modelText) {
-    return null;
-  }
-
-  return extractFirstJsonObject(modelText);
 }
 
 function hasProviderConfig(modelEnv: string): { apiKey: string; model: string } | null {
-  const apiKey = process.env.GEMINI_API_KEY;
-  const model = process.env[modelEnv];
-  const zeroRetentionEnabled = process.env.GEMINI_TRANSCRIPT_ZERO_RETENTION === 'true';
+  const apiKey = process.env.NVIDIA_API_KEY;
+  const model = process.env[modelEnv] || 'deepseek-ai/deepseek-v3.2';
+  const zeroRetentionEnabled = process.env.NVIDIA_TRANSCRIPT_ZERO_RETENTION === 'true';
 
-  if (!apiKey || !model || !zeroRetentionEnabled) {
+  if (!apiKey) {
+    console.warn('NVIDIA_API_KEY is not set.');
+    return null;
+  }
+  if (!zeroRetentionEnabled) {
+    console.warn('NVIDIA_TRANSCRIPT_ZERO_RETENTION is not set to "true". AI extraction disabled for privacy.');
     return null;
   }
 
@@ -198,15 +146,21 @@ export const parseVoiceNoteIntent = action({
       throw new Error('Transcript must not be empty');
     }
 
-    const provider = hasProviderConfig('GEMINI_MODEL_PARSE');
+    const provider = hasProviderConfig('NVIDIA_MODEL_PARSE');
     if (!provider) {
-      return buildTranscriptFallbackResponse(normalizedTranscript);
+      console.log('AI Provider not configured, using deterministic fallback.');
+      return buildTranscriptFallbackResponse({
+        transcript: normalizedTranscript,
+        nowEpochMs: args.nowEpochMs,
+        timezone: args.timezone,
+      });
     }
 
+    console.log(`Calling AI Provider (${provider.model}) for sessionId: ${args.sessionId}`);
     let providerOutput: unknown | null = null;
 
     try {
-      providerOutput = await callGeminiForJson({
+      providerOutput = await callNvidiaForJson({
         model: provider.model,
         apiKey: provider.apiKey,
         systemPrompt: buildParseVoiceNoteSystemPrompt({
@@ -219,17 +173,24 @@ export const parseVoiceNoteIntent = action({
           transcript: normalizedTranscript,
         }),
       });
-    } catch {
+      console.log('AI Provider Output:', JSON.stringify(providerOutput, null, 2));
+    } catch (error) {
+      console.error('AI Provider call failed:', error);
       providerOutput = null;
     }
 
     if (!providerOutput) {
-      return buildTranscriptFallbackResponse(normalizedTranscript);
+      return buildTranscriptFallbackResponse({
+        transcript: normalizedTranscript,
+        nowEpochMs: args.nowEpochMs,
+        timezone: args.timezone,
+      });
     }
 
     return normalizeVoiceIntentResponse(providerOutput, {
       transcript: normalizedTranscript,
       nowEpochMs: args.nowEpochMs,
+      timezone: args.timezone,
     });
   },
 });
@@ -242,15 +203,15 @@ export const continueVoiceClarification = action({
       throw new Error('Clarification answer must not be empty');
     }
 
-    const provider = hasProviderConfig('GEMINI_MODEL_CLARIFY');
+    const provider = hasProviderConfig('NVIDIA_MODEL_CLARIFY');
     if (!provider) {
-      return normalizeClarificationFallback(args.priorDraft, args.nowEpochMs);
+      return normalizeClarificationFallback(args.priorDraft, args.nowEpochMs, args.timezone);
     }
 
     let providerOutput: unknown | null = null;
 
     try {
-      providerOutput = await callGeminiForJson({
+      providerOutput = await callNvidiaForJson({
         model: provider.model,
         apiKey: provider.apiKey,
         systemPrompt: buildClarificationSystemPrompt({
@@ -269,12 +230,13 @@ export const continueVoiceClarification = action({
     }
 
     if (!providerOutput) {
-      return normalizeClarificationFallback(args.priorDraft, args.nowEpochMs);
+      return normalizeClarificationFallback(args.priorDraft, args.nowEpochMs, args.timezone);
     }
 
     return normalizeVoiceIntentResponse(mergeWithPriorDraft(providerOutput, args.priorDraft), {
       transcript: args.priorDraft.normalizedTranscript,
       nowEpochMs: args.nowEpochMs,
+      timezone: args.timezone,
     });
   },
 });

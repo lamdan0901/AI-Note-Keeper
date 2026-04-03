@@ -249,12 +249,10 @@ const NotesScreenContent = ({
 
   const { toast, showToast } = useToast();
 
-  const handleVoiceSessionError = useCallback(
-    (error: VoiceSessionError) => {
-      showToast(error.message, true);
-    },
-    [showToast],
-  );
+  const handleVoiceSessionError = useCallback((_error: VoiceSessionError) => {
+    // Voice session failures are surfaced by the voice overlay dialog.
+    return;
+  }, []);
 
   const handleVoiceReviewOpen = useCallback(
     (result: VoiceDraftMappingResult) => {
@@ -932,7 +930,6 @@ const NotesScreenContent = ({
         voiceCaptureEnabled={voiceCaptureEnabled}
         onManualPress={() => editorModalRef.current?.openEditor()}
         onHoldStart={handleVoiceHoldStart}
-        onHoldEnd={handleVoiceHoldEnd}
         onHoldCancel={handleVoiceCancel}
         onInteractionError={handleVoiceInteractionError}
       />
@@ -970,6 +967,8 @@ const NotesScreenContent = ({
         }
         transcript={voiceState.transcript}
         errorMessage={voiceState.status === 'error' ? voiceState.error.message : undefined}
+        errorCategory={voiceState.status === 'error' ? voiceState.error.category : undefined}
+        onDone={handleVoiceHoldEnd}
         onCancel={handleVoiceCancel}
         onRetry={handleVoiceRetry}
       />

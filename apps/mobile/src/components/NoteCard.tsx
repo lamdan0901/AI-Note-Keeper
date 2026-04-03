@@ -42,6 +42,7 @@ const areRenderedNoteFieldsEqual = (left: Note, right: Note): boolean => {
     left.snoozedUntil === right.snoozedUntil &&
     left.nextTriggerAt === right.nextTriggerAt &&
     left.triggerAt === right.triggerAt &&
+    left.timezone === right.timezone &&
     left.repeat === right.repeat
   );
 };
@@ -135,8 +136,8 @@ function NoteCardComponent({
 
   const formattedReminder = useMemo(() => {
     if (!effectiveTriggerAt) return null;
-    return formatReminder(new Date(effectiveTriggerAt), note.repeat ?? null);
-  }, [effectiveTriggerAt, note.repeat]);
+    return formatReminder(new Date(effectiveTriggerAt), note.repeat ?? null, note.timezone);
+  }, [effectiveTriggerAt, note.repeat, note.timezone]);
 
   const checklistItems = useMemo(() => {
     if (note.contentType !== 'checklist') return [];

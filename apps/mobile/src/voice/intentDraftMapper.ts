@@ -24,15 +24,16 @@ function buildContent(input: {
   extractedContent: string;
   transcript: string;
   keepTranscriptInContent: boolean;
+  hasTitle: boolean;
 }): string {
-  const { extractedContent, transcript, keepTranscriptInContent } = input;
+  const { extractedContent, transcript, keepTranscriptInContent, hasTitle } = input;
 
   if (!keepTranscriptInContent) {
-    return extractedContent || transcript;
+    return extractedContent;
   }
 
   if (!extractedContent) {
-    return transcript;
+    return hasTitle ? '' : transcript;
   }
 
   if (!transcript || transcript === extractedContent) {
@@ -83,15 +84,19 @@ export function mapVoiceIntentDraftToEditor(
     warnings.push('Discarded invalid repeat rule from AI draft.');
   }
 
-  const keepTranscriptInContent =
-    response.draft.keepTranscriptInContent ||
-    response.confidence.content < CONTENT_CONFIDENCE_FALLBACK_THRESHOLD ||
-    extractedContent.length === 0;
+  const isLowConfidence =
+    (title.length > 0 && response.confidence.title < CONTENT_CONFIDENCE_FALLBACK_THRESHOLD) ||
+    (extractedContent.length > 0 &&
+      response.confidence.content < CONTENT_CONFIDENCE_FALLBACK_THRESHOLD) ||
+    (title.length === 0 && extractedContent.length === 0);
+
+  const keepTranscriptInContent = response.draft.keepTranscriptInContent || isLowConfidence;
 
   const content = buildContent({
     extractedContent,
     transcript,
     keepTranscriptInContent,
+    hasTitle: title.length > 0,
   });
 
   const missingFields = normalizeMissingFields(response.clarification.missingFields);

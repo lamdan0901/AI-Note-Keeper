@@ -1,3 +1,5 @@
+import type { VoiceErrorCategory } from '../types';
+
 export type VoiceOverlayStatus = 'listening' | 'processing' | 'error';
 
 type VoiceHoldEnabledParams = {
@@ -17,6 +19,7 @@ export function isVoiceHoldEnabled({
 export function buildVoiceOverlayAccessibilityLabel(
   status: VoiceOverlayStatus,
   processingMessage?: string,
+  errorCategory?: VoiceErrorCategory,
 ): string {
   if (status === 'listening') {
     return 'Voice recording in progress';
@@ -27,6 +30,10 @@ export function buildVoiceOverlayAccessibilityLabel(
       return processingMessage.trim();
     }
     return 'Processing voice note';
+  }
+
+  if (errorCategory === 'permission-denied') {
+    return 'Microphone permission denied';
   }
 
   return 'Voice capture error';

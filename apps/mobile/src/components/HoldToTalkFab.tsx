@@ -12,13 +12,15 @@ export interface HoldToTalkFabProps {
   voiceCaptureEnabled: boolean;
   onManualPress: () => void;
   onHoldStart: AsyncCallback;
-  onHoldEnd: AsyncCallback;
   onHoldCancel?: () => void;
   onInteractionError?: (error: unknown) => void;
   disabled?: boolean;
 }
 
-function runAsyncCallback(callback: AsyncCallback, onInteractionError?: (error: unknown) => void): void {
+function runAsyncCallback(
+  callback: AsyncCallback,
+  onInteractionError?: (error: unknown) => void,
+): void {
   try {
     const result = callback();
     if (result instanceof Promise) {
@@ -35,7 +37,6 @@ export function HoldToTalkFab({
   voiceCaptureEnabled,
   onManualPress,
   onHoldStart,
-  onHoldEnd,
   onHoldCancel,
   onInteractionError,
   disabled = false,
@@ -78,8 +79,6 @@ export function HoldToTalkFab({
 
     if (holdInteraction.consumeHoldFired()) {
       suppressNextPressRef.current = true;
-      triggerVoiceHaptic('listen-stop');
-      runAsyncCallback(onHoldEnd, onInteractionError);
       return;
     }
 
@@ -107,7 +106,7 @@ export function HoldToTalkFab({
         accessibilityLabel={holdEnabled ? 'Create note with hold to talk' : 'Create note'}
         accessibilityHint={
           holdEnabled
-            ? 'Tap to open editor, or press and hold to capture voice'
+            ? 'Tap to open editor, or press and hold to start voice capture'
             : 'Tap to open note editor'
         }
       >

@@ -37,6 +37,9 @@ describe('voice ui helpers', () => {
       'Resolving clarification',
     );
     expect(buildVoiceOverlayAccessibilityLabel('error')).toBe('Voice capture error');
+    expect(buildVoiceOverlayAccessibilityLabel('error', undefined, 'permission-denied')).toBe(
+      'Microphone permission denied',
+    );
   });
 
   it('normalizes clarification turn label bounds', () => {

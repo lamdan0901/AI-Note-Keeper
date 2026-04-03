@@ -79,6 +79,7 @@ type VoiceCaptureSessionControllerConfig = {
   userId: string;
   timezone: string;
   locale?: string | null;
+  silenceAutoStopMs?: number;
   maxClarificationTurns?: number;
   getNowEpochMs?: () => number;
   createSessionId?: () => string;
@@ -103,6 +104,7 @@ export function createVoiceCaptureSessionController(
   config: VoiceCaptureSessionControllerConfig,
 ): VoiceCaptureSessionController {
   const maxClarificationTurns = config.maxClarificationTurns ?? 2;
+  const silenceAutoStopMs = config.silenceAutoStopMs ?? 6000;
   const getNowEpochMs = config.getNowEpochMs ?? Date.now;
   const createSessionId = config.createSessionId ?? createDefaultSessionId;
 
@@ -117,6 +119,7 @@ export function createVoiceCaptureSessionController(
   let activeGeneration = 0;
   let pendingActivationPromise: Promise<void> | null = null;
   let pendingStartPromise: Promise<void> | null = null;
+  let silenceAutoStopTimer: ReturnType<typeof setTimeout> | null = null;
 
   const listeners = new Set<StateListener>();
 
@@ -129,6 +132,14 @@ export function createVoiceCaptureSessionController(
   const setState = (nextState: VoiceCaptureSessionState): void => {
     state = nextState;
     emit();
+  };
+
+  const clearSilenceAutoStopTimer = (): void => {
+    if (!silenceAutoStopTimer) {
+      return;
+    }
+    clearTimeout(silenceAutoStopTimer);
+    silenceAutoStopTimer = null;
   };
 
   const nextGeneration = (): number => {
@@ -144,6 +155,8 @@ export function createVoiceCaptureSessionController(
     if (generation !== undefined && !isActiveGeneration(generation)) {
       return;
     }
+
+    clearSilenceAutoStopTimer();
 
     const normalizedError = toVoiceSessionError(error);
     setState({
@@ -181,76 +194,12 @@ export function createVoiceCaptureSessionController(
     });
   };
 
-  const beginHold = async (): Promise<void> => {
-    if (!(state.status === 'idle' || state.status === 'review' || state.status === 'error')) {
-      return;
-    }
-
-    const generation = nextGeneration();
-
-    sessionId = createSessionId();
-    clarificationTurn = 0;
-    lastMappedResult = null;
-
-    setState({ status: 'listening', transcript: '' });
-
-    try {
-      const activationPromise = (async () => {
-        await config.speechRecognizer.ensurePermissions();
-
-        if (!isActiveGeneration(generation)) {
-          return;
-        }
-
-        const startPromise = config.speechRecognizer.startListening(
-          {
-            locale: config.locale ?? undefined,
-          },
-          {
-            onPartialTranscript: (transcript) => {
-              if (!isActiveGeneration(generation)) {
-                return;
-              }
-
-              const normalizedTranscript = normalizeText(transcript);
-              if (!normalizedTranscript) {
-                return;
-              }
-
-              if (state.status === 'listening') {
-                setState({
-                  status: 'listening',
-                  transcript: normalizedTranscript,
-                });
-              }
-            },
-            onError: (speechError) => {
-              fail(speechError, generation);
-            },
-          },
-        );
-        pendingStartPromise = startPromise;
-        await startPromise;
-
-        if (!isActiveGeneration(generation)) {
-          config.speechRecognizer.cancelListening();
-        }
-      })();
-
-      pendingActivationPromise = activationPromise;
-      await activationPromise;
-    } catch (error) {
-      fail(error, generation);
-    } finally {
-      pendingActivationPromise = null;
-      pendingStartPromise = null;
-    }
-  };
-
-  const releaseHold = async (): Promise<void> => {
+  async function releaseHold(): Promise<void> {
     if (state.status !== 'listening') {
       return;
     }
+
+    clearSilenceAutoStopTimer();
 
     const generation = activeGeneration;
     const activationPromise = pendingActivationPromise;
@@ -283,7 +232,7 @@ export function createVoiceCaptureSessionController(
 
     try {
       const transcript = await config.speechRecognizer.stopListening();
-      if (!isActiveGeneration(generation)) {
+      if (!isActiveGeneration(generation) || state.status !== 'listening') {
         return;
       }
 
@@ -338,6 +287,99 @@ export function createVoiceCaptureSessionController(
       resolveReview(mapped, undefined, generation);
     } catch (error) {
       fail(error, generation);
+    }
+  }
+
+  const scheduleSilenceAutoStop = (generation: number): void => {
+    if (silenceAutoStopMs <= 0) {
+      return;
+    }
+
+    clearSilenceAutoStopTimer();
+    silenceAutoStopTimer = setTimeout(() => {
+      if (!isActiveGeneration(generation) || state.status !== 'listening') {
+        return;
+      }
+      void releaseHold();
+    }, silenceAutoStopMs);
+  };
+
+  const beginHold = async (): Promise<void> => {
+    if (!(state.status === 'idle' || state.status === 'review' || state.status === 'error')) {
+      return;
+    }
+
+    const generation = nextGeneration();
+
+    sessionId = createSessionId();
+    clarificationTurn = 0;
+    lastMappedResult = null;
+
+    setState({ status: 'listening', transcript: '' });
+    clearSilenceAutoStopTimer();
+
+    let activationPromise: Promise<void> | null = null;
+    let localStartPromise: Promise<void> | null = null;
+
+    try {
+      activationPromise = (async () => {
+        await config.speechRecognizer.ensurePermissions();
+
+        if (!isActiveGeneration(generation)) {
+          return;
+        }
+
+        const startPromise = config.speechRecognizer.startListening(
+          {
+            locale: config.locale ?? undefined,
+          },
+          {
+            onPartialTranscript: (transcript) => {
+              if (!isActiveGeneration(generation)) {
+                return;
+              }
+
+              const normalizedTranscript = normalizeText(transcript);
+              if (!normalizedTranscript) {
+                return;
+              }
+
+              if (state.status === 'listening') {
+                setState({
+                  status: 'listening',
+                  transcript: normalizedTranscript,
+                });
+                scheduleSilenceAutoStop(generation);
+              }
+            },
+            onError: (speechError) => {
+              fail(speechError, generation);
+            },
+          },
+        );
+        localStartPromise = startPromise;
+        pendingStartPromise = startPromise;
+        await startPromise;
+
+        if (!isActiveGeneration(generation)) {
+          config.speechRecognizer.cancelListening();
+          return;
+        }
+
+        scheduleSilenceAutoStop(generation);
+      })();
+
+      pendingActivationPromise = activationPromise;
+      await activationPromise;
+    } catch (error) {
+      fail(error, generation);
+    } finally {
+      if (activationPromise && pendingActivationPromise === activationPromise) {
+        pendingActivationPromise = null;
+      }
+      if (localStartPromise && pendingStartPromise === localStartPromise) {
+        pendingStartPromise = null;
+      }
     }
   };
 
@@ -427,6 +469,7 @@ export function createVoiceCaptureSessionController(
 
   const cancel = (): void => {
     config.speechRecognizer.cancelListening();
+    clearSilenceAutoStopTimer();
     pendingActivationPromise = null;
     pendingStartPromise = null;
     nextGeneration();
@@ -441,6 +484,7 @@ export function createVoiceCaptureSessionController(
 
   const reset = (): void => {
     config.speechRecognizer.cancelListening();
+    clearSilenceAutoStopTimer();
     pendingActivationPromise = null;
     pendingStartPromise = null;
     nextGeneration();
@@ -454,6 +498,7 @@ export function createVoiceCaptureSessionController(
   };
 
   const dispose = (): void => {
+    clearSilenceAutoStopTimer();
     pendingActivationPromise = null;
     pendingStartPromise = null;
     nextGeneration();

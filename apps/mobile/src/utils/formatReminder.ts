@@ -1,7 +1,11 @@
 import { RepeatRule } from '../../../../packages/shared/types/reminder';
 import { formatReminderLabel } from '../../../../packages/shared/utils/repeatLabel';
 
-export const formatReminder = (date: Date, repeatRule: RepeatRule | null): string => {
+export const formatReminder = (
+  date: Date,
+  repeatRule: RepeatRule | null,
+  timeZone?: string,
+): string => {
   return formatReminderLabel(date, repeatRule, {
     separator: ' ',
     wrapParens: true,
@@ -12,5 +16,6 @@ export const formatReminder = (date: Date, repeatRule: RepeatRule | null): strin
       hour: '2-digit',
       minute: '2-digit',
     },
+    timeZone,
   });
 };

@@ -10,10 +10,8 @@ import {
   View,
 } from 'react-native';
 import { type Theme, useTheme } from '../../theme';
-import {
-  buildVoiceOverlayAccessibilityLabel,
-  type VoiceOverlayStatus,
-} from './voiceUiHelpers';
+import { buildVoiceOverlayAccessibilityLabel, type VoiceOverlayStatus } from './voiceUiHelpers';
+import type { VoiceErrorCategory } from '../types';
 
 export interface VoiceCaptureOverlayProps {
   visible: boolean;
@@ -21,6 +19,8 @@ export interface VoiceCaptureOverlayProps {
   transcript: string;
   processingMessage?: string;
   errorMessage?: string;
+  errorCategory?: VoiceErrorCategory;
+  onDone: () => void;
   onCancel: () => void;
   onRetry: () => void;
 }
@@ -88,18 +88,22 @@ export function VoiceCaptureOverlay({
   transcript,
   processingMessage,
   errorMessage,
+  errorCategory,
+  onDone,
   onCancel,
   onRetry,
 }: VoiceCaptureOverlayProps) {
   const { theme } = useTheme();
   const componentStyles = useMemo(() => createStyles(theme), [theme]);
+  const isPermissionDeniedError = status === 'error' && errorCategory === 'permission-denied';
 
   if (!visible) {
     return null;
   }
 
-  const title =
-    status === 'listening'
+  const title = isPermissionDeniedError
+    ? 'Microphone permission denied'
+    : status === 'listening'
       ? 'Listening...'
       : status === 'processing'
         ? processingMessage?.trim() || 'Processing your note...'
@@ -107,8 +111,11 @@ export function VoiceCaptureOverlay({
 
   const subtitle =
     status === 'error'
-      ? errorMessage?.trim() || 'Please retry voice capture or continue manually.'
-      : transcript.trim() || 'Speak naturally. Release to process.';
+      ? errorMessage?.trim() ||
+        (isPermissionDeniedError
+          ? 'Allow microphone permission when prompted to continue using voice capture.'
+          : 'Please retry voice capture or continue manually.')
+      : transcript.trim() || 'Speak naturally. Tap Done to process or wait 6s of silence.';
 
   return (
     <Modal transparent visible={visible} animationType="fade" onRequestClose={onCancel}>
@@ -117,7 +124,11 @@ export function VoiceCaptureOverlay({
         <View
           style={componentStyles.card}
           accessible
-          accessibilityLabel={buildVoiceOverlayAccessibilityLabel(status, processingMessage)}
+          accessibilityLabel={buildVoiceOverlayAccessibilityLabel(
+            status,
+            processingMessage,
+            errorCategory,
+          )}
           accessibilityRole="summary"
           accessibilityLiveRegion="polite"
         >
@@ -126,7 +137,13 @@ export function VoiceCaptureOverlay({
               <ActivityIndicator size="small" color="#ffffff" />
             ) : (
               <Ionicons
-                name={status === 'error' ? 'alert-circle-outline' : 'mic'}
+                name={
+                  status === 'error'
+                    ? isPermissionDeniedError
+                      ? 'mic-off-outline'
+                      : 'alert-circle-outline'
+                    : 'mic'
+                }
                 size={20}
                 color="#ffffff"
               />
@@ -145,16 +162,49 @@ export function VoiceCaptureOverlay({
 
           <View style={componentStyles.actions}>
             {status === 'error' ? (
+              isPermissionDeniedError ? (
+                <Pressable
+                  style={[componentStyles.actionButton, componentStyles.secondary]}
+                  onPress={onCancel}
+                >
+                  <Text style={componentStyles.secondaryText}>Close</Text>
+                </Pressable>
+              ) : (
+                <>
+                  <Pressable
+                    style={[componentStyles.actionButton, componentStyles.secondary]}
+                    onPress={onCancel}
+                  >
+                    <Text style={componentStyles.secondaryText}>Close</Text>
+                  </Pressable>
+                  <Pressable
+                    style={[componentStyles.actionButton, componentStyles.primary]}
+                    onPress={onRetry}
+                  >
+                    <Text style={componentStyles.primaryText}>Retry</Text>
+                  </Pressable>
+                </>
+              )
+            ) : status === 'listening' ? (
               <>
-                <Pressable style={[componentStyles.actionButton, componentStyles.secondary]} onPress={onCancel}>
+                <Pressable
+                  style={[componentStyles.actionButton, componentStyles.secondary]}
+                  onPress={onCancel}
+                >
                   <Text style={componentStyles.secondaryText}>Cancel</Text>
                 </Pressable>
-                <Pressable style={[componentStyles.actionButton, componentStyles.primary]} onPress={onRetry}>
-                  <Text style={componentStyles.primaryText}>Retry</Text>
+                <Pressable
+                  style={[componentStyles.actionButton, componentStyles.primary]}
+                  onPress={onDone}
+                >
+                  <Text style={componentStyles.primaryText}>Done</Text>
                 </Pressable>
               </>
             ) : (
-              <Pressable style={[componentStyles.actionButton, componentStyles.secondary]} onPress={onCancel}>
+              <Pressable
+                style={[componentStyles.actionButton, componentStyles.secondary]}
+                onPress={onCancel}
+              >
                 <Text style={componentStyles.secondaryText}>Cancel</Text>
               </Pressable>
             )}

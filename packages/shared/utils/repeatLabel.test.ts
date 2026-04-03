@@ -121,4 +121,33 @@ describe('formatReminderLabel', () => {
     expect(a).toContain('Every 2 days');
     expect(b).toContain('Every 2 days');
   });
+
+  it('respects explicit timezone when formatting date text', () => {
+    const utc = formatReminderLabel(date, null, {
+      dateFormatOptions: {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      },
+      timeZone: 'UTC',
+    });
+    const bangkok = formatReminderLabel(date, null, {
+      dateFormatOptions: {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      },
+      timeZone: 'Asia/Bangkok',
+    });
+
+    expect(utc).not.toBe(bangkok);
+  });
+
+  it('falls back safely when timezone is invalid', () => {
+    expect(() =>
+      formatReminderLabel(date, null, {
+        timeZone: 'Invalid/Timezone',
+      }),
+    ).not.toThrow();
+  });
 });

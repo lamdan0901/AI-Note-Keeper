@@ -18,6 +18,7 @@ type FakeSpeechOptions = {
   ensurePermissionsError?: VoiceSessionError;
   stopError?: VoiceSessionError;
   startSignal?: Promise<void>;
+  emitPartialOnStart?: boolean;
 };
 
 class FakeSpeechRecognizer implements VoiceSpeechRecognizer {
@@ -30,6 +31,8 @@ class FakeSpeechRecognizer implements VoiceSpeechRecognizer {
   private readonly stopError?: VoiceSessionError;
 
   private readonly startSignal?: Promise<void>;
+
+  private readonly emitPartialOnStart: boolean;
 
   private callbacks: VoiceSpeechCallbacks | null = null;
 
@@ -47,6 +50,7 @@ class FakeSpeechRecognizer implements VoiceSpeechRecognizer {
     this.ensurePermissionsError = options?.ensurePermissionsError;
     this.stopError = options?.stopError;
     this.startSignal = options?.startSignal;
+    this.emitPartialOnStart = options?.emitPartialOnStart ?? true;
   }
 
   async ensurePermissions(): Promise<void> {
@@ -67,7 +71,9 @@ class FakeSpeechRecognizer implements VoiceSpeechRecognizer {
       await this.startSignal;
     }
     this.callbacks = callbacks;
-    callbacks.onPartialTranscript(this.transcript);
+    if (this.emitPartialOnStart) {
+      callbacks.onPartialTranscript(this.transcript);
+    }
   }
 
   async stopListening(): Promise<string> {
@@ -124,6 +130,7 @@ function buildController(input?: {
   speech?: VoiceSpeechRecognizer;
   intentClient?: VoiceIntentClient;
   maxClarificationTurns?: number;
+  silenceAutoStopMs?: number;
   onOpenReview?: (result: unknown) => void;
 }): {
   controller: VoiceCaptureSessionController;
@@ -144,6 +151,7 @@ function buildController(input?: {
     userId: 'user-1',
     timezone: 'UTC',
     locale: 'en-US',
+    silenceAutoStopMs: input?.silenceAutoStopMs,
     maxClarificationTurns: input?.maxClarificationTurns,
     getNowEpochMs: () => 1_800_000_000_000,
     createSessionId: () => 'session-1',
@@ -154,6 +162,55 @@ function buildController(input?: {
 }
 
 describe('voice capture session controller', () => {
+  it('auto-stops and processes after 6 seconds of silence when transcript exists', async () => {
+    jest.useFakeTimers();
+
+    try {
+      const { controller, intentClient } = buildController({
+        silenceAutoStopMs: 6000,
+      });
+
+      await controller.beginHold();
+      expect(controller.getState().status).toBe('listening');
+
+      await jest.advanceTimersByTimeAsync(6100);
+
+      expect(intentClient.parseVoiceNoteIntent).toHaveBeenCalledTimes(1);
+      expect(controller.getState().status).toBe('review');
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('auto-stops with no-speech error after 6 seconds of silence when transcript is empty', async () => {
+    jest.useFakeTimers();
+
+    try {
+      const speech = new FakeSpeechRecognizer({
+        transcript: '   ',
+        emitPartialOnStart: false,
+      });
+      const { controller } = buildController({
+        speech,
+        silenceAutoStopMs: 6000,
+      });
+
+      await controller.beginHold();
+      expect(controller.getState().status).toBe('listening');
+
+      await jest.advanceTimersByTimeAsync(6100);
+
+      const finalState = controller.getState();
+      expect(finalState.status).toBe('error');
+      if (finalState.status !== 'error') {
+        throw new Error('Expected error state when silence auto-stop captures no speech');
+      }
+      expect(finalState.error.category).toBe('no-speech');
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('runs hold-to-review flow for parse success', async () => {
     const onOpenReview = jest.fn();
     const { controller, intentClient } = buildController({ onOpenReview });
@@ -345,6 +402,77 @@ describe('voice capture session controller', () => {
 
     permissionDeferred.resolve(undefined);
     await beginPromise;
+    await releasePromise;
+
+    expect(intentClient.parseVoiceNoteIntent).toHaveBeenCalledTimes(1);
+    expect(controller.getState().status).toBe('review');
+  });
+
+  it('keeps second attempt pending promises intact when first attempt resolves late', async () => {
+    const firstEnsureDeferred = createDeferred<void>();
+    const secondStartDeferred = createDeferred<void>();
+
+    class SequencedSpeechRecognizer implements VoiceSpeechRecognizer {
+      private ensureCalls = 0;
+
+      private startCalls = 0;
+
+      private secondStartResolved = false;
+
+      async ensurePermissions(): Promise<void> {
+        this.ensureCalls += 1;
+        if (this.ensureCalls === 1) {
+          await firstEnsureDeferred.promise;
+        }
+      }
+
+      async startListening(
+        _options: VoiceSpeechStartOptions,
+        callbacks: VoiceSpeechCallbacks,
+      ): Promise<void> {
+        this.startCalls += 1;
+        if (this.startCalls === 1) {
+          await secondStartDeferred.promise;
+          this.secondStartResolved = true;
+        }
+        callbacks.onPartialTranscript('draft note transcript');
+      }
+
+      async stopListening(): Promise<string> {
+        if (!this.secondStartResolved) {
+          throw new Error('Recognizer stop requested before startListening');
+        }
+        return 'draft note transcript';
+      }
+
+      cancelListening(): void {
+        return;
+      }
+
+      dispose(): void {
+        return;
+      }
+    }
+
+    const speech = new SequencedSpeechRecognizer();
+    const { controller, intentClient } = buildController({ speech });
+
+    const firstBeginPromise = controller.beginHold();
+    controller.cancel();
+
+    const secondBeginPromise = controller.beginHold();
+    expect(controller.getState().status).toBe('listening');
+
+    firstEnsureDeferred.resolve(undefined);
+    await firstBeginPromise;
+
+    const releasePromise = controller.releaseHold();
+    await Promise.resolve();
+
+    expect(intentClient.parseVoiceNoteIntent).toHaveBeenCalledTimes(0);
+
+    secondStartDeferred.resolve(undefined);
+    await secondBeginPromise;
     await releasePromise;
 
     expect(intentClient.parseVoiceNoteIntent).toHaveBeenCalledTimes(1);

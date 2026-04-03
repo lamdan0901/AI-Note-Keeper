@@ -3,7 +3,7 @@ import {
   type ExpoSpeechRecognitionErrorEvent,
   type ExpoSpeechRecognitionResultEvent,
 } from 'expo-speech-recognition';
-import { Platform } from 'react-native';
+import { NativeEventEmitter, Platform } from 'react-native';
 import type {
   VoiceErrorCategory,
   VoiceSessionError,
@@ -17,19 +17,18 @@ type SpeechListener = {
 };
 
 type SpeechModuleLike = {
-  addListener: <EventName extends 'result' | 'error' | 'end'>(
-    eventName: EventName,
-    listener:
-      | ((event: ExpoSpeechRecognitionResultEvent) => void)
-      | ((event: ExpoSpeechRecognitionErrorEvent) => void)
-      | (() => void),
-  ) => SpeechListener;
   start: (options: {
     lang: string;
     interimResults: boolean;
     continuous: boolean;
     maxAlternatives: number;
     addsPunctuation: boolean;
+    androidIntent?: string;
+    androidIntentOptions?: {
+      EXTRA_LANGUAGE_MODEL?: string;
+      EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS?: number;
+      EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS?: number;
+    };
   }) => void;
   stop: () => void;
   abort: () => void;
@@ -136,26 +135,81 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T
 
 type AndroidSpeechRecognizerOptions = {
   speechModule?: SpeechModuleLike;
+  eventEmitter?: {
+    addListener: <EventName extends 'result' | 'error' | 'end'>(
+      eventName: EventName,
+      listener:
+        | ((event: ExpoSpeechRecognitionResultEvent) => void)
+        | ((event: ExpoSpeechRecognitionErrorEvent) => void)
+        | (() => void),
+    ) => SpeechListener;
+  };
   stopResultTimeoutMs?: number;
+  stopGraceMs?: number;
 };
 
 export class AndroidSpeechRecognizer implements VoiceSpeechRecognizer {
   private readonly speechModule: SpeechModuleLike;
 
+  private eventEmitter: {
+    addListener: <EventName extends 'result' | 'error' | 'end'>(
+      eventName: EventName,
+      listener:
+        | ((event: ExpoSpeechRecognitionResultEvent) => void)
+        | ((event: ExpoSpeechRecognitionErrorEvent) => void)
+        | (() => void),
+    ) => SpeechListener;
+  } | null = null;
+
   private readonly stopResultTimeoutMs: number;
+
+  private readonly stopGraceMs: number;
 
   private listeners: SpeechListener[] = [];
 
   private currentTranscript = '';
 
+  private baseTranscript = '';
+
   private activeDeferred: DeferredTranscript | null = null;
 
   private isListening = false;
 
+  private stopRequested = false;
+
+  private startOptions: VoiceSpeechStartOptions | null = null;
+
   constructor(options?: AndroidSpeechRecognizerOptions) {
     this.speechModule =
       options?.speechModule ?? (ExpoSpeechRecognitionModule as unknown as SpeechModuleLike);
+    this.eventEmitter = options?.eventEmitter ?? null;
     this.stopResultTimeoutMs = options?.stopResultTimeoutMs ?? 1800;
+    this.stopGraceMs = options?.stopGraceMs ?? 450;
+  }
+
+  private getBestEffortTranscript(): string {
+    return normalizeTranscript(this.currentTranscript);
+  }
+
+  private isVoiceSessionError(error: unknown): error is VoiceSessionError {
+    return (
+      typeof error === 'object' &&
+      error !== null &&
+      'category' in error &&
+      typeof (error as { category?: unknown }).category === 'string'
+    );
+  }
+
+  private getEventEmitter(): NonNullable<AndroidSpeechRecognizer['eventEmitter']> {
+    if (this.eventEmitter) {
+      return this.eventEmitter;
+    }
+
+    this.eventEmitter = new NativeEventEmitter(
+      this.speechModule as unknown as ConstructorParameters<typeof NativeEventEmitter>[0],
+    ) as unknown as NonNullable<AndroidSpeechRecognizer['eventEmitter']>;
+
+    return this.eventEmitter;
   }
 
   private ensureAndroidPlatform(): void {
@@ -178,6 +232,18 @@ export class AndroidSpeechRecognizer implements VoiceSpeechRecognizer {
   async ensurePermissions(): Promise<void> {
     this.ensureAndroidPlatform();
 
+    const currentPermissions = await this.speechModule.getPermissionsAsync();
+    if (!currentPermissions.granted) {
+      const requestedPermissions = await this.speechModule.requestPermissionsAsync();
+      if (!requestedPermissions.granted) {
+        throw buildSessionError(
+          'permission-denied',
+          'Microphone permission is required for voice capture.',
+          true,
+        );
+      }
+    }
+
     if (!this.speechModule.isRecognitionAvailable()) {
       throw buildSessionError(
         'recognizer-unavailable',
@@ -185,28 +251,26 @@ export class AndroidSpeechRecognizer implements VoiceSpeechRecognizer {
         false,
       );
     }
+  }
 
-    const currentPermissions = await this.speechModule.getPermissionsAsync();
-    if (currentPermissions.granted) {
+  private startNativeRecognition(): void {
+    if (!this.startOptions) {
       return;
     }
 
-    if (!currentPermissions.canAskAgain) {
-      throw buildSessionError(
-        'permission-denied',
-        'Microphone permission has been denied. Enable it in system settings.',
-        true,
-      );
-    }
-
-    const requestedPermissions = await this.speechModule.requestPermissionsAsync();
-    if (!requestedPermissions.granted) {
-      throw buildSessionError(
-        'permission-denied',
-        'Microphone permission is required for voice capture.',
-        true,
-      );
-    }
+    this.speechModule.start({
+      lang: this.startOptions.locale ?? 'en-US',
+      interimResults: true,
+      continuous: true,
+      maxAlternatives: 1,
+      addsPunctuation: true,
+      androidIntent: 'android.speech.action.WEB_SEARCH',
+      androidIntentOptions: {
+        EXTRA_LANGUAGE_MODEL: 'web_search',
+        EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS: 3000,
+        EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS: 3000,
+      },
+    });
   }
 
   async startListening(
@@ -221,42 +285,70 @@ export class AndroidSpeechRecognizer implements VoiceSpeechRecognizer {
 
     this.clearListeners();
     this.currentTranscript = '';
+    this.baseTranscript = '';
     this.activeDeferred = createDeferredTranscript();
+    this.stopRequested = false;
+    this.startOptions = options;
+
+    const eventEmitter = this.getEventEmitter();
 
     this.listeners = [
-      this.speechModule.addListener('result', (event: ExpoSpeechRecognitionResultEvent) => {
+      eventEmitter.addListener('result', (event: ExpoSpeechRecognitionResultEvent) => {
         const payload = event;
-        const transcript = normalizeTranscript(payload.results[0]?.transcript ?? '');
-        if (!transcript) {
+        const sessionTranscript = normalizeTranscript(payload.results[0]?.transcript ?? '');
+        if (!sessionTranscript && !this.baseTranscript) {
           return;
         }
 
-        this.currentTranscript = transcript;
-        callbacks.onPartialTranscript(transcript);
+        const combined = normalizeTranscript(`${this.baseTranscript} ${sessionTranscript}`);
+        this.currentTranscript = combined;
+        callbacks.onPartialTranscript(combined);
 
         if (payload.isFinal) {
-          this.activeDeferred?.resolve(transcript);
+          if (this.stopRequested) {
+            this.activeDeferred?.resolve(combined);
+          } else {
+            // Segment is final but user is still holding. Keep it as base.
+            this.baseTranscript = combined;
+          }
         }
       }),
-      this.speechModule.addListener('error', (event: ExpoSpeechRecognitionErrorEvent) => {
+      eventEmitter.addListener('error', (event: ExpoSpeechRecognitionErrorEvent) => {
         const normalizedError = normalizeSpeechError(event);
+
+        if (!this.stopRequested && normalizedError.category === 'no-speech') {
+          // Restart on silence timeout if still holding
+          if (this.isListening) {
+            this.startNativeRecognition();
+          }
+          return;
+        }
+
+        if (this.stopRequested) {
+          if (normalizedError.category === 'no-speech') {
+            // Ignore post-stop no-speech noise so late partial/final results can still be captured.
+            return;
+          }
+
+          // Route non-no-speech stop-time errors through stopListening for a single final outcome.
+          this.activeDeferred?.reject(normalizedError);
+          return;
+        }
+
         callbacks.onError(normalizedError);
         this.activeDeferred?.reject(normalizedError);
       }),
-      this.speechModule.addListener('end', () => {
-        if (this.currentTranscript) {
+      eventEmitter.addListener('end', () => {
+        if (this.stopRequested && this.currentTranscript) {
           this.activeDeferred?.resolve(this.currentTranscript);
+        } else if (this.isListening && !this.stopRequested) {
+          // Native service stopped but user is still holding the button. Restart.
+          this.startNativeRecognition();
         }
       }),
     ];
 
-    this.speechModule.start({
-      lang: options.locale ?? 'en-US',
-      interimResults: true,
-      continuous: false,
-      maxAlternatives: 1,
-      addsPunctuation: true,
-    });
+    this.startNativeRecognition();
 
     this.isListening = true;
   }
@@ -266,6 +358,7 @@ export class AndroidSpeechRecognizer implements VoiceSpeechRecognizer {
       throw buildSessionError('no-speech', 'Voice capture session is not active.', true);
     }
 
+    this.stopRequested = true;
     this.speechModule.stop();
 
     try {
@@ -275,15 +368,41 @@ export class AndroidSpeechRecognizer implements VoiceSpeechRecognizer {
         throw buildSessionError('no-speech', 'No speech detected.', true);
       }
       return normalized;
-    } catch {
-      const fallbackTranscript = normalizeTranscript(this.currentTranscript);
+    } catch (error) {
+      const fallbackTranscript = this.getBestEffortTranscript();
       if (fallbackTranscript) {
         return fallbackTranscript;
       }
+
+      if (this.stopGraceMs > 0) {
+        try {
+          const lateTranscript = await withTimeout(this.activeDeferred.promise, this.stopGraceMs);
+          const normalizedLateTranscript = normalizeTranscript(lateTranscript);
+          if (normalizedLateTranscript) {
+            return normalizedLateTranscript;
+          }
+        } catch (lateError) {
+          const lateFallbackTranscript = this.getBestEffortTranscript();
+          if (lateFallbackTranscript) {
+            return lateFallbackTranscript;
+          }
+
+          if (this.isVoiceSessionError(lateError) && lateError.category !== 'no-speech') {
+            throw lateError;
+          }
+        }
+      }
+
+      if (this.isVoiceSessionError(error) && error.category !== 'no-speech') {
+        throw error;
+      }
+
       throw buildSessionError('no-speech', 'No speech detected.', true);
     } finally {
       this.isListening = false;
+      this.stopRequested = false;
       this.activeDeferred = null;
+      this.startOptions = null;
       this.clearListeners();
     }
   }
@@ -296,9 +415,12 @@ export class AndroidSpeechRecognizer implements VoiceSpeechRecognizer {
     this.speechModule.abort();
     this.activeDeferred?.reject(buildSessionError('no-speech', 'Voice capture cancelled.', true));
     this.isListening = false;
+    this.stopRequested = false;
     this.activeDeferred = null;
+    this.startOptions = null;
     this.clearListeners();
     this.currentTranscript = '';
+    this.baseTranscript = '';
   }
 
   dispose(): void {

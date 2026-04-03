@@ -9,6 +9,15 @@ import { RepeatRule } from '../types/reminder';
 
 const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
+function isValidTimeZone(timeZone: string): boolean {
+  try {
+    new Intl.DateTimeFormat(undefined, { timeZone }).format(new Date(0));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Return a short human-readable label for a `RepeatRule`, or `null` for no repeat.
  *
@@ -75,6 +84,8 @@ export function formatReminderLabel(
     wrapParens?: boolean;
     /** Intl.DateTimeFormatOptions for the date portion.  */
     dateFormatOptions?: Intl.DateTimeFormatOptions;
+    /** Optional IANA timezone used to render the date text. */
+    timeZone?: string;
   } = {},
 ): string {
   const {
@@ -87,9 +98,12 @@ export function formatReminderLabel(
       hour: 'numeric',
       minute: '2-digit',
     },
+    timeZone,
   } = opts;
 
-  const dateText = new Intl.DateTimeFormat(undefined, dateFormatOptions).format(date);
+  const formatterOptions =
+    timeZone && isValidTimeZone(timeZone) ? { ...dateFormatOptions, timeZone } : dateFormatOptions;
+  const dateText = new Intl.DateTimeFormat(undefined, formatterOptions).format(date);
   const repeatText = formatRepeatLabel(repeat);
 
   if (!repeatText) return dateText;
