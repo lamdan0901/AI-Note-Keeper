@@ -19,7 +19,8 @@ type VoiceIntentClientOptions = {
   client?: Pick<ConvexHttpClient, 'action'>;
 };
 
-const DEFAULT_TIMEOUT_MS = 30_000;
+const DEFAULT_TIMEOUT_MS = 45_000;
+const VOICE_INTENT_TIMEOUT_ERROR_MESSAGE = 'Voice intent request timed out';
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -28,7 +29,7 @@ function sleep(ms: number): Promise<void> {
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
   let timer: NodeJS.Timeout | null = null;
   const timeoutPromise = new Promise<T>((_, reject) => {
-    timer = setTimeout(() => reject(new Error('Voice intent request timed out')), timeoutMs);
+    timer = setTimeout(() => reject(new Error(VOICE_INTENT_TIMEOUT_ERROR_MESSAGE)), timeoutMs);
   });
 
   try {
@@ -46,11 +47,19 @@ function isRetryableError(error: unknown): boolean {
   }
 
   const message = error.message.toLowerCase();
+  const timeoutMessage = VOICE_INTENT_TIMEOUT_ERROR_MESSAGE.toLowerCase();
+
+  if (message.includes(timeoutMessage)) {
+    return false;
+  }
+
   return (
     message.includes('timed out') ||
     message.includes('network') ||
     message.includes('fetch') ||
-    message.includes('temporarily unavailable')
+    message.includes('temporarily unavailable') ||
+    message.includes('econnreset') ||
+    message.includes('etimedout')
   );
 }
 
