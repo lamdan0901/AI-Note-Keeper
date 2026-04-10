@@ -7,6 +7,7 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { type Note } from '../db/notesRepo';
 import { NoteCard } from './NoteCard';
 import { type Theme, useTheme } from '../theme';
@@ -173,6 +174,7 @@ export const NotesList: React.FC<NotesListProps> = ({
   if (notes.length === 0) {
     return (
       <View style={styles.emptyContainer}>
+        <Ionicons name="file-tray-outline" size={54} color={theme.colors.textMuted} />
         <Text style={styles.emptyText}>
           {searchQuery.trim() ? 'No matching notes found.' : 'No notes yet. Create one!'}
         </Text>
@@ -254,6 +256,7 @@ const createStyles = (theme: Theme) =>
       justifyContent: 'center',
       alignItems: 'center',
       padding: theme.spacing.xl,
+      gap: theme.spacing.md,
     },
     emptyText: {
       fontSize: theme.typography.sizes.base,

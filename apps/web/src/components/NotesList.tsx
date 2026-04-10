@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pin } from 'lucide-react';
+import { Pin, FileText } from 'lucide-react';
 import type { WebNote } from '../services/notesTypes';
 import type { NotesViewMode } from '../services/notesTypes';
 import { NoteCard } from './NoteCard';
@@ -54,9 +54,12 @@ export function NotesList({
   if (notes.length === 0) {
     return (
       <div className="notes-list notes-list--empty">
-        <p className="notes-list__empty-text">
-          {hasSearchQuery ? 'No matching notes found.' : 'No notes yet. Create one to get started.'}
-        </p>
+        <div className="notes-list__empty-state">
+          <FileText size={54} strokeWidth={1.5} className="notes-list__empty-icon" />
+          <p className="notes-list__empty-text">
+            {hasSearchQuery ? 'No matching notes found.' : 'No notes yet. Create one to get started.'}
+          </p>
+        </div>
       </div>
     );
   }
