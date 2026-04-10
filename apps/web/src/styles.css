@@ -709,6 +709,16 @@ body {
   align-items: center;
   padding: 64px 0;
 }
+.notes-list__empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+.notes-list__empty-icon {
+  color: var(--color-text-muted);
+  opacity: 0.5;
+}
 .notes-list__empty-text {
   font-size: 15px;
   color: var(--color-text-muted);
