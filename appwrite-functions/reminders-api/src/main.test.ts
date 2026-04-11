@@ -49,10 +49,12 @@ const mockListDocuments = jest.fn();
 const mockCreateDocument = jest.fn();
 const mockUpdateDocument = jest.fn();
 const mockDeleteDocument = jest.fn();
+const mockCreateExecution = jest.fn();
 
 jest.mock('node-appwrite', () => ({
   Client: jest.fn().mockImplementation(() => ({
     setEndpoint: jest.fn().mockReturnThis(),
+    setProject: jest.fn().mockReturnThis(),
     setKey: jest.fn().mockReturnThis(),
   })),
   Databases: jest.fn().mockImplementation(() => ({
@@ -60,6 +62,9 @@ jest.mock('node-appwrite', () => ({
     createDocument: mockCreateDocument,
     updateDocument: mockUpdateDocument,
     deleteDocument: mockDeleteDocument,
+  })),
+  Functions: jest.fn().mockImplementation(() => ({
+    createExecution: mockCreateExecution,
   })),
   ID: { unique: () => 'gen-id' },
   Query: {
@@ -96,7 +101,10 @@ beforeEach(() => {
   jest.clearAllMocks();
   process.env.APPWRITE_FUNCTION_API_ENDPOINT = 'https://cloud.appwrite.io/v1';
   process.env.APPWRITE_FUNCTION_API_KEY = 'test-key';
+  process.env.APPWRITE_FUNCTION_PROJECT_ID = 'test-project-id';
+  process.env.PUSH_FUNCTION_ID = 'push-fn-id';
 
+  mockCreateExecution.mockResolvedValue({ $id: 'exec-1' });
   mockListDocuments.mockResolvedValue({ documents: [] });
   mockCreateDocument.mockImplementation((_db, _col, id, data) =>
     Promise.resolve({ $id: id, ...data }),
@@ -230,6 +238,35 @@ describe('createReminder (POST /)', () => {
     const created = mockCreateDocument.mock.calls.find((call) => call[1] === 'notes');
     expect(created).toBeDefined();
     expect(created[3].nextTriggerAt).toBe(futureStart);
+  });
+
+  it('calls functions.createExecution with reminder push payload after create', async () => {
+    const { context, responses } = makeContext({
+      method: 'POST',
+      path: '/',
+      headers: withAuth(),
+      body: JSON.stringify({
+        userId: VALID_USER_ID,
+        triggerAt: 5000,
+        active: true,
+        timezone: 'UTC',
+      }),
+    });
+    await main(context as never);
+    expect(responses[0].status).toBe(201);
+    expect(mockCreateExecution).toHaveBeenCalledWith(
+      'push-fn-id',
+      expect.stringContaining('"type":"reminder"'),
+      true,
+    );
+    const execBody = JSON.parse(mockCreateExecution.mock.calls[0][1] as string) as {
+      type: string;
+      userId: string;
+      isTrigger: boolean;
+    };
+    expect(execBody.type).toBe('reminder');
+    expect(execBody.userId).toBe(VALID_USER_ID);
+    expect(execBody.isTrigger).toBe(false);
   });
 });
 

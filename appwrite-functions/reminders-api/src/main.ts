@@ -1,4 +1,4 @@
-import { Client, Databases, ID, Query } from 'node-appwrite';
+import { Client, Databases, Functions, ID, Query } from 'node-appwrite';
 import { computeNextTrigger } from './utils/recurrence.js';
 import type { RepeatRule } from './utils/recurrence.js';
 
@@ -117,6 +117,8 @@ export default async function main(context: AppwriteContext): Promise<void> {
 
   const client = new Client().setEndpoint(endpoint).setProject(projectId).setKey(apiKey);
   const databases = new Databases(client);
+  const functions = new Functions(client);
+  const pushFunctionId = process.env.PUSH_FUNCTION_ID;
 
   const { method, path } = req;
   const reminderId = extractId(path);
@@ -233,7 +235,13 @@ export default async function main(context: AppwriteContext): Promise<void> {
         payloadHash: '',
       });
 
-      // TODO Phase 5: call push-notification function
+      await firePushAsync(functions, pushFunctionId, {
+        type: 'reminder',
+        userId,
+        reminderId: id,
+        changeEventId: id,
+        isTrigger: false,
+      });
       log(`Created reminder ${id}`);
       return res.json(mapDocToReminder(created), 201);
     } catch (err) {
@@ -316,7 +324,13 @@ export default async function main(context: AppwriteContext): Promise<void> {
         payloadHash: '',
       });
 
-      // TODO Phase 5: call push-notification function
+      await firePushAsync(functions, pushFunctionId, {
+        type: 'reminder',
+        userId,
+        reminderId,
+        changeEventId: ID.unique(),
+        isTrigger: false,
+      });
       return res.json(mapDocToReminder(updated));
     } catch (err) {
       error(`updateReminder failed: ${String(err)}`);
@@ -357,7 +371,13 @@ export default async function main(context: AppwriteContext): Promise<void> {
         payloadHash: '',
       });
 
-      // TODO Phase 5: call push-notification function
+      await firePushAsync(functions, pushFunctionId, {
+        type: 'reminder',
+        userId,
+        reminderId,
+        changeEventId: ID.unique(),
+        isTrigger: false,
+      });
       return res.json({ id: reminderId });
     } catch (err) {
       error(`deleteReminder failed: ${String(err)}`);
@@ -451,7 +471,13 @@ export default async function main(context: AppwriteContext): Promise<void> {
         payloadHash: '',
       });
 
-      // TODO Phase 5: call push-notification function
+      await firePushAsync(functions, pushFunctionId, {
+        type: 'reminder',
+        userId,
+        reminderId,
+        changeEventId: ID.unique(),
+        isTrigger: false,
+      });
       return res.json(mapDocToReminder(updated));
     } catch (err) {
       error(`ackReminder failed: ${String(err)}`);
@@ -511,7 +537,13 @@ export default async function main(context: AppwriteContext): Promise<void> {
         payloadHash: '',
       });
 
-      // TODO Phase 5: call push-notification function
+      await firePushAsync(functions, pushFunctionId, {
+        type: 'reminder',
+        userId,
+        reminderId,
+        changeEventId: ID.unique(),
+        isTrigger: false,
+      });
       return res.json(mapDocToReminder(updated));
     } catch (err) {
       error(`snoozeReminder failed: ${String(err)}`);
@@ -520,4 +552,21 @@ export default async function main(context: AppwriteContext): Promise<void> {
   }
 
   return res.json({ error: 'Method not allowed', status: 405 }, 405);
+}
+
+// ---------------------------------------------------------------------------
+// Helper — fire push notification asynchronously (non-blocking)
+// ---------------------------------------------------------------------------
+
+async function firePushAsync(
+  functions: Functions,
+  pushFunctionId: string | undefined,
+  payload: Record<string, unknown>,
+): Promise<void> {
+  if (!pushFunctionId) return;
+  try {
+    await functions.createExecution(pushFunctionId, JSON.stringify(payload), true);
+  } catch {
+    // Best-effort — push failure must not fail the mutation
+  }
 }

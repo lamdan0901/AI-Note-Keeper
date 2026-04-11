@@ -22,6 +22,10 @@ const remindersApiFunctionId = import.meta.env.VITE_APPWRITE_REMINDERS_API_FUNCT
 const subscriptionsApiFunctionId = import.meta.env.VITE_APPWRITE_SUBSCRIPTIONS_API_FUNCTION_ID as
   | string
   | undefined;
+const aiVoiceFunctionId = import.meta.env.VITE_APPWRITE_AI_VOICE_FUNCTION_ID as string | undefined;
+const userDataMigrationFunctionId = import.meta.env
+  .VITE_APPWRITE_USER_DATA_MIGRATION_FUNCTION_ID as string | undefined;
+const fcmProviderId = import.meta.env.VITE_APPWRITE_FCM_PROVIDER_ID as string | undefined;
 
 if (!convexUrl) {
   throw new Error('VITE_CONVEX_URL is not configured. Set it in your .env file.');
@@ -42,6 +46,9 @@ const backendClient: AppwriteBackendClient | ConvexBackendClient =
           notesSyncFunctionId,
           remindersApiFunctionId,
           subscriptionsApiFunctionId,
+          aiVoiceFunctionId,
+          userDataMigrationFunctionId,
+          fcmProviderId,
         );
       })()
     : convexDelegate;

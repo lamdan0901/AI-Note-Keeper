@@ -54,6 +54,7 @@ jest.mock('node-appwrite', () => {
   return {
     Client: jest.fn().mockImplementation(() => ({
       setEndpoint: jest.fn().mockReturnThis(),
+      setProject: jest.fn().mockReturnThis(),
       setKey: jest.fn().mockReturnThis(),
     })),
     Databases: jest.fn().mockImplementation(() => ({
@@ -72,6 +73,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   process.env.APPWRITE_FUNCTION_API_ENDPOINT = 'https://cloud.appwrite.io/v1';
   process.env.APPWRITE_FUNCTION_API_KEY = 'test-api-key';
+  process.env.APPWRITE_FUNCTION_PROJECT_ID = 'test-project-id';
 
   // Default: no existing notes
   mockListDocuments.mockResolvedValue({ documents: [] });
@@ -156,15 +158,6 @@ describe('LWW conflict resolution', () => {
       isPinned: false,
     };
 
-    // First call returns existing note, second call (canonical fetch) returns updated list
-    mockListDocuments
-      .mockResolvedValueOnce({ documents: [existingDoc] }) // change event check: not called
-      .mockResolvedValueOnce({ documents: [existingDoc] }) // existing fetch
-      .mockResolvedValueOnce({ documents: [existingDoc] }); // canonical fetch
-
-    // We need the createDocument (change event) + then listDocuments for existing + final list
-    // Reset and control more carefully
-    mockCreateDocument.mockResolvedValue({});
     mockListDocuments
       .mockResolvedValueOnce({ documents: [existingDoc] }) // existing check in sync loop
       .mockResolvedValueOnce({ documents: [existingDoc] }); // final canonical fetch

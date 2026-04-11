@@ -1,4 +1,4 @@
-import { Client, Databases, ID, Query } from 'node-appwrite';
+import { Client, Databases, Functions, ID, Query } from 'node-appwrite';
 import { computeNextReminderAt } from './utils/billing.js';
 
 // ---------------------------------------------------------------------------
@@ -129,6 +129,8 @@ export default async function main(context: AppwriteContext): Promise<void> {
 
   const client = new Client().setEndpoint(endpoint).setProject(projectId).setKey(apiKey);
   const databases = new Databases(client);
+  const functions = new Functions(client);
+  const pushFunctionId = process.env.PUSH_FUNCTION_ID;
 
   const { method, path } = req;
   const subPath = extractSubPath(path);
@@ -269,6 +271,14 @@ export default async function main(context: AppwriteContext): Promise<void> {
         docFields,
       );
       log(`Created subscription ${created.$id as string}`);
+      await firePushAsync(functions, pushFunctionId, {
+        type: 'subscription',
+        userId,
+        subscriptionId: created.$id as string,
+        title: (docFields['serviceName'] as string) ?? '',
+        body: '',
+        reminderKind: 'sync',
+      });
       return res.json({ id: created.$id as string }, 201);
     } catch (err) {
       error(`createSubscription failed: ${String(err)}`);
@@ -346,6 +356,14 @@ export default async function main(context: AppwriteContext): Promise<void> {
         subscriptionId,
         patch,
       );
+      await firePushAsync(functions, pushFunctionId, {
+        type: 'subscription',
+        userId,
+        subscriptionId,
+        title: (patch['serviceName'] as string | undefined) ?? (doc.serviceName as string) ?? '',
+        body: '',
+        reminderKind: 'sync',
+      });
       return res.json(mapDocToSubscription(updated));
     } catch (err) {
       error(`updateSubscription failed: ${String(err)}`);
@@ -375,6 +393,14 @@ export default async function main(context: AppwriteContext): Promise<void> {
         updatedAt: now,
       });
       log(`Soft-deleted subscription ${subscriptionId}`);
+      await firePushAsync(functions, pushFunctionId, {
+        type: 'subscription',
+        userId,
+        subscriptionId,
+        title: doc.serviceName as string,
+        body: '',
+        reminderKind: 'sync',
+      });
       return res.json({ id: subscriptionId });
     } catch (err) {
       error(`deleteSubscription failed: ${String(err)}`);
@@ -404,6 +430,14 @@ export default async function main(context: AppwriteContext): Promise<void> {
         { active: true, deletedAt: null, updatedAt: Date.now() },
       );
       log(`Restored subscription ${subscriptionId}`);
+      await firePushAsync(functions, pushFunctionId, {
+        type: 'subscription',
+        userId,
+        subscriptionId,
+        title: doc.serviceName as string,
+        body: '',
+        reminderKind: 'sync',
+      });
       return res.json(mapDocToSubscription(updated));
     } catch (err) {
       error(`restoreSubscription failed: ${String(err)}`);
@@ -441,4 +475,21 @@ export default async function main(context: AppwriteContext): Promise<void> {
   }
 
   return res.json({ error: 'Not found', status: 404 }, 404);
+}
+
+// ---------------------------------------------------------------------------
+// Helper — fire push notification asynchronously (non-blocking)
+// ---------------------------------------------------------------------------
+
+async function firePushAsync(
+  functions: Functions,
+  pushFunctionId: string | undefined,
+  payload: Record<string, unknown>,
+): Promise<void> {
+  if (!pushFunctionId) return;
+  try {
+    await functions.createExecution(pushFunctionId, JSON.stringify(payload), true);
+  } catch {
+    // Best-effort — push failure must not fail the mutation
+  }
 }

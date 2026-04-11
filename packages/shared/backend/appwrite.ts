@@ -1,4 +1,4 @@
-import { Account, Databases, Functions, Query, ExecutionMethod } from 'appwrite';
+import { Account, Databases, Functions, ID, Query, ExecutionMethod } from 'appwrite';
 import type {
   BackendClient,
   DevicePushTokenData,
@@ -83,12 +83,15 @@ function mapDocToNote(doc: Record<string, any>): Note {
 export class AppwriteBackendClient implements BackendClient {
   constructor(
     private readonly account: Account,
-    private readonly delegate: BackendClient,
+    private readonly delegate?: BackendClient,
     private readonly databases?: Databases,
     private readonly functions?: Functions,
     private readonly notesSyncFunctionId?: string,
     private readonly remindersApiFunctionId?: string,
     private readonly subscriptionsApiFunctionId?: string,
+    private readonly aiVoiceFunctionId?: string,
+    private readonly userDataMigrationFunctionId?: string,
+    private readonly fcmProviderId?: string,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -125,7 +128,35 @@ export class AppwriteBackendClient implements BackendClient {
     username: string,
     password: string,
   ): Promise<MergeSummary> {
-    return this.delegate.preflightUserDataMerge(fromUserId, toUserId, username, password);
+    if (this.functions && this.userDataMigrationFunctionId) {
+      return this.functions
+        .createExecution(
+          this.userDataMigrationFunctionId,
+          JSON.stringify({ fromUserId, toUserId, username, password }),
+          false,
+          '/preflight',
+          ExecutionMethod.POST,
+        )
+        .then((exec) => {
+          const parsed = JSON.parse(exec.responseBody) as MergeSummary & {
+            error?: string;
+            status?: number;
+          };
+          if (parsed.error) {
+            throw new Error(
+              `user-data-migration preflight error: ${parsed.error} (status ${
+                parsed.status ?? 'unknown'
+              })`,
+            );
+          }
+          return parsed;
+        });
+    }
+    if (this.delegate)
+      return this.delegate.preflightUserDataMerge(fromUserId, toUserId, username, password);
+    throw new Error(
+      'preflightUserDataMerge: neither userDataMigrationFunctionId nor delegate is configured',
+    );
   }
 
   applyUserDataMerge(
@@ -135,7 +166,34 @@ export class AppwriteBackendClient implements BackendClient {
     password: string,
     strategy: MergeStrategy,
   ): Promise<void> {
-    return this.delegate.applyUserDataMerge(fromUserId, toUserId, username, password, strategy);
+    if (this.functions && this.userDataMigrationFunctionId) {
+      return this.functions
+        .createExecution(
+          this.userDataMigrationFunctionId,
+          JSON.stringify({ fromUserId, toUserId, username, password, strategy }),
+          false,
+          '/apply',
+          ExecutionMethod.POST,
+        )
+        .then((exec) => {
+          const parsed = JSON.parse(exec.responseBody) as {
+            error?: string;
+            status?: number;
+          };
+          if (parsed.error) {
+            throw new Error(
+              `user-data-migration apply error: ${parsed.error} (status ${
+                parsed.status ?? 'unknown'
+              })`,
+            );
+          }
+        });
+    }
+    if (this.delegate)
+      return this.delegate.applyUserDataMerge(fromUserId, toUserId, username, password, strategy);
+    throw new Error(
+      'applyUserDataMerge: neither userDataMigrationFunctionId nor delegate is configured',
+    );
   }
 
   getNotes(userId: string): Promise<Note[]> {
@@ -144,7 +202,8 @@ export class AppwriteBackendClient implements BackendClient {
         .listDocuments(DATABASE_ID, NOTES_COLLECTION, [Query.equal('userId', userId)])
         .then((result) => result.documents.map(mapDocToNote));
     }
-    return this.delegate.getNotes(userId);
+    if (this.delegate) return this.delegate.getNotes(userId);
+    throw new Error('getNotes: neither databases nor delegate is configured');
   }
 
   async syncNotes(
@@ -177,7 +236,10 @@ export class AppwriteBackendClient implements BackendClient {
           'is missing. Set the env var to avoid split-backend writes.',
       );
     }
-    return this.delegate.syncNotes(userId, changes, lastSyncAt);
+    return (
+      this.delegate?.syncNotes(userId, changes, lastSyncAt) ??
+      Promise.reject(new Error('syncNotes: neither notesSyncFunctionId nor delegate is configured'))
+    );
   }
 
   async permanentlyDeleteNote(userId: string, noteId: string): Promise<void> {
@@ -193,7 +255,7 @@ export class AppwriteBackendClient implements BackendClient {
       }
       return;
     }
-    return this.delegate.permanentlyDeleteNote(userId, noteId);
+    if (this.delegate) return this.delegate.permanentlyDeleteNote(userId, noteId);
   }
 
   async emptyTrash(userId: string): Promise<void> {
@@ -209,7 +271,7 @@ export class AppwriteBackendClient implements BackendClient {
       );
       return;
     }
-    return this.delegate.emptyTrash(userId);
+    if (this.delegate) return this.delegate.emptyTrash(userId);
   }
 
   // ---------------------------------------------------------------------------
@@ -272,7 +334,8 @@ export class AppwriteBackendClient implements BackendClient {
         () => null,
       );
     }
-    return this.delegate.getReminder(reminderId);
+    if (this.delegate) return this.delegate.getReminder(reminderId);
+    throw new Error('getReminder: neither remindersApiFunctionId nor delegate is configured');
   }
 
   listReminders(updatedSince?: number): Promise<Reminder[]> {
@@ -280,7 +343,8 @@ export class AppwriteBackendClient implements BackendClient {
       const path = updatedSince !== undefined ? `/?updatedSince=${updatedSince}` : '/';
       return this.callRemindersApi<Reminder[]>(ExecutionMethod.GET, path);
     }
-    return this.delegate.listReminders(updatedSince);
+    if (this.delegate) return this.delegate.listReminders(updatedSince);
+    throw new Error('listReminders: neither remindersApiFunctionId nor delegate is configured');
   }
 
   createReminder(data: ReminderCreate): Promise<Reminder> {
@@ -291,7 +355,8 @@ export class AppwriteBackendClient implements BackendClient {
         data as unknown as Record<string, unknown>,
       );
     }
-    return this.delegate.createReminder(data);
+    if (this.delegate) return this.delegate.createReminder(data);
+    throw new Error('createReminder: neither remindersApiFunctionId nor delegate is configured');
   }
 
   updateReminder(id: string, patch: ReminderUpdate): Promise<Reminder | null> {
@@ -302,7 +367,8 @@ export class AppwriteBackendClient implements BackendClient {
         patch as unknown as Record<string, unknown>,
       ).catch(() => null);
     }
-    return this.delegate.updateReminder(id, patch);
+    if (this.delegate) return this.delegate.updateReminder(id, patch);
+    throw new Error('updateReminder: neither remindersApiFunctionId nor delegate is configured');
   }
 
   deleteReminder(id: string, deviceId?: string): Promise<void> {
@@ -313,7 +379,8 @@ export class AppwriteBackendClient implements BackendClient {
         deviceId ? { deviceId } : undefined,
       );
     }
-    return this.delegate.deleteReminder(id, deviceId);
+    if (this.delegate) return this.delegate.deleteReminder(id, deviceId);
+    throw new Error('deleteReminder: neither remindersApiFunctionId nor delegate is configured');
   }
 
   snoozeReminder(id: string, snoozedUntil: number, deviceId?: string): Promise<Reminder | null> {
@@ -323,7 +390,7 @@ export class AppwriteBackendClient implements BackendClient {
         ...(deviceId ? { deviceId } : {}),
       }).catch(() => null);
     }
-    return this.delegate.snoozeReminder(id, snoozedUntil, deviceId);
+    if (this.delegate) return this.delegate.snoozeReminder(id, snoozedUntil, deviceId);
   }
 
   ackReminder(
@@ -339,7 +406,7 @@ export class AppwriteBackendClient implements BackendClient {
           : {}),
       });
     }
-    return this.delegate.ackReminder(id, ackType, opts);
+    if (this.delegate) return this.delegate.ackReminder(id, ackType, opts);
   }
 
   listSubscriptions(userId: string): Promise<Subscription[]> {
@@ -349,7 +416,10 @@ export class AppwriteBackendClient implements BackendClient {
         `/subscriptions?userId=${encodeURIComponent(userId)}`,
       );
     }
-    return this.delegate.listSubscriptions(userId);
+    if (this.delegate) return this.delegate.listSubscriptions(userId);
+    throw new Error(
+      'listSubscriptions: neither subscriptionsApiFunctionId nor delegate is configured',
+    );
   }
 
   listDeletedSubscriptions(userId: string): Promise<Subscription[]> {
@@ -359,7 +429,10 @@ export class AppwriteBackendClient implements BackendClient {
         `/subscriptions/deleted?userId=${encodeURIComponent(userId)}`,
       );
     }
-    return this.delegate.listDeletedSubscriptions(userId);
+    if (this.delegate) return this.delegate.listDeletedSubscriptions(userId);
+    throw new Error(
+      'listDeletedSubscriptions: neither subscriptionsApiFunctionId nor delegate is configured',
+    );
   }
 
   createSubscription(data: SubscriptionCreate): Promise<string> {
@@ -370,7 +443,10 @@ export class AppwriteBackendClient implements BackendClient {
         data as unknown as Record<string, unknown>,
       ).then((r) => r.id);
     }
-    return this.delegate.createSubscription(data);
+    if (this.delegate) return this.delegate.createSubscription(data);
+    throw new Error(
+      'createSubscription: neither subscriptionsApiFunctionId nor delegate is configured',
+    );
   }
 
   updateSubscription(id: string, patch: SubscriptionUpdate): Promise<void> {
@@ -381,21 +457,30 @@ export class AppwriteBackendClient implements BackendClient {
         patch as unknown as Record<string, unknown>,
       );
     }
-    return this.delegate.updateSubscription(id, patch);
+    if (this.delegate) return this.delegate.updateSubscription(id, patch);
+    throw new Error(
+      'updateSubscription: neither subscriptionsApiFunctionId nor delegate is configured',
+    );
   }
 
   deleteSubscription(id: string): Promise<void> {
     if (this.functions && this.subscriptionsApiFunctionId) {
       return this.callSubscriptionsApi<void>(ExecutionMethod.DELETE, `/subscriptions/${id}`);
     }
-    return this.delegate.deleteSubscription(id);
+    if (this.delegate) return this.delegate.deleteSubscription(id);
+    throw new Error(
+      'deleteSubscription: neither subscriptionsApiFunctionId nor delegate is configured',
+    );
   }
 
   restoreSubscription(id: string): Promise<void> {
     if (this.functions && this.subscriptionsApiFunctionId) {
       return this.callSubscriptionsApi<void>(ExecutionMethod.POST, `/subscriptions/${id}/restore`);
     }
-    return this.delegate.restoreSubscription(id);
+    if (this.delegate) return this.delegate.restoreSubscription(id);
+    throw new Error(
+      'restoreSubscription: neither subscriptionsApiFunctionId nor delegate is configured',
+    );
   }
 
   permanentlyDeleteSubscription(id: string): Promise<void> {
@@ -405,7 +490,10 @@ export class AppwriteBackendClient implements BackendClient {
         `/subscriptions/${id}/permanent-delete`,
       );
     }
-    return this.delegate.permanentlyDeleteSubscription(id);
+    if (this.delegate) return this.delegate.permanentlyDeleteSubscription(id);
+    throw new Error(
+      'permanentlyDeleteSubscription: neither subscriptionsApiFunctionId nor delegate is configured',
+    );
   }
 
   emptySubscriptionTrash(userId: string): Promise<void> {
@@ -415,20 +503,82 @@ export class AppwriteBackendClient implements BackendClient {
         `/subscriptions/trash?userId=${encodeURIComponent(userId)}`,
       );
     }
-    return this.delegate.emptySubscriptionTrash(userId);
+    if (this.delegate) return this.delegate.emptySubscriptionTrash(userId);
+    throw new Error(
+      'emptySubscriptionTrash: neither subscriptionsApiFunctionId nor delegate is configured',
+    );
   }
 
-  upsertDevicePushToken(data: DevicePushTokenData): Promise<void> {
-    return this.delegate.upsertDevicePushToken(data);
+  async upsertDevicePushToken(data: DevicePushTokenData): Promise<void> {
+    // Use data.deviceId as the Appwrite push target ID for deterministic upsert.
+    // identifier is the FCM token; providerId is the FCM messaging provider.
+    try {
+      await this.account.createPushTarget(data.deviceId, data.fcmToken, this.fcmProviderId);
+    } catch {
+      // Target already exists — update the FCM token
+      await this.account.updatePushTarget(data.deviceId, data.fcmToken);
+    }
   }
 
   parseVoiceNoteIntent(data: ParseVoiceNoteIntentRequest): Promise<VoiceIntentResponseDto> {
-    return this.delegate.parseVoiceNoteIntent(data);
+    if (this.functions && this.aiVoiceFunctionId) {
+      return this.functions
+        .createExecution(
+          this.aiVoiceFunctionId,
+          JSON.stringify(data),
+          false,
+          '/parse',
+          ExecutionMethod.POST,
+        )
+        .then((exec) => {
+          const parsed = JSON.parse(exec.responseBody) as VoiceIntentResponseDto & {
+            error?: string;
+            status?: number;
+          };
+          if (parsed.error) {
+            throw new Error(
+              `ai-voice-capture parse error: ${parsed.error} (status ${
+                parsed.status ?? 'unknown'
+              })`,
+            );
+          }
+          return parsed;
+        });
+    }
+    if (this.delegate) return this.delegate.parseVoiceNoteIntent(data);
+    throw new Error('parseVoiceNoteIntent: neither aiVoiceFunctionId nor delegate is configured');
   }
 
   continueVoiceClarification(
     data: ContinueVoiceClarificationRequest,
   ): Promise<VoiceIntentResponseDto> {
-    return this.delegate.continueVoiceClarification(data);
+    if (this.functions && this.aiVoiceFunctionId) {
+      return this.functions
+        .createExecution(
+          this.aiVoiceFunctionId,
+          JSON.stringify(data),
+          false,
+          '/clarify',
+          ExecutionMethod.POST,
+        )
+        .then((exec) => {
+          const parsed = JSON.parse(exec.responseBody) as VoiceIntentResponseDto & {
+            error?: string;
+            status?: number;
+          };
+          if (parsed.error) {
+            throw new Error(
+              `ai-voice-capture clarify error: ${parsed.error} (status ${
+                parsed.status ?? 'unknown'
+              })`,
+            );
+          }
+          return parsed;
+        });
+    }
+    if (this.delegate) return this.delegate.continueVoiceClarification(data);
+    throw new Error(
+      'continueVoiceClarification: neither aiVoiceFunctionId nor delegate is configured',
+    );
   }
 }

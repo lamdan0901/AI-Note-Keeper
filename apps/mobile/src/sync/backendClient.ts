@@ -22,19 +22,26 @@ export const getBackendClient = (): BackendClient | null => {
   const notesSyncFunctionId = process.env.EXPO_PUBLIC_APPWRITE_NOTES_SYNC_FUNCTION_ID;
   const remindersApiFunctionId = process.env.EXPO_PUBLIC_APPWRITE_REMINDERS_API_FUNCTION_ID;
   const subscriptionsApiFunctionId = process.env.EXPO_PUBLIC_APPWRITE_SUBSCRIPTIONS_API_FUNCTION_ID;
+  const aiVoiceFunctionId = process.env.EXPO_PUBLIC_APPWRITE_AI_VOICE_FUNCTION_ID;
+  const userDataMigrationFunctionId =
+    process.env.EXPO_PUBLIC_APPWRITE_USER_DATA_MIGRATION_FUNCTION_ID;
+  const fcmProviderId = process.env.EXPO_PUBLIC_APPWRITE_FCM_PROVIDER_ID;
 
   const convexDelegate = convexUrl ? new ConvexBackendClient(convexUrl) : null;
 
-  if (appwriteEndpoint && appwriteProjectId && convexDelegate) {
+  if (appwriteEndpoint && appwriteProjectId) {
     const awClient = createAppwriteClient(appwriteEndpoint, appwriteProjectId);
     _client = new AppwriteBackendClient(
       new Account(awClient),
-      convexDelegate,
+      convexDelegate ?? undefined,
       new Databases(awClient),
       new Functions(awClient),
       notesSyncFunctionId,
       remindersApiFunctionId,
       subscriptionsApiFunctionId,
+      aiVoiceFunctionId,
+      userDataMigrationFunctionId,
+      fcmProviderId,
     );
     return _client;
   }

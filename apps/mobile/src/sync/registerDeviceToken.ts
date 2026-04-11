@@ -4,7 +4,7 @@ import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import uuid from 'react-native-uuid';
 
-import { createConvexBackendClient } from '../../../../packages/shared/backend/convex';
+import { getBackendClient } from './backendClient';
 import { logSyncEvent } from '../reminders/logging';
 import { resolveCurrentUserId } from '../auth/session';
 
@@ -13,7 +13,6 @@ const PUSH_PERMISSION_DENIED_LOG_TS_KEY = 'PUSH_PERMISSION_DENIED_LOG_TS';
 const PUSH_PERMISSION_DENIED_LOG_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 type RegisterDeviceTokenOptions = {
-  convexUrl?: string;
   userId?: string;
   deviceId?: string;
 };
@@ -26,17 +25,6 @@ type RegisterDeviceTokenOptions = {
  * creates an OptionalMemberExpression AST node that the babel plugin
  * does NOT match, leaving the var undefined at runtime in APK builds.
  */
-const resolveConvexUrl = (override?: string): string | null => {
-  if (override) {
-    return override;
-  }
-  // Direct access – babel inlines this at build time
-  const envUrl = process.env.EXPO_PUBLIC_CONVEX_URL;
-  if (envUrl) {
-    return envUrl;
-  }
-  return null;
-};
 
 const resolveUserId = async (override?: string): Promise<string> => {
   if (override) {
@@ -99,19 +87,6 @@ export const registerDevicePushToken = async (
 
   console.log('[PushToken] ===== Registration START =====');
 
-  const convexUrl = resolveConvexUrl(options.convexUrl);
-  console.log('[PushToken] Resolved Convex URL:', convexUrl ?? 'NULL');
-  if (!convexUrl) {
-    console.warn(
-      '[PushToken] ABORT: No Convex URL. Env value:',
-      String(process.env.EXPO_PUBLIC_CONVEX_URL ?? 'undefined'),
-    );
-    logSyncEvent('warn', 'push_token_missing_convex_url', {
-      rawEnv: String(process.env.EXPO_PUBLIC_CONVEX_URL ?? 'undefined'),
-    });
-    return;
-  }
-
   const userId = await resolveUserId(options.userId);
   console.log('[PushToken] UserId:', userId);
 
@@ -171,10 +146,10 @@ export const registerDevicePushToken = async (
   console.log('[PushToken] DeviceId:', deviceId);
 
   try {
-    const client = createConvexBackendClient(convexUrl);
+    const client = getBackendClient();
     if (!client) {
-      console.warn('[PushToken] ABORT: Failed to create backend client');
-      logSyncEvent('warn', 'push_token_missing_convex_url', {});
+      console.warn('[PushToken] ABORT: No backend client available');
+      logSyncEvent('warn', 'push_token_no_backend_client', {});
       return;
     }
     console.log('[PushToken] Calling upsertDevicePushToken mutation...');
