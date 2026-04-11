@@ -1,6 +1,5 @@
 import { AppRegistry } from 'react-native';
-import { ConvexHttpClient } from 'convex/browser';
-import { api } from '../../../../convex/_generated/api';
+import { createConvexBackendClient } from '../../../../packages/shared/backend/convex';
 import { computeNextTrigger } from '../../../../packages/shared/utils/recurrence';
 import { getDb } from '../db/bootstrap';
 import { getNoteById, upsertNote } from '../db/notesRepo';
@@ -62,7 +61,7 @@ const getRepeatRule = (note: Note): RepeatRule | null => {
 const getConvexClient = () => {
   const url = process.env.EXPO_PUBLIC_CONVEX_URL;
   if (!url) return null;
-  return new ConvexHttpClient(url);
+  return createConvexBackendClient(url);
 };
 
 interface DoneTaskData {
@@ -119,9 +118,7 @@ const reminderDoneTask = async (data: DoneTaskData) => {
     const client = getConvexClient();
     if (client) {
       try {
-        await client.mutation(api.functions.reminders.ackReminder, {
-          id: noteId, // Cast ID
-          ackType: 'done',
+        await client.ackReminder(noteId, 'done', {
           optimisticNextTrigger: nextTrigger ?? undefined,
         });
         logSyncEvent('info', 'headless_done_sync_success', { noteId });

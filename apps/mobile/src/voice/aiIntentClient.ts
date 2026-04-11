@@ -1,22 +1,28 @@
-import { ConvexHttpClient } from 'convex/browser';
-import { api } from '../../../../convex/_generated/api';
+import { createConvexBackendClient } from '../../../../packages/shared/backend/convex';
+import type {
+  ParseVoiceNoteIntentRequest,
+  ContinueVoiceClarificationRequest,
+  VoiceIntentResponseDto,
+} from '../../../../packages/shared/types/voice';
 import {
   defaultRetryPolicy,
   getRetryDelayMs,
   shouldRetry,
   type RetryPolicy,
 } from '../sync/retryPolicy';
-import type {
-  ContinueVoiceClarificationRequest,
-  ParseVoiceNoteIntentRequest,
-  VoiceIntentClient,
-  VoiceIntentResponseDto,
-} from './types';
+import type { VoiceIntentClient } from './types';
+
+type VoiceBackend = {
+  parseVoiceNoteIntent(data: ParseVoiceNoteIntentRequest): Promise<VoiceIntentResponseDto>;
+  continueVoiceClarification(
+    data: ContinueVoiceClarificationRequest,
+  ): Promise<VoiceIntentResponseDto>;
+};
 
 type VoiceIntentClientOptions = {
   timeoutMs?: number;
   retryPolicy?: RetryPolicy;
-  client?: Pick<ConvexHttpClient, 'action'>;
+  backend?: VoiceBackend;
 };
 
 const DEFAULT_TIMEOUT_MS = 45_000;
@@ -84,23 +90,23 @@ async function runWithRetry<T>(
   throw new Error('Voice intent request exhausted retries');
 }
 
-function createDefaultClient(): ConvexHttpClient {
-  const convexUrl = process.env.EXPO_PUBLIC_CONVEX_URL;
-  if (!convexUrl) {
+function createDefaultBackend(): VoiceBackend {
+  const client = createConvexBackendClient();
+  if (!client) {
     throw new Error('Missing EXPO_PUBLIC_CONVEX_URL');
   }
-  return new ConvexHttpClient(convexUrl);
+  return client;
 }
 
 export class ConvexVoiceIntentClient implements VoiceIntentClient {
-  private readonly client: Pick<ConvexHttpClient, 'action'>;
+  private readonly backend: VoiceBackend;
 
   private readonly timeoutMs: number;
 
   private readonly retryPolicy: RetryPolicy;
 
   constructor(options?: VoiceIntentClientOptions) {
-    this.client = options?.client ?? createDefaultClient();
+    this.backend = options?.backend ?? createDefaultBackend();
     this.timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.retryPolicy = options?.retryPolicy ?? defaultRetryPolicy;
   }
@@ -109,11 +115,7 @@ export class ConvexVoiceIntentClient implements VoiceIntentClient {
     request: ParseVoiceNoteIntentRequest,
   ): Promise<VoiceIntentResponseDto> {
     return await runWithRetry(
-      async () =>
-        await this.client.action(api.functions.aiNoteCapture.parseVoiceNoteIntent, {
-          ...request,
-          locale: request.locale,
-        }),
+      async () => await this.backend.parseVoiceNoteIntent(request),
       this.retryPolicy,
       this.timeoutMs,
     );
@@ -123,8 +125,7 @@ export class ConvexVoiceIntentClient implements VoiceIntentClient {
     request: ContinueVoiceClarificationRequest,
   ): Promise<VoiceIntentResponseDto> {
     return await runWithRetry(
-      async () =>
-        await this.client.action(api.functions.aiNoteCapture.continueVoiceClarification, request),
+      async () => await this.backend.continueVoiceClarification(request),
       this.retryPolicy,
       this.timeoutMs,
     );

@@ -1,10 +1,11 @@
-import { useMutation, useQuery } from 'convex/react';
+import { useMutation } from 'convex/react';
 import { api } from '../../../../convex/_generated/api';
 import type {
   Subscription,
   SubscriptionCreate,
   SubscriptionUpdate,
 } from '../../../../packages/shared/types/subscription';
+import { useBackendHooks } from '../../../../packages/shared/backend/context';
 import { useUserId } from '../auth/useUserId';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const subscriptionsApi = api.functions.subscriptions as any;
@@ -38,9 +39,7 @@ export function mapDocToMobileSubscription(doc: any): Subscription {
 
 export function useSubscriptions(): Subscription[] | undefined {
   const userId = useUserId();
-  const raw = useQuery(api.functions.subscriptions.listSubscriptions, { userId });
-  if (raw === undefined) return undefined;
-  return raw.map(mapDocToMobileSubscription);
+  return useBackendHooks().useSubscriptions(userId);
 }
 
 export function useCreateSubscription() {
@@ -57,9 +56,7 @@ export function useDeleteSubscription() {
 
 export function useDeletedSubscriptions(enabled = true): Subscription[] | undefined {
   const userId = useUserId();
-  const raw = useQuery(subscriptionsApi.listDeletedSubscriptions, enabled ? { userId } : 'skip');
-  if (raw === undefined) return undefined;
-  return raw.map(mapDocToMobileSubscription);
+  return useBackendHooks().useDeletedSubscriptions(userId, enabled);
 }
 
 export function useRestoreSubscription() {

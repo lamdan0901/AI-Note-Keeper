@@ -12,7 +12,6 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { ConvexHttpClient } from 'convex/browser';
 import { getDb } from '../db/bootstrap';
 import {
   listDeletedNotes,
@@ -22,10 +21,10 @@ import {
 } from '../db/notesRepo';
 import { restoreNoteOffline } from '../notes/editor';
 import { syncNotes } from '../sync/noteSync';
-import { type Theme, useTheme } from '../theme';
-import { SyncProvider } from '../sync/syncManager';
-import { api } from '../../../../convex/_generated/api';
 import { NoteCard } from '../components/NoteCard';
+import { useTheme, type Theme } from '../theme';
+import { SyncProvider } from '../sync/syncManager';
+import { useBackendClient } from '../../../../packages/shared/backend/context';
 import { useDebouncedValue } from '../../../../packages/shared/hooks/useDebouncedValue';
 import type { Subscription } from '../../../../packages/shared/types/subscription';
 import {
@@ -46,12 +45,6 @@ function getDaysRemaining(deletedAt: number | undefined): number {
   if (!deletedAt) return 14;
   const elapsed = Date.now() - deletedAt;
   return Math.max(0, Math.ceil((FOURTEEN_DAYS_MS - elapsed) / (24 * 60 * 60 * 1000)));
-}
-
-function getConvexClient(): ConvexHttpClient | null {
-  const url = process.env.EXPO_PUBLIC_CONVEX_URL;
-  if (!url) return null;
-  return new ConvexHttpClient(url);
 }
 
 type TrashScreenProps = {
@@ -312,6 +305,7 @@ const TrashScreenContent: React.FC<TrashScreenProps> = ({
   subscriptionsEnabled = false,
 }) => {
   const { theme } = useTheme();
+  const backendClient = useBackendClient();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const [notes, setNotes] = useState<Note[]>([]);
   const [loadingNotes, setLoadingNotes] = useState(true);
@@ -385,13 +379,7 @@ const TrashScreenContent: React.FC<TrashScreenProps> = ({
 
       void (async () => {
         try {
-          const client = getConvexClient();
-          if (client) {
-            await client.mutation(api.functions.notes.permanentlyDeleteNote, {
-              userId: userId ?? '',
-              noteId: note.id,
-            });
-          }
+          await backendClient.permanentlyDeleteNote(userId ?? '', note.id);
           const db = await getDb();
           await hardDeleteNote(db, note.id);
         } catch (e) {
@@ -401,7 +389,7 @@ const TrashScreenContent: React.FC<TrashScreenProps> = ({
         }
       })();
     },
-    [loadTrash, userId],
+    [backendClient, loadTrash, userId],
   );
 
   const handleEmptyNotesTrash = useCallback(() => {
@@ -419,10 +407,7 @@ const TrashScreenContent: React.FC<TrashScreenProps> = ({
 
             void (async () => {
               try {
-                const client = getConvexClient();
-                if (client) {
-                  await client.mutation(api.functions.notes.emptyTrash, { userId: userId ?? '' });
-                }
+                await backendClient.emptyTrash(userId ?? '');
                 const db = await getDb();
                 await hardDeleteAllInactive(db, userId);
               } catch (e) {

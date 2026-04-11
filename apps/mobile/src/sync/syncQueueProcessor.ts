@@ -8,9 +8,9 @@
  * - Transaction safety
  */
 
-import { ConvexHttpClient } from 'convex/browser';
 import { SQLiteDatabase } from 'expo-sqlite/next';
-import { api } from '../../../../convex/_generated/api';
+import type { BackendClient } from '../../../../packages/shared/backend/types';
+import { createConvexBackendClient } from '../../../../packages/shared/backend/convex';
 import { Note } from '../db/notesRepo';
 import { nowMs } from '../../../../packages/shared/utils/time';
 import {
@@ -174,7 +174,7 @@ const mapToApiPayload = (item: OutboxItem) => {
  * Process a single batch of outbox items
  */
 const processBatch = async (
-  client: ConvexHttpClient,
+  client: BackendClient,
   db: SQLiteDatabase,
   items: OutboxItem[],
   userId: string,
@@ -201,14 +201,7 @@ const processBatch = async (
 
   try {
     // Send batch to server
-    const result = await withTimeout(
-      client.mutation(api.functions.notes.syncNotes, {
-        userId,
-        changes,
-        lastSyncAt: 0,
-      }),
-      timeoutMs,
-    );
+    const result = await withTimeout(client.syncNotes(userId, changes, 0), timeoutMs);
 
     // Process results - assume all succeeded if we got here
     // Map server responses back to our items
@@ -304,7 +297,11 @@ export const processQueue = async (
     log('warn', 'Missing Convex URL, skipping queue push');
     return { total: 0, succeeded: 0, failed: 0, results: [] };
   }
-  const client = new ConvexHttpClient(convexUrl);
+  const client = createConvexBackendClient(convexUrl);
+  if (!client) {
+    log('warn', 'Failed to create backend client, skipping queue push');
+    return { total: 0, succeeded: 0, failed: 0, results: [] };
+  }
 
   // Get all pending operations ready for retry
   const pendingItems = (await getPendingOperations(db)) as OutboxItem[];

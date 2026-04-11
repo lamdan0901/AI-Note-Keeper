@@ -1,5 +1,6 @@
-import { useMutation, useQuery } from 'convex/react';
-import { api } from '../../../../convex/_generated/api';
+import { useCallback } from 'react';
+import { useBackendClient, useBackendHooks } from '../../../../packages/shared/backend/context';
+import type { SyncNoteChange, SyncNotesResult } from '../../../../packages/shared/backend/types';
 import type { NoteEditorDraft, WebNote } from './notesTypes';
 import { buildReminderSyncFields } from './reminderUtils';
 import { useWebAuth } from '../auth/AuthContext';
@@ -63,26 +64,39 @@ function mapDocToWebNote(doc: any): WebNote {
  */
 export function useNotes(): WebNote[] | undefined {
   const { userId } = useWebAuth();
-  const raw = useQuery(api.functions.notes.getNotes, { userId });
+  const hooks = useBackendHooks();
+  const raw = hooks.useAllNotes(userId);
   if (raw === undefined) return undefined;
   return raw.map(mapDocToWebNote);
 }
 
 /**
- * Returns the raw `syncNotes` mutation function from Convex.
+ * Returns a stable callback that calls `syncNotes` on the backend client.
  * Use the helper wrappers below (`createNote`, `updateNote`, `deleteNote`)
  * rather than calling this directly.
  */
 export function useSyncNotes() {
-  return useMutation(api.functions.notes.syncNotes);
+  const client = useBackendClient();
+  return useCallback(
+    (args: {
+      userId: string;
+      changes: SyncNoteChange[];
+      lastSyncAt: number;
+    }): Promise<SyncNotesResult> => client.syncNotes(args.userId, args.changes, args.lastSyncAt),
+    [client],
+  );
 }
 
 // ---------------------------------------------------------------------------
 // Mutation helpers
 // ---------------------------------------------------------------------------
 
-type SyncFn = ReturnType<typeof useSyncNotes>;
-type SyncChange = Parameters<SyncFn>[0]['changes'][number];
+type SyncFn = (args: {
+  userId: string;
+  changes: SyncNoteChange[];
+  lastSyncAt: number;
+}) => Promise<SyncNotesResult>;
+type SyncChange = SyncNoteChange;
 
 function toLegacySyncChange(change: SyncChange): SyncChange {
   const legacyCompatible = { ...change } as Partial<SyncChange>;
@@ -206,17 +220,24 @@ export async function deleteNote(sync: SyncFn, userId: string, id: string) {
 
 export function useAllNotes(): WebNote[] | undefined {
   const { userId } = useWebAuth();
-  const raw = useQuery(api.functions.notes.getNotes, { userId });
+  const hooks = useBackendHooks();
+  const raw = hooks.useAllNotes(userId);
   if (raw === undefined) return undefined;
   return raw.map(mapDocToWebNote);
 }
 
 export function usePermanentlyDeleteNote() {
-  return useMutation(api.functions.notes.permanentlyDeleteNote);
+  const client = useBackendClient();
+  return useCallback(
+    (args: { userId: string; noteId: string }) =>
+      client.permanentlyDeleteNote(args.userId, args.noteId),
+    [client],
+  );
 }
 
 export function useEmptyTrash() {
-  return useMutation(api.functions.notes.emptyTrash);
+  const client = useBackendClient();
+  return useCallback((args: { userId: string }) => client.emptyTrash(args.userId), [client]);
 }
 
 /**

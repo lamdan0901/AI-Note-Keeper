@@ -1,5 +1,5 @@
-import { ConvexHttpClient } from 'convex/browser';
-import { api } from '../../../../convex/_generated/api';
+import type { BackendClient } from '../../../../packages/shared/backend/types';
+import { createConvexBackendClient } from '../../../../packages/shared/backend/convex';
 import type { Reminder } from '../../../../packages/shared/types/reminder';
 import { logSyncEvent } from '../reminders/logging';
 
@@ -9,7 +9,7 @@ export type FetchReminderResult =
   | { status: 'error'; reminder: null; error: unknown };
 
 type FetchReminderOptions = {
-  client?: ConvexHttpClient;
+  client?: BackendClient;
   convexUrl?: string;
 };
 
@@ -23,12 +23,16 @@ const resolveConvexUrl = (override?: string): string | null => {
   return null;
 };
 
-const createClient = (convexUrl?: string): ConvexHttpClient => {
+const createClient = (convexUrl?: string): BackendClient => {
   const resolved = resolveConvexUrl(convexUrl);
   if (!resolved) {
     throw new Error('Missing Convex URL for reminder fetch.');
   }
-  return new ConvexHttpClient(resolved);
+  const client = createConvexBackendClient(resolved);
+  if (!client) {
+    throw new Error('Failed to create backend client for reminder fetch.');
+  }
+  return client;
 };
 
 export const fetchReminder = async (
@@ -37,9 +41,7 @@ export const fetchReminder = async (
 ): Promise<FetchReminderResult> => {
   try {
     const client = options.client ?? createClient(options.convexUrl);
-    const reminder = await client.query(api.functions.reminders.getReminder, {
-      reminderId,
-    });
+    const reminder = await client.getReminder(reminderId);
 
     if (!reminder) {
       logSyncEvent('info', 'reminder_fetch_not_found', { reminderId });

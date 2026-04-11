@@ -1,11 +1,10 @@
-import { ConvexHttpClient } from 'convex/browser';
 import * as Notifications from 'expo-notifications';
 import { getMessaging, getToken } from '@react-native-firebase/messaging';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import uuid from 'react-native-uuid';
 
-import { api } from '../../../../convex/_generated/api';
+import { createConvexBackendClient } from '../../../../packages/shared/backend/convex';
 import { logSyncEvent } from '../reminders/logging';
 import { resolveCurrentUserId } from '../auth/session';
 
@@ -172,9 +171,14 @@ export const registerDevicePushToken = async (
   console.log('[PushToken] DeviceId:', deviceId);
 
   try {
-    const client = new ConvexHttpClient(convexUrl);
+    const client = createConvexBackendClient(convexUrl);
+    if (!client) {
+      console.warn('[PushToken] ABORT: Failed to create backend client');
+      logSyncEvent('warn', 'push_token_missing_convex_url', {});
+      return;
+    }
     console.log('[PushToken] Calling upsertDevicePushToken mutation...');
-    await client.mutation(api.functions.deviceTokens.upsertDevicePushToken, {
+    await client.upsertDevicePushToken({
       id: deviceId,
       userId,
       deviceId,

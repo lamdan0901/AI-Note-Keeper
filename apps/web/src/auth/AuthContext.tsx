@@ -7,9 +7,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { ConvexHttpClient } from 'convex/browser';
-
-import { api } from '../../../../convex/_generated/api';
+import { useBackendClient } from '../../../../packages/shared/backend/context';
 import {
   MergeStrategy,
   MergeSummary,
@@ -22,11 +20,6 @@ import {
   saveWebAuthSession,
   WebAuthSession,
 } from './session';
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const authApi = (api.functions as any).auth;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const migrationApi = (api.functions as any).userDataMigration;
 
 type TransitionState = 'idle' | 'preflight' | 'awaiting-strategy' | 'applying' | 'logout-snapshot';
 
@@ -61,15 +54,8 @@ type WebAuthContextValue = {
 
 const WebAuthContext = createContext<WebAuthContextValue | undefined>(undefined);
 
-const getClient = (): ConvexHttpClient => {
-  const url = import.meta.env.VITE_CONVEX_URL as string | undefined;
-  if (!url) {
-    throw new Error('VITE_CONVEX_URL is required');
-  }
-  return new ConvexHttpClient(url);
-};
-
 export const WebAuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const backendClient = useBackendClient();
   const [localUserId] = useState(() => getOrCreateWebLocalUserId());
   const [session, setSession] = useState<WebAuthSession | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -100,13 +86,13 @@ export const WebAuthProvider: React.FC<{ children: React.ReactNode }> = ({ child
         };
 
         if (strategy !== 'cloud') {
-          await getClient().mutation(migrationApi.applyUserDataMerge, {
-            fromUserId: merge.fromUserId,
-            toUserId: merge.targetUserId,
-            username: merge.username,
-            password: merge.password,
+          await backendClient.applyUserDataMerge(
+            merge.fromUserId,
+            merge.targetUserId,
+            merge.username,
+            merge.password,
             strategy,
-          });
+          );
         }
 
         finalizeSession({
@@ -122,7 +108,7 @@ export const WebAuthProvider: React.FC<{ children: React.ReactNode }> = ({ child
         };
       }
     },
-    [finalizeSession],
+    [backendClient, finalizeSession],
   );
 
   const handleAuthSuccess = useCallback(
@@ -145,12 +131,12 @@ export const WebAuthProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
 
       setTransitionState('preflight');
-      const summary = (await getClient().mutation(migrationApi.preflightUserDataMerge, {
-        fromUserId: localUserId,
-        toUserId: accountUserId,
+      const summary = (await backendClient.preflightUserDataMerge(
+        localUserId,
+        accountUserId,
         username,
         password,
-      })) as MergeSummary;
+      )) as MergeSummary;
 
       const resolution = resolveMergeResolution(summary);
       if (resolution === 'prompt') {
@@ -178,13 +164,13 @@ export const WebAuthProvider: React.FC<{ children: React.ReactNode }> = ({ child
         resolution,
       );
     },
-    [applyResolvedMerge, finalizeSession, localUserId],
+    [applyResolvedMerge, backendClient, finalizeSession, localUserId],
   );
 
   const login = useCallback(
     async (username: string, password: string): Promise<AuthResult> => {
       try {
-        const result = await getClient().mutation(authApi.login, { username, password });
+        const result = await backendClient.login(username, password);
         return await handleAuthSuccess({
           accountUserId: result.userId,
           accountUsername: result.username,
@@ -199,13 +185,13 @@ export const WebAuthProvider: React.FC<{ children: React.ReactNode }> = ({ child
         };
       }
     },
-    [handleAuthSuccess],
+    [backendClient, handleAuthSuccess],
   );
 
   const register = useCallback(
     async (username: string, password: string): Promise<AuthResult> => {
       try {
-        const result = await getClient().mutation(authApi.register, { username, password });
+        const result = await backendClient.register(username, password);
         return await handleAuthSuccess({
           accountUserId: result.userId,
           accountUsername: result.username,
@@ -220,7 +206,7 @@ export const WebAuthProvider: React.FC<{ children: React.ReactNode }> = ({ child
         };
       }
     },
-    [handleAuthSuccess],
+    [backendClient, handleAuthSuccess],
   );
 
   const resolvePendingMerge = useCallback(
@@ -243,20 +229,20 @@ export const WebAuthProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const currentSession = session;
     const currentSecret = currentSecretRef.current;
     if (currentSession && currentSecret?.password) {
-      await getClient().mutation(migrationApi.applyUserDataMerge, {
-        fromUserId: currentSession.userId,
-        toUserId: localUserId,
-        username: currentSecret.username,
-        password: currentSecret.password,
-        strategy: 'local',
-      });
+      await backendClient.applyUserDataMerge(
+        currentSession.userId,
+        localUserId,
+        currentSecret.username,
+        currentSecret.password,
+        'local',
+      );
     }
 
     clearWebAuthSession();
     setSession(null);
     setPendingMerge(null);
     setTransitionState('idle');
-  }, [localUserId, session]);
+  }, [backendClient, localUserId, session]);
 
   const value = useMemo<WebAuthContextValue>(
     () => ({

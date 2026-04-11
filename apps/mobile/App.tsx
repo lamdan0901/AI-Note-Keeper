@@ -33,10 +33,16 @@ SplashScreen.preventAutoHideAsync();
 import { Linking } from 'react-native';
 import { rescheduleAllActiveReminders } from './src/reminders/scheduler';
 import { getDb } from './src/db/bootstrap';
+import { BackendContext } from '../../packages/shared/backend/context';
+import { ConvexBackendClient, convexBackendHooks } from '../../packages/shared/backend/convex';
 
 const convexUrl = process.env.EXPO_PUBLIC_CONVEX_URL;
 const convexClient = convexUrl ? new ConvexReactClient(convexUrl) : null;
 const hasConvexBackend = Boolean(convexUrl);
+
+const backendClient: ConvexBackendClient | null = convexUrl
+  ? new ConvexBackendClient(convexUrl)
+  : null;
 
 export default function App(): JSX.Element | null {
   const [isReady, setIsReady] = useState(false);
@@ -166,18 +172,18 @@ export default function App(): JSX.Element | null {
     />
   );
 
-  if (!convexClient) {
-    return (
-      <ThemeProvider>
-        <AuthProvider>{content}</AuthProvider>
-      </ThemeProvider>
-    );
+  if (!convexClient || !backendClient) {
+    // No backend configured — render without AuthProvider (which requires BackendContext).
+    // Default AuthContext values (isLoading: false, isAuthenticated: false) apply.
+    return <ThemeProvider>{content}</ThemeProvider>;
   }
 
   return (
     <ThemeProvider>
       <ConvexProvider client={convexClient}>
-        <AuthProvider>{content}</AuthProvider>
+        <BackendContext.Provider value={{ client: backendClient, hooks: convexBackendHooks }}>
+          <AuthProvider>{content}</AuthProvider>
+        </BackendContext.Provider>
       </ConvexProvider>
     </ThemeProvider>
   );

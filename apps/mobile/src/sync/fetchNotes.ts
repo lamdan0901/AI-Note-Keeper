@@ -1,7 +1,5 @@
-import { ConvexHttpClient } from 'convex/browser';
-import { api } from '../../../../convex/_generated/api';
 import { type Note } from '../db/notesRepo';
-import { coerceRepeatRule } from '../../../../packages/shared/utils/repeatCodec';
+import { createConvexBackendClient } from '../../../../packages/shared/backend/convex';
 
 export type FetchNotesResult =
   | { status: 'ok'; notes: Note[]; syncedAt: number }
@@ -27,71 +25,22 @@ export const fetchNotes = async (userId: string): Promise<FetchNotesResult> => {
     const convexUrl = process.env.EXPO_PUBLIC_CONVEX_URL;
     if (!convexUrl) throw new Error('Missing Convex URL');
 
-    const client = new ConvexHttpClient(convexUrl);
+    const client = createConvexBackendClient(convexUrl);
+    if (!client) throw new Error('Failed to create backend client');
 
-    // For MVP, we are just fetching all notes. In real world we would delta sync.
-    // However, the `syncNotes` mutation defined earlier returns all notes,
-    // but here we might want just a query if we were doing pure pull.
-    // Instead, let's use the query.
+    const notes = await withTimeout(client.getNotes(userId), 15000);
 
-    const notes = (await withTimeout(
-      client.query(api.functions.notes.getNotes, { userId }),
-      15000,
-    )) as Note[];
-
-    // Map Convex result to local Note type if needed (mostly same)
-    const mappedNotes: Note[] = notes.flatMap((n) => {
-      const payloadUserId = typeof n.userId === 'string' ? n.userId : undefined;
-      if (payloadUserId && payloadUserId !== userId) {
+    // Filter out notes with a mismatched userId (server safety check)
+    const mappedNotes: Note[] = notes.flatMap((note) => {
+      if (note.userId && note.userId !== userId) {
         console.warn('[Sync] Ignoring note with mismatched userId', {
-          noteId: n.id,
+          noteId: note.id,
           expectedUserId: userId,
-          payloadUserId,
+          payloadUserId: note.userId,
         });
         return [];
       }
-
-      const normalizedUserId = payloadUserId ?? userId;
-
-      // Derive canonical repeat: prefer stored `repeat`, fall back to legacy fields
-      const repeat = coerceRepeatRule({
-        repeat: n.repeat,
-        repeatRule: n.repeatRule,
-        repeatConfig: n.repeatConfig,
-        triggerAt: n.triggerAt,
-      });
-
-      return {
-        id: n.id,
-        userId: normalizedUserId,
-        title: n.title ?? null,
-        content: n.content ?? null,
-        contentType:
-          ((n as Record<string, unknown>).contentType as Note['contentType']) || undefined,
-        color: n.color ?? null,
-        active: n.active,
-        done: n.done ?? false,
-
-        isPinned: n.isPinned ?? false,
-        triggerAt: n.triggerAt,
-        repeatRule: n.repeatRule,
-        repeatConfig: n.repeatConfig,
-        // Always populate canonical repeat (derived if not stored)
-        repeat,
-        snoozedUntil: n.snoozedUntil,
-        scheduleStatus: n.scheduleStatus,
-        timezone: n.timezone,
-        baseAtLocal: n.baseAtLocal ?? null,
-        startAt: n.startAt ?? null,
-        nextTriggerAt: n.nextTriggerAt ?? null,
-        lastFiredAt: n.lastFiredAt ?? null,
-        lastAcknowledgedAt: n.lastAcknowledgedAt ?? null,
-        version: n.version,
-        deletedAt: n.deletedAt ?? undefined,
-
-        updatedAt: n.updatedAt,
-        createdAt: n.createdAt,
-      };
+      return [{ ...note, userId: note.userId ?? userId }];
     });
 
     return { status: 'ok', notes: mappedNotes, syncedAt: Date.now() };

@@ -1,10 +1,11 @@
-import { useMutation, useQuery } from 'convex/react';
+import { useMutation } from 'convex/react';
 import { api } from '../../../../convex/_generated/api';
 import type {
   Subscription,
   SubscriptionCreate,
   SubscriptionUpdate,
 } from '../../../../packages/shared/types/subscription';
+import { useBackendHooks } from '../../../../packages/shared/backend/context';
 import { useWebAuth } from '../auth/AuthContext';
 
 // ---------------------------------------------------------------------------
@@ -51,16 +52,12 @@ export function mapDocToWebSubscription(doc: any): Subscription {
  */
 export function useSubscriptions(): Subscription[] | undefined {
   const { userId } = useWebAuth();
-  const raw = useQuery(api.functions.subscriptions.listSubscriptions, { userId });
-  if (raw === undefined) return undefined;
-  return raw.map(mapDocToWebSubscription);
+  return useBackendHooks().useSubscriptions(userId);
 }
 
 export function useDeletedSubscriptions(): Subscription[] | undefined {
   const { userId } = useWebAuth();
-  const raw = useQuery(api.functions.subscriptions.listDeletedSubscriptions, { userId });
-  if (raw === undefined) return undefined;
-  return raw.map(mapDocToWebSubscription);
+  return useBackendHooks().useDeletedSubscriptions(userId);
 }
 
 export function useCreateSubscription() {
