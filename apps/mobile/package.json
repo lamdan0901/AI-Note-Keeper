@@ -17,6 +17,7 @@
     "@react-native-community/netinfo": "11.1.0",
     "@react-native-firebase/app": "^21.6.1",
     "@react-native-firebase/messaging": "^21.6.1",
+    "appwrite": "^16.0.2",
     "convex": "^1.33.1",
     "expo": "~50.0.0",
     "expo-navigation-bar": "~2.8.1",

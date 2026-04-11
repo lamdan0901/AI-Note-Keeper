@@ -12,6 +12,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "appwrite": "^16.0.2",
     "convex": "^1.33.1",
     "lucide-react": "^0.575.0",
     "react": "^18.2.0",
