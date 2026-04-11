@@ -189,6 +189,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const init = async () => {
       try {
         await runFreshInstallResetIfNeeded();
+        // DEVICE_UNIQUE_ID is the stable install identity used for Convex data and push tokens.
+        // It must never be overwritten with a transient Appwrite session ID.
         const deviceId = await getOrCreateDeviceId();
         const session = await loadAuthSession();
 
@@ -484,6 +486,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     await clearAuthSession();
     currentSecretRef.current = null;
+
+    // Destroy the Appwrite session. The stable device UUID remains the identity.
+    // TODO(Phase-3): replace react-native-appwrite (proper RN session persistence)
+    await backendClient.logout();
+
     await backfillMissingLocalUserId(deviceId);
 
     setState({

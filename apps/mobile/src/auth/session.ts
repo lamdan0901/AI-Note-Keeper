@@ -29,6 +29,10 @@ export const getOrCreateDeviceId = async (): Promise<string> => {
   }
 };
 
+export const storeDeviceId = async (id: string): Promise<void> => {
+  await AsyncStorage.setItem(DEVICE_ID_KEY, id);
+};
+
 export const hasStoredDeviceId = async (): Promise<boolean> => {
   const existing = await AsyncStorage.getItem(DEVICE_ID_KEY);
   return Boolean(existing && existing.trim().length > 0);

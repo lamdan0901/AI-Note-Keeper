@@ -238,6 +238,9 @@ export const WebAuthProvider: React.FC<{ children: React.ReactNode }> = ({ child
       );
     }
 
+    // Destroy the Appwrite session. localUserId (stable localStorage UUID) is unchanged.
+    await backendClient.logout();
+
     clearWebAuthSession();
     setSession(null);
     setPendingMerge(null);

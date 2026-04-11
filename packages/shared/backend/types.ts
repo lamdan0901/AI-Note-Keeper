@@ -68,6 +68,8 @@ export type DevicePushTokenData = {
 
 export interface BackendClient {
   // Auth
+  createAnonymousSession(): Promise<string>;
+  logout(): Promise<void>;
   validateSession(userId: string): Promise<UserRecord | null>;
   login(username: string, password: string): Promise<UserRecord>;
   register(username: string, password: string): Promise<UserRecord>;

@@ -112,6 +112,12 @@ export class ConvexBackendClient implements BackendClient {
 
   // Auth
 
+  async createAnonymousSession(): Promise<string> {
+    return '';
+  }
+
+  async logout(): Promise<void> {}
+
   async validateSession(userId: string): Promise<UserRecord | null> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const authApi = (api.functions as any).auth;

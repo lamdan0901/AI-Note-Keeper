@@ -35,14 +35,31 @@ import { rescheduleAllActiveReminders } from './src/reminders/scheduler';
 import { getDb } from './src/db/bootstrap';
 import { BackendContext } from '../../packages/shared/backend/context';
 import { ConvexBackendClient, convexBackendHooks } from '../../packages/shared/backend/convex';
+import { AppwriteBackendClient } from '../../packages/shared/backend/appwrite';
+import { createAppwriteClient } from '../../packages/shared/appwrite/client';
+import { Account } from 'appwrite';
+
+// NOTE(Phase-3): The standard `appwrite` SDK persists sessions via window.localStorage,
+// which is unavailable in React Native. This means validateSession() will fail after an
+// app restart and users must re-login. Fix: replace this package with `react-native-appwrite`
+// which manages session persistence via AsyncStorage natively.
 
 const convexUrl = process.env.EXPO_PUBLIC_CONVEX_URL;
 const convexClient = convexUrl ? new ConvexReactClient(convexUrl) : null;
 const hasConvexBackend = Boolean(convexUrl);
 
-const backendClient: ConvexBackendClient | null = convexUrl
-  ? new ConvexBackendClient(convexUrl)
-  : null;
+const convexDelegate = convexUrl ? new ConvexBackendClient(convexUrl) : null;
+
+const appwriteEndpoint = process.env.EXPO_PUBLIC_APPWRITE_ENDPOINT;
+const appwriteProjectId = process.env.EXPO_PUBLIC_APPWRITE_PROJECT_ID;
+
+const backendClient: AppwriteBackendClient | null =
+  appwriteEndpoint && appwriteProjectId && convexDelegate
+    ? new AppwriteBackendClient(
+        new Account(createAppwriteClient(appwriteEndpoint, appwriteProjectId)),
+        convexDelegate,
+      )
+    : null;
 
 export default function App(): JSX.Element | null {
   const [isReady, setIsReady] = useState(false);
