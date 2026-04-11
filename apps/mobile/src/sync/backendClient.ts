@@ -21,6 +21,7 @@ export const getBackendClient = (): BackendClient | null => {
   const appwriteProjectId = process.env.EXPO_PUBLIC_APPWRITE_PROJECT_ID;
   const notesSyncFunctionId = process.env.EXPO_PUBLIC_APPWRITE_NOTES_SYNC_FUNCTION_ID;
   const remindersApiFunctionId = process.env.EXPO_PUBLIC_APPWRITE_REMINDERS_API_FUNCTION_ID;
+  const subscriptionsApiFunctionId = process.env.EXPO_PUBLIC_APPWRITE_SUBSCRIPTIONS_API_FUNCTION_ID;
 
   const convexDelegate = convexUrl ? new ConvexBackendClient(convexUrl) : null;
 
@@ -33,6 +34,7 @@ export const getBackendClient = (): BackendClient | null => {
       new Functions(awClient),
       notesSyncFunctionId,
       remindersApiFunctionId,
+      subscriptionsApiFunctionId,
     );
     return _client;
   }

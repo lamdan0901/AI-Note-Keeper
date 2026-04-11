@@ -19,6 +19,9 @@ const notesSyncFunctionId = import.meta.env.VITE_APPWRITE_NOTES_SYNC_FUNCTION_ID
 const remindersApiFunctionId = import.meta.env.VITE_APPWRITE_REMINDERS_API_FUNCTION_ID as
   | string
   | undefined;
+const subscriptionsApiFunctionId = import.meta.env.VITE_APPWRITE_SUBSCRIPTIONS_API_FUNCTION_ID as
+  | string
+  | undefined;
 
 if (!convexUrl) {
   throw new Error('VITE_CONVEX_URL is not configured. Set it in your .env file.');
@@ -38,6 +41,7 @@ const backendClient: AppwriteBackendClient | ConvexBackendClient =
           new Functions(awClient),
           notesSyncFunctionId,
           remindersApiFunctionId,
+          subscriptionsApiFunctionId,
         );
       })()
     : convexDelegate;

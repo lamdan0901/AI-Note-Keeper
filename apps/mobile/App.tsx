@@ -54,6 +54,7 @@ const appwriteEndpoint = process.env.EXPO_PUBLIC_APPWRITE_ENDPOINT;
 const appwriteProjectId = process.env.EXPO_PUBLIC_APPWRITE_PROJECT_ID;
 const notesSyncFunctionId = process.env.EXPO_PUBLIC_APPWRITE_NOTES_SYNC_FUNCTION_ID;
 const remindersApiFunctionId = process.env.EXPO_PUBLIC_APPWRITE_REMINDERS_API_FUNCTION_ID;
+const subscriptionsApiFunctionId = process.env.EXPO_PUBLIC_APPWRITE_SUBSCRIPTIONS_API_FUNCTION_ID;
 
 const backendClient: AppwriteBackendClient | null =
   appwriteEndpoint && appwriteProjectId && convexDelegate
@@ -64,6 +65,7 @@ const backendClient: AppwriteBackendClient | null =
         new Functions(createAppwriteClient(appwriteEndpoint, appwriteProjectId)),
         notesSyncFunctionId,
         remindersApiFunctionId,
+        subscriptionsApiFunctionId,
       )
     : null;
 

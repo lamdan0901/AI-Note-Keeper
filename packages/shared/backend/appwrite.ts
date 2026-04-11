@@ -88,6 +88,7 @@ export class AppwriteBackendClient implements BackendClient {
     private readonly functions?: Functions,
     private readonly notesSyncFunctionId?: string,
     private readonly remindersApiFunctionId?: string,
+    private readonly subscriptionsApiFunctionId?: string,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -215,6 +216,32 @@ export class AppwriteBackendClient implements BackendClient {
   // Reminders — routed through reminders-api Function when available
   // ---------------------------------------------------------------------------
 
+  private async callSubscriptionsApi<T>(
+    method: ExecutionMethod,
+    path: string,
+    body?: Record<string, unknown>,
+  ): Promise<T> {
+    if (!this.functions || !this.subscriptionsApiFunctionId) {
+      throw new Error('subscriptions-api function not configured');
+    }
+    const execution = await this.functions.createExecution(
+      this.subscriptionsApiFunctionId,
+      body ? JSON.stringify(body) : '',
+      false,
+      path,
+      method,
+    );
+    const parsed = JSON.parse(execution.responseBody) as T & { error?: string; status?: number };
+    if ((parsed as { error?: string }).error) {
+      throw new Error(
+        `subscriptions-api error: ${(parsed as { error: string }).error} (status ${
+          (parsed as { status?: number }).status ?? 'unknown'
+        })`,
+      );
+    }
+    return parsed;
+  }
+
   private async callRemindersApi<T>(
     method: ExecutionMethod,
     path: string,
@@ -316,34 +343,78 @@ export class AppwriteBackendClient implements BackendClient {
   }
 
   listSubscriptions(userId: string): Promise<Subscription[]> {
+    if (this.functions && this.subscriptionsApiFunctionId) {
+      return this.callSubscriptionsApi<Subscription[]>(
+        ExecutionMethod.GET,
+        `/subscriptions?userId=${encodeURIComponent(userId)}`,
+      );
+    }
     return this.delegate.listSubscriptions(userId);
   }
 
   listDeletedSubscriptions(userId: string): Promise<Subscription[]> {
+    if (this.functions && this.subscriptionsApiFunctionId) {
+      return this.callSubscriptionsApi<Subscription[]>(
+        ExecutionMethod.GET,
+        `/subscriptions/deleted?userId=${encodeURIComponent(userId)}`,
+      );
+    }
     return this.delegate.listDeletedSubscriptions(userId);
   }
 
   createSubscription(data: SubscriptionCreate): Promise<string> {
+    if (this.functions && this.subscriptionsApiFunctionId) {
+      return this.callSubscriptionsApi<{ id: string }>(
+        ExecutionMethod.POST,
+        '/subscriptions',
+        data as unknown as Record<string, unknown>,
+      ).then((r) => r.id);
+    }
     return this.delegate.createSubscription(data);
   }
 
   updateSubscription(id: string, patch: SubscriptionUpdate): Promise<void> {
+    if (this.functions && this.subscriptionsApiFunctionId) {
+      return this.callSubscriptionsApi<void>(
+        ExecutionMethod.PATCH,
+        `/subscriptions/${id}`,
+        patch as unknown as Record<string, unknown>,
+      );
+    }
     return this.delegate.updateSubscription(id, patch);
   }
 
   deleteSubscription(id: string): Promise<void> {
+    if (this.functions && this.subscriptionsApiFunctionId) {
+      return this.callSubscriptionsApi<void>(ExecutionMethod.DELETE, `/subscriptions/${id}`);
+    }
     return this.delegate.deleteSubscription(id);
   }
 
   restoreSubscription(id: string): Promise<void> {
+    if (this.functions && this.subscriptionsApiFunctionId) {
+      return this.callSubscriptionsApi<void>(ExecutionMethod.POST, `/subscriptions/${id}/restore`);
+    }
     return this.delegate.restoreSubscription(id);
   }
 
   permanentlyDeleteSubscription(id: string): Promise<void> {
+    if (this.functions && this.subscriptionsApiFunctionId) {
+      return this.callSubscriptionsApi<void>(
+        ExecutionMethod.POST,
+        `/subscriptions/${id}/permanent-delete`,
+      );
+    }
     return this.delegate.permanentlyDeleteSubscription(id);
   }
 
   emptySubscriptionTrash(userId: string): Promise<void> {
+    if (this.functions && this.subscriptionsApiFunctionId) {
+      return this.callSubscriptionsApi<void>(
+        ExecutionMethod.DELETE,
+        `/subscriptions/trash?userId=${encodeURIComponent(userId)}`,
+      );
+    }
     return this.delegate.emptySubscriptionTrash(userId);
   }
 
