@@ -37,7 +37,7 @@ import { BackendContext } from '../../packages/shared/backend/context';
 import { ConvexBackendClient, convexBackendHooks } from '../../packages/shared/backend/convex';
 import { AppwriteBackendClient } from '../../packages/shared/backend/appwrite';
 import { createAppwriteClient } from '../../packages/shared/appwrite/client';
-import { Account } from 'appwrite';
+import { Account, Databases, Functions } from 'appwrite';
 
 // NOTE(Phase-3): The standard `appwrite` SDK persists sessions via window.localStorage,
 // which is unavailable in React Native. This means validateSession() will fail after an
@@ -52,12 +52,18 @@ const convexDelegate = convexUrl ? new ConvexBackendClient(convexUrl) : null;
 
 const appwriteEndpoint = process.env.EXPO_PUBLIC_APPWRITE_ENDPOINT;
 const appwriteProjectId = process.env.EXPO_PUBLIC_APPWRITE_PROJECT_ID;
+const notesSyncFunctionId = process.env.EXPO_PUBLIC_APPWRITE_NOTES_SYNC_FUNCTION_ID;
+const remindersApiFunctionId = process.env.EXPO_PUBLIC_APPWRITE_REMINDERS_API_FUNCTION_ID;
 
 const backendClient: AppwriteBackendClient | null =
   appwriteEndpoint && appwriteProjectId && convexDelegate
     ? new AppwriteBackendClient(
         new Account(createAppwriteClient(appwriteEndpoint, appwriteProjectId)),
         convexDelegate,
+        new Databases(createAppwriteClient(appwriteEndpoint, appwriteProjectId)),
+        new Functions(createAppwriteClient(appwriteEndpoint, appwriteProjectId)),
+        notesSyncFunctionId,
+        remindersApiFunctionId,
       )
     : null;
 

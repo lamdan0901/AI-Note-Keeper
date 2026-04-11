@@ -1,4 +1,4 @@
-import { Account } from 'appwrite';
+import { Account, Databases, Functions, Query, ExecutionMethod } from 'appwrite';
 import type {
   BackendClient,
   DevicePushTokenData,
@@ -7,7 +7,7 @@ import type {
   UserRecord,
 } from './types';
 import type { Note } from '../types/note';
-import type { Reminder } from '../types/reminder';
+import type { Reminder, ReminderCreate, ReminderUpdate } from '../types/reminder';
 import type { Subscription, SubscriptionCreate, SubscriptionUpdate } from '../types/subscription';
 import type { MergeSummary, MergeStrategy } from '../auth/userDataMerge';
 import type {
@@ -22,19 +22,72 @@ import {
   registerUser,
   validateCurrentSession,
 } from '../appwrite/auth';
+import { DATABASE_ID, NOTES_COLLECTION } from '../appwrite/collections';
+import { coerceRepeatRule } from '../utils/repeatCodec';
+
+// ---------------------------------------------------------------------------
+// Internal doc mappers
+// ---------------------------------------------------------------------------
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapDocToNote(doc: Record<string, any>): Note {
+  const repeat = coerceRepeatRule({
+    repeat: doc.repeat ? JSON.parse(doc.repeat as string) : undefined,
+    repeatRule: doc.repeatRule,
+    repeatConfig: doc.repeatConfig ? JSON.parse(doc.repeatConfig as string) : undefined,
+    triggerAt: doc.triggerAt,
+  });
+
+  return {
+    id: (doc.$id ?? doc.id) as string,
+    userId: (doc.userId as string | undefined) ?? undefined,
+    title: doc.title ?? null,
+    content: doc.content ?? null,
+    contentType: doc.contentType ?? undefined,
+    color: doc.color ?? null,
+    active: Boolean(doc.active),
+    done: Boolean(doc.done),
+    isPinned: Boolean(doc.isPinned),
+    triggerAt: doc.triggerAt ?? undefined,
+    repeatRule: doc.repeatRule ?? undefined,
+    repeatConfig: doc.repeatConfig ? JSON.parse(doc.repeatConfig as string) : undefined,
+    repeat,
+    snoozedUntil: doc.snoozedUntil ?? undefined,
+    scheduleStatus: doc.scheduleStatus ?? undefined,
+    timezone: doc.timezone ?? undefined,
+    baseAtLocal: doc.baseAtLocal ?? null,
+    startAt: doc.startAt ?? null,
+    nextTriggerAt: doc.nextTriggerAt ?? null,
+    lastFiredAt: doc.lastFiredAt ?? null,
+    lastAcknowledgedAt: doc.lastAcknowledgedAt ?? null,
+    version: doc.version ?? 0,
+    deletedAt: doc.deletedAt ?? undefined,
+    syncStatus: 'synced',
+    serverVersion: (doc.version ?? 0) as number,
+    updatedAt: doc.updatedAt as number,
+    createdAt: doc.createdAt as number,
+  };
+}
 
 // ---------------------------------------------------------------------------
 // AppwriteBackendClient
 //
-// Implements BackendClient with Appwrite handling auth and delegating all
-// other methods (notes, reminders, subscriptions, push, voice) to a
-// ConvexBackendClient until those are migrated in Phases 3–5.
+// Implements BackendClient:
+//   - Auth: implemented with Appwrite Account SDK
+//   - Notes: getNotes/permanentlyDeleteNote/emptyTrash via Databases SDK;
+//            syncNotes via notes-sync Function execution
+//   - Reminders: all via reminders-api Function execution
+//   - Subscriptions/Push/Voice: delegated to ConvexBackendClient (Phases 4–5)
 // ---------------------------------------------------------------------------
 
 export class AppwriteBackendClient implements BackendClient {
   constructor(
     private readonly account: Account,
     private readonly delegate: BackendClient,
+    private readonly databases?: Databases,
+    private readonly functions?: Functions,
+    private readonly notesSyncFunctionId?: string,
+    private readonly remindersApiFunctionId?: string,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -85,27 +138,165 @@ export class AppwriteBackendClient implements BackendClient {
   }
 
   getNotes(userId: string): Promise<Note[]> {
+    if (this.databases) {
+      return this.databases
+        .listDocuments(DATABASE_ID, NOTES_COLLECTION, [Query.equal('userId', userId)])
+        .then((result) => result.documents.map(mapDocToNote));
+    }
     return this.delegate.getNotes(userId);
   }
 
-  syncNotes(
+  async syncNotes(
     userId: string,
     changes: SyncNoteChange[],
     lastSyncAt: number,
   ): Promise<SyncNotesResult> {
+    if (this.functions && this.notesSyncFunctionId) {
+      const execution = await this.functions.createExecution(
+        this.notesSyncFunctionId,
+        JSON.stringify({ userId, changes, lastSyncAt }),
+        false,
+        '/',
+        ExecutionMethod.POST,
+      );
+      const parsed = JSON.parse(execution.responseBody) as {
+        notes?: Array<{ id: string; version: number }>;
+        syncedAt?: number;
+        error?: string;
+        status?: number;
+      };
+      if (parsed.error) {
+        throw new Error(`syncNotes failed: ${parsed.error} (status ${parsed.status ?? 'unknown'})`);
+      }
+      return { notes: parsed.notes ?? [], syncedAt: parsed.syncedAt ?? Date.now() };
+    }
+    if (this.databases) {
+      throw new Error(
+        'syncNotes: Appwrite SDK is configured for reads but APPWRITE_NOTES_SYNC_FUNCTION_ID ' +
+          'is missing. Set the env var to avoid split-backend writes.',
+      );
+    }
     return this.delegate.syncNotes(userId, changes, lastSyncAt);
   }
 
-  permanentlyDeleteNote(userId: string, noteId: string): Promise<void> {
+  async permanentlyDeleteNote(userId: string, noteId: string): Promise<void> {
+    if (this.databases) {
+      // Verify ownership before delete
+      const result = await this.databases.listDocuments(DATABASE_ID, NOTES_COLLECTION, [
+        Query.equal('userId', userId),
+        Query.equal('$id', noteId),
+      ]);
+      const doc = result.documents[0];
+      if (doc && doc.active === false) {
+        await this.databases.deleteDocument(DATABASE_ID, NOTES_COLLECTION, noteId);
+      }
+      return;
+    }
     return this.delegate.permanentlyDeleteNote(userId, noteId);
   }
 
-  emptyTrash(userId: string): Promise<void> {
+  async emptyTrash(userId: string): Promise<void> {
+    if (this.databases) {
+      const result = await this.databases.listDocuments(DATABASE_ID, NOTES_COLLECTION, [
+        Query.equal('userId', userId),
+        Query.equal('active', false),
+      ]);
+      await Promise.all(
+        result.documents.map((doc) =>
+          this.databases!.deleteDocument(DATABASE_ID, NOTES_COLLECTION, doc.$id),
+        ),
+      );
+      return;
+    }
     return this.delegate.emptyTrash(userId);
   }
 
+  // ---------------------------------------------------------------------------
+  // Reminders — routed through reminders-api Function when available
+  // ---------------------------------------------------------------------------
+
+  private async callRemindersApi<T>(
+    method: ExecutionMethod,
+    path: string,
+    body?: Record<string, unknown>,
+  ): Promise<T> {
+    if (!this.functions || !this.remindersApiFunctionId) {
+      throw new Error('reminders-api function not configured');
+    }
+    const execution = await this.functions.createExecution(
+      this.remindersApiFunctionId,
+      body ? JSON.stringify(body) : '',
+      false,
+      path,
+      method,
+    );
+    const parsed = JSON.parse(execution.responseBody) as T & { error?: string; status?: number };
+    if ((parsed as { error?: string }).error) {
+      throw new Error(
+        `reminders-api error: ${(parsed as { error: string }).error} (status ${(parsed as { status?: number }).status ?? 'unknown'})`,
+      );
+    }
+    return parsed;
+  }
+
   getReminder(reminderId: string): Promise<Reminder | null> {
+    if (this.functions && this.remindersApiFunctionId) {
+      return this.callRemindersApi<Reminder>(ExecutionMethod.GET, `/${reminderId}`).catch(
+        () => null,
+      );
+    }
     return this.delegate.getReminder(reminderId);
+  }
+
+  listReminders(updatedSince?: number): Promise<Reminder[]> {
+    if (this.functions && this.remindersApiFunctionId) {
+      const path = updatedSince !== undefined ? `/?updatedSince=${updatedSince}` : '/';
+      return this.callRemindersApi<Reminder[]>(ExecutionMethod.GET, path);
+    }
+    return this.delegate.listReminders(updatedSince);
+  }
+
+  createReminder(data: ReminderCreate): Promise<Reminder> {
+    if (this.functions && this.remindersApiFunctionId) {
+      return this.callRemindersApi<Reminder>(
+        ExecutionMethod.POST,
+        '/',
+        data as unknown as Record<string, unknown>,
+      );
+    }
+    return this.delegate.createReminder(data);
+  }
+
+  updateReminder(id: string, patch: ReminderUpdate): Promise<Reminder | null> {
+    if (this.functions && this.remindersApiFunctionId) {
+      return this.callRemindersApi<Reminder>(
+        ExecutionMethod.PATCH,
+        `/${id}`,
+        patch as unknown as Record<string, unknown>,
+      ).catch(() => null);
+    }
+    return this.delegate.updateReminder(id, patch);
+  }
+
+  deleteReminder(id: string, deviceId?: string): Promise<void> {
+    if (this.functions && this.remindersApiFunctionId) {
+      return this.callRemindersApi<void>(
+        ExecutionMethod.DELETE,
+        `/${id}`,
+        deviceId ? { deviceId } : undefined,
+      );
+    }
+    return this.delegate.deleteReminder(id, deviceId);
+  }
+
+  snoozeReminder(id: string, snoozedUntil: number, deviceId?: string): Promise<Reminder | null> {
+    if (this.functions && this.remindersApiFunctionId) {
+      return this.callRemindersApi<Reminder>(ExecutionMethod.POST, `/${id}/snooze`, {
+        snoozedUntil,
+        ...(deviceId ? { deviceId } : {}),
+      }).catch(() => null);
+    }
+    return this.delegate.snoozeReminder(id, snoozedUntil, deviceId);
   }
 
   ackReminder(
@@ -113,6 +304,14 @@ export class AppwriteBackendClient implements BackendClient {
     ackType: string,
     opts?: { optimisticNextTrigger?: number },
   ): Promise<void> {
+    if (this.functions && this.remindersApiFunctionId) {
+      return this.callRemindersApi<void>(ExecutionMethod.POST, `/${id}/ack`, {
+        ackType,
+        ...(opts?.optimisticNextTrigger !== undefined
+          ? { optimisticNextTrigger: opts.optimisticNextTrigger }
+          : {}),
+      });
+    }
     return this.delegate.ackReminder(id, ackType, opts);
   }
 

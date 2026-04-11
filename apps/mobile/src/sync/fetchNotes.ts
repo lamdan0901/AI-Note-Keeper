@@ -1,5 +1,5 @@
 import { type Note } from '../db/notesRepo';
-import { createConvexBackendClient } from '../../../../packages/shared/backend/convex';
+import type { BackendClient } from '../../../../packages/shared/backend/types';
 
 export type FetchNotesResult =
   | { status: 'ok'; notes: Note[]; syncedAt: number }
@@ -20,14 +20,11 @@ const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number): Promise<T
   }
 };
 
-export const fetchNotes = async (userId: string): Promise<FetchNotesResult> => {
+export const fetchNotes = async (
+  userId: string,
+  client: BackendClient,
+): Promise<FetchNotesResult> => {
   try {
-    const convexUrl = process.env.EXPO_PUBLIC_CONVEX_URL;
-    if (!convexUrl) throw new Error('Missing Convex URL');
-
-    const client = createConvexBackendClient(convexUrl);
-    if (!client) throw new Error('Failed to create backend client');
-
     const notes = await withTimeout(client.getNotes(userId), 15000);
 
     // Filter out notes with a mismatched userId (server safety check)

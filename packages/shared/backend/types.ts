@@ -1,5 +1,5 @@
 import type { Note, NoteContentType } from '../types/note';
-import type { Reminder, RepeatRule } from '../types/reminder';
+import type { Reminder, RepeatRule, ReminderCreate, ReminderUpdate } from '../types/reminder';
 import type { Subscription, SubscriptionCreate, SubscriptionUpdate } from '../types/subscription';
 import type { MergeSummary, MergeStrategy } from '../auth/userDataMerge';
 import type {
@@ -101,6 +101,11 @@ export interface BackendClient {
 
   // Reminders
   getReminder(reminderId: string): Promise<Reminder | null>;
+  listReminders(updatedSince?: number): Promise<Reminder[]>;
+  createReminder(data: ReminderCreate): Promise<Reminder>;
+  updateReminder(id: string, patch: ReminderUpdate): Promise<Reminder | null>;
+  deleteReminder(id: string, deviceId?: string): Promise<void>;
+  snoozeReminder(id: string, snoozedUntil: number, deviceId?: string): Promise<Reminder | null>;
   ackReminder(
     id: string,
     ackType: string,

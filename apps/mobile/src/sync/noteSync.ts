@@ -5,6 +5,7 @@ import { resolveNoteConflict } from './conflictResolution';
 import { fetchNotes } from './fetchNotes';
 import { enqueueNoteOperation, getAllOutboxEntries } from './noteOutbox';
 import { processQueue, getQueueStats } from './syncQueueProcessor';
+import { getBackendClient } from './backendClient';
 
 // ============================================================================
 // Structured Logging
@@ -50,10 +51,7 @@ export type SyncResult = {
 // Main Sync Function
 // ============================================================================
 
-export const syncNotes = async (
-  db: SQLiteDatabase,
-  userId: string,
-): Promise<SyncResult> => {
+export const syncNotes = async (db: SQLiteDatabase, userId: string): Promise<SyncResult> => {
   const startTime = Date.now();
   let pullCount = 0;
   let conflictCount = 0;
@@ -65,9 +63,12 @@ export const syncNotes = async (
   const preStats = await getQueueStats(db);
   log('debug', 'Pre-sync queue stats', preStats);
 
-  const hasConvexUrl = Boolean(process.env.EXPO_PUBLIC_CONVEX_URL);
-  if (!hasConvexUrl) {
-    log('warn', 'Convex URL missing, skipping remote pull/push and running local-only sync');
+  const client = getBackendClient();
+  if (!client) {
+    log(
+      'warn',
+      'No backend client available, skipping remote pull/push and running local-only sync',
+    );
     return {
       success: true,
       pullCount: 0,
@@ -80,7 +81,7 @@ export const syncNotes = async (
   // -------------------------------------------------------------------------
   // 1. PULL: Fetch latest state from server
   // -------------------------------------------------------------------------
-  const fetchResult = await fetchNotes(userId);
+  const fetchResult = await fetchNotes(userId, client);
 
   if (fetchResult.status === 'error') {
     log('error', 'Pull failed, aborting sync', { error: fetchResult.error });
@@ -172,7 +173,7 @@ export const syncNotes = async (
   // -------------------------------------------------------------------------
   // 3. PUSH: Process outbox queue with batching and partial failure handling
   // -------------------------------------------------------------------------
-  const pushResult = await processQueue(db, userId);
+  const pushResult = await processQueue(db, userId, {}, client);
 
   // -------------------------------------------------------------------------
   // 4. Summary

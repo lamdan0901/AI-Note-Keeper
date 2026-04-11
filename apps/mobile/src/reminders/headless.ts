@@ -1,5 +1,5 @@
 import { AppRegistry } from 'react-native';
-import { createConvexBackendClient } from '../../../../packages/shared/backend/convex';
+import { getBackendClient } from '../sync/backendClient';
 import { computeNextTrigger } from '../../../../packages/shared/utils/recurrence';
 import { getDb } from '../db/bootstrap';
 import { getNoteById, upsertNote } from '../db/notesRepo';
@@ -58,12 +58,6 @@ const getRepeatRule = (note: Note): RepeatRule | null => {
   return null;
 };
 
-const getConvexClient = () => {
-  const url = process.env.EXPO_PUBLIC_CONVEX_URL;
-  if (!url) return null;
-  return createConvexBackendClient(url);
-};
-
 interface DoneTaskData {
   noteId?: string;
   reminderId?: string; // Legacy/Fallback
@@ -114,8 +108,8 @@ const reminderDoneTask = async (data: DoneTaskData) => {
     // Even if nextTrigger is null, this will cancel existing alarms via Ledger
     await rescheduleNoteWithLedger(db, mapNoteToReminder(updatedNote));
 
-    // 4. Sync to Convex
-    const client = getConvexClient();
+    // 4. Sync to backend
+    const client = getBackendClient();
     if (client) {
       try {
         await client.ackReminder(noteId, 'done', {

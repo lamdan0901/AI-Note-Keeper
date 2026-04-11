@@ -1,7 +1,6 @@
-import React, { useMemo } from "react";
-import { useQuery } from "convex/react";
-import { api } from "../../../../convex/_generated/api";
-import type { Reminder } from "../../../../packages/shared/types/reminder";
+import React, { useMemo, useState, useEffect } from 'react';
+import { useBackendClient } from '../../../../packages/shared/backend/context';
+import type { Reminder } from '../../../../packages/shared/types/reminder';
 
 type DedupedReminder = {
   reminder: Reminder;
@@ -11,8 +10,8 @@ type DedupedReminder = {
 const formatTimestamp = (timestampMs: number, timezone: string): string => {
   try {
     return new Intl.DateTimeFormat(undefined, {
-      dateStyle: "medium",
-      timeStyle: "short",
+      dateStyle: 'medium',
+      timeStyle: 'short',
       timeZone: timezone,
     }).format(new Date(timestampMs));
   } catch {
@@ -36,20 +35,39 @@ const dedupeReminders = (reminders: Reminder[]): DedupedReminder[] => {
     }
   }
 
-  return Array.from(byId.values()).sort(
-    (a, b) => b.reminder.updatedAt - a.reminder.updatedAt,
-  );
+  return Array.from(byId.values()).sort((a, b) => b.reminder.updatedAt - a.reminder.updatedAt);
 };
 
 export default function RemindersPage(): JSX.Element {
-  const reminders = useQuery(api.functions.reminders.listReminders, {});
+  const client = useBackendClient();
+  const [reminders, setReminders] = useState<Reminder[] | undefined>(undefined);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = () => {
+      client
+        .listReminders()
+        .then((list) => {
+          if (!cancelled) setReminders(list);
+        })
+        .catch(() => {
+          if (!cancelled) setReminders([]);
+        });
+    };
+    load();
+    const intervalId = setInterval(load, 30_000);
+    return () => {
+      cancelled = true;
+      clearInterval(intervalId);
+    };
+  }, [client]);
 
   const deduped = useMemo(() => {
     if (!reminders) {
       return null;
     }
 
-    const normalizedReminders = reminders.map(r => ({
+    const normalizedReminders = reminders.map((r) => ({
       ...r,
       title: r.title ?? null,
     })) as Reminder[];
@@ -79,19 +97,19 @@ export default function RemindersPage(): JSX.Element {
           Showing {deduped.dedupedCount} of {deduped.total} records
           {deduped.duplicateCount > 0
             ? ` (collapsed ${deduped.duplicateCount} ${
-                deduped.duplicateCount === 1 ? "duplicate" : "duplicates"
+                deduped.duplicateCount === 1 ? 'duplicate' : 'duplicates'
               })`
-            : ""}
+            : ''}
           .
         </p>
       )}
       {deduped && deduped.list.length === 0 ? (
         <p>No reminders yet.</p>
       ) : (
-        <div style={{ marginTop: "16px", overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+        <div style={{ marginTop: '16px', overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
-              <tr style={{ textAlign: "left" }}>
+              <tr style={{ textAlign: 'left' }}>
                 <th>Title</th>
                 <th>Next Trigger</th>
                 <th>Repeat</th>
@@ -103,14 +121,12 @@ export default function RemindersPage(): JSX.Element {
             <tbody>
               {deduped?.list.map(({ reminder, count }) => (
                 <tr key={reminder.id}>
-                  <td>{reminder.title ?? "Untitled"}</td>
+                  <td>{reminder.title ?? 'Untitled'}</td>
                   <td>{formatTimestamp(reminder.triggerAt, reminder.timezone)}</td>
                   <td>{reminder.repeatRule}</td>
-                  <td>
-                    {reminder.active ? reminder.scheduleStatus : "inactive"}
-                  </td>
+                  <td>{reminder.active ? reminder.scheduleStatus : 'inactive'}</td>
                   <td>{formatTimestamp(reminder.updatedAt, reminder.timezone)}</td>
-                  <td>{count > 1 ? `x${count}` : "-"}</td>
+                  <td>{count > 1 ? `x${count}` : '-'}</td>
                 </tr>
               ))}
             </tbody>

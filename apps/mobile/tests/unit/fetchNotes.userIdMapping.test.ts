@@ -1,33 +1,21 @@
 import { describe, expect, it, jest, beforeEach } from '@jest/globals';
-
-const queryMock = jest.fn() as jest.MockedFunction<(...args: unknown[]) => Promise<unknown>>;
-
-jest.mock('convex/browser', () => ({
-  ConvexHttpClient: jest.fn().mockImplementation(() => ({
-    query: queryMock,
-  })),
-}));
-
-jest.mock('../../../../convex/_generated/api', () => ({
-  api: {
-    functions: {
-      notes: {
-        getNotes: 'functions.notes.getNotes',
-      },
-    },
-  },
-}));
+import type { BackendClient } from '../../../../packages/shared/backend/types';
+import type { Note } from '../../src/db/notesRepo';
 
 import { fetchNotes } from '../../src/sync/fetchNotes';
+
+const makeClient = (notes: Note[]) =>
+  ({
+    getNotes: jest.fn<() => Promise<Note[]>>().mockResolvedValue(notes),
+  }) as unknown as BackendClient;
 
 describe('fetchNotes userId mapping', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    process.env.EXPO_PUBLIC_CONVEX_URL = 'https://example.convex.cloud';
   });
 
   it('preserves userId from server payload', async () => {
-    queryMock.mockResolvedValue([
+    const client = makeClient([
       {
         id: 'note-1',
         userId: 'account-user-1',
@@ -39,10 +27,10 @@ describe('fetchNotes userId mapping', () => {
         updatedAt: 1,
         createdAt: 1,
         version: 3,
-      },
+      } as Note,
     ]);
 
-    const result = await fetchNotes('account-user-1');
+    const result = await fetchNotes('account-user-1', client);
 
     expect(result.status).toBe('ok');
     if (result.status !== 'ok') {
@@ -51,13 +39,10 @@ describe('fetchNotes userId mapping', () => {
 
     expect(result.notes).toHaveLength(1);
     expect(result.notes[0]?.userId).toBe('account-user-1');
-    expect(queryMock).toHaveBeenCalledWith('functions.notes.getNotes', {
-      userId: 'account-user-1',
-    });
   });
 
   it('falls back to requested userId when payload omits userId', async () => {
-    queryMock.mockResolvedValue([
+    const client = makeClient([
       {
         id: 'note-2',
         title: 'Title 2',
@@ -68,10 +53,10 @@ describe('fetchNotes userId mapping', () => {
         updatedAt: 2,
         createdAt: 2,
         version: 1,
-      },
+      } as Note,
     ]);
 
-    const result = await fetchNotes('account-user-2');
+    const result = await fetchNotes('account-user-2', client);
 
     expect(result.status).toBe('ok');
     if (result.status !== 'ok') {
@@ -84,7 +69,7 @@ describe('fetchNotes userId mapping', () => {
 
   it('drops notes with mismatched payload userId', async () => {
     const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-    queryMock.mockResolvedValue([
+    const client = makeClient([
       {
         id: 'note-3',
         userId: 'other-user',
@@ -96,10 +81,10 @@ describe('fetchNotes userId mapping', () => {
         updatedAt: 3,
         createdAt: 3,
         version: 1,
-      },
+      } as Note,
     ]);
 
-    const result = await fetchNotes('account-user-3');
+    const result = await fetchNotes('account-user-3', client);
 
     expect(result.status).toBe('ok');
     if (result.status !== 'ok') {

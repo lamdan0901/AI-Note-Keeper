@@ -11,7 +11,7 @@ import { useQuery } from 'convex/react';
 import { api } from '../../../convex/_generated/api';
 
 import type { Note } from '../types/note';
-import type { Reminder } from '../types/reminder';
+import type { Reminder, ReminderCreate, ReminderUpdate } from '../types/reminder';
 import type { Subscription, SubscriptionCreate, SubscriptionUpdate } from '../types/subscription';
 import type {
   ParseVoiceNoteIntentRequest,
@@ -212,6 +212,50 @@ export class ConvexBackendClient implements BackendClient {
   async getReminder(reminderId: string): Promise<Reminder | null> {
     const doc = await this.client.query(api.functions.reminders.getReminder, { reminderId });
     return (doc as Reminder | null) ?? null;
+  }
+
+  async listReminders(updatedSince?: number): Promise<Reminder[]> {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const remindersApi = (api.functions as any).reminders;
+    const docs = await this.client.query(remindersApi.listReminders, {
+      updatedSince,
+    });
+    return (docs as Reminder[]) ?? [];
+  }
+
+  async createReminder(data: ReminderCreate): Promise<Reminder> {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const remindersApi = (api.functions as any).reminders;
+    const result = await this.client.mutation(remindersApi.createReminder, data);
+    return result as Reminder;
+  }
+
+  async updateReminder(id: string, patch: ReminderUpdate): Promise<Reminder | null> {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const remindersApi = (api.functions as any).reminders;
+    const result = await this.client.mutation(remindersApi.updateReminder, { id, ...patch });
+    return (result as Reminder | null) ?? null;
+  }
+
+  async deleteReminder(id: string, deviceId?: string): Promise<void> {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const remindersApi = (api.functions as any).reminders;
+    await this.client.mutation(remindersApi.deleteReminder, { id, deviceId });
+  }
+
+  async snoozeReminder(
+    id: string,
+    snoozedUntil: number,
+    deviceId?: string,
+  ): Promise<Reminder | null> {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const remindersApi = (api.functions as any).reminders;
+    const result = await this.client.mutation(remindersApi.snoozeReminder, {
+      id,
+      snoozedUntil,
+      deviceId,
+    });
+    return (result as Reminder | null) ?? null;
   }
 
   async ackReminder(

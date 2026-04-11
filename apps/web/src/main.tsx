@@ -7,12 +7,18 @@ import { BackendContext } from '../../../packages/shared/backend/context';
 import { ConvexBackendClient, convexBackendHooks } from '../../../packages/shared/backend/convex';
 import { AppwriteBackendClient } from '../../../packages/shared/backend/appwrite';
 import { createAppwriteClient } from '../../../packages/shared/appwrite/client';
-import { Account } from 'appwrite';
+import { Account, Databases, Functions } from 'appwrite';
 import './styles.css';
 
 const convexUrl = import.meta.env.VITE_CONVEX_URL as string | undefined;
 const appwriteEndpoint = import.meta.env.VITE_APPWRITE_ENDPOINT as string | undefined;
 const appwriteProjectId = import.meta.env.VITE_APPWRITE_PROJECT_ID as string | undefined;
+const notesSyncFunctionId = import.meta.env.VITE_APPWRITE_NOTES_SYNC_FUNCTION_ID as
+  | string
+  | undefined;
+const remindersApiFunctionId = import.meta.env.VITE_APPWRITE_REMINDERS_API_FUNCTION_ID as
+  | string
+  | undefined;
 
 if (!convexUrl) {
   throw new Error('VITE_CONVEX_URL is not configured. Set it in your .env file.');
@@ -23,10 +29,17 @@ const convexDelegate = new ConvexBackendClient(convexUrl);
 
 const backendClient: AppwriteBackendClient | ConvexBackendClient =
   appwriteEndpoint && appwriteProjectId
-    ? new AppwriteBackendClient(
-        new Account(createAppwriteClient(appwriteEndpoint, appwriteProjectId)),
-        convexDelegate,
-      )
+    ? (() => {
+        const awClient = createAppwriteClient(appwriteEndpoint, appwriteProjectId);
+        return new AppwriteBackendClient(
+          new Account(awClient),
+          convexDelegate,
+          new Databases(awClient),
+          new Functions(awClient),
+          notesSyncFunctionId,
+          remindersApiFunctionId,
+        );
+      })()
     : convexDelegate;
 
 ReactDOM.createRoot(document.getElementById('root')!).render(

@@ -10,7 +10,6 @@
 
 import { SQLiteDatabase } from 'expo-sqlite/next';
 import type { BackendClient } from '../../../../packages/shared/backend/types';
-import { createConvexBackendClient } from '../../../../packages/shared/backend/convex';
 import { Note } from '../db/notesRepo';
 import { nowMs } from '../../../../packages/shared/utils/time';
 import {
@@ -210,24 +209,24 @@ const processBatch = async (
 
     for (const item of orderedItems) {
       const serverNote = serverNotesMap.get(item.noteId);
-      if (serverNote || item.operation === 'delete') {
-        // Success!
-        results.push({
-          noteId: item.noteId,
-          success: true,
-          serverVersion: serverNote?.version,
-        });
+      const deleteConfirmed = !serverNote || serverNote.active === false;
+      const success = item.operation === 'delete' ? deleteConfirmed : Boolean(serverNote);
+      results.push({
+        noteId: item.noteId,
+        success,
+        serverVersion: serverNote?.version,
+        error: success
+          ? undefined
+          : item.operation === 'delete'
+            ? 'Delete not acknowledged by server'
+            : 'Note not returned in server response',
+      });
+      if (success) {
         log('debug', `Synced ${item.operation}: ${item.noteId}`, {
           serverVersion: serverNote?.version,
         });
       } else {
-        // Note not in response but not a delete - unexpected
-        results.push({
-          noteId: item.noteId,
-          success: false,
-          error: 'Note not returned in server response',
-        });
-        log('warn', `Note not in server response: ${item.noteId}`);
+        log('warn', `Failed to confirm ${item.operation}: ${item.noteId}`);
       }
     }
 
@@ -284,6 +283,7 @@ export const processQueue = async (
   db: SQLiteDatabase,
   userId: string,
   config: Partial<QueueProcessorConfig> = {},
+  client: BackendClient | null = null,
 ): Promise<BatchResult> => {
   const cfg = { ...DEFAULT_CONFIG, ...config };
   const allResults: SyncOperationResult[] = [];
@@ -291,15 +291,8 @@ export const processQueue = async (
 
   log('info', 'Starting queue processing', { config: cfg });
 
-  // Get Convex client
-  const convexUrl = process.env.EXPO_PUBLIC_CONVEX_URL;
-  if (!convexUrl) {
-    log('warn', 'Missing Convex URL, skipping queue push');
-    return { total: 0, succeeded: 0, failed: 0, results: [] };
-  }
-  const client = createConvexBackendClient(convexUrl);
   if (!client) {
-    log('warn', 'Failed to create backend client, skipping queue push');
+    log('warn', 'No backend client provided, skipping queue push');
     return { total: 0, succeeded: 0, failed: 0, results: [] };
   }
 
