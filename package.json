@@ -16,7 +16,9 @@
     "build:mobile": "npm --workspace apps/mobile run build",
     "dev:mobile": "npm --workspace apps/mobile run android",
     "dev:clients": "concurrently -k -n web,mobile -c green,cyan \"npm run dev:web\" \"npm run dev:mobile\"",
-    "setup-appwrite-schema": "ts-node --project tsconfig.scripts.json scripts/setup-appwrite-schema.ts"
+    "setup-appwrite-schema": "ts-node --project tsconfig.scripts.json scripts/setup-appwrite-schema.ts",
+    "migrate-convex-to-appwrite": "ts-node --project tsconfig.scripts.json scripts/migrate-convex-to-appwrite.ts",
+    "rollback-appwrite-migration": "ts-node --project tsconfig.scripts.json scripts/rollback-appwrite-migration.ts"
   },
   "dependencies": {
     "convex": "^1.33.1",

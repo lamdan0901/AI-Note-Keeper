@@ -264,6 +264,7 @@ async function setupSubscriptionsCollection() {
   await createStringAttr(C, 'currency', 10, true);
   await createStringAttr(C, 'billingCycle', 20, true);
   await createIntAttr(C, 'billingCycleCustomDays', false);
+  await createStringAttr(C, 'notes', 500, false);
   await createIntAttr(C, 'nextBillingDate', true);
   await createIntAttr(C, 'trialEndDate', false);
   await createStringAttr(C, 'status', 20, true);
