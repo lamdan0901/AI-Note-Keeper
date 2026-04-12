@@ -6,6 +6,7 @@ import { WebAuthProvider } from './auth/AuthContext';
 import { BackendContext } from '../../../packages/shared/backend/context';
 import { ConvexBackendClient, convexBackendHooks } from '../../../packages/shared/backend/convex';
 import { AppwriteBackendClient } from '../../../packages/shared/backend/appwrite';
+import { createAppwriteBackendHooks } from '../../../packages/shared/backend/appwriteHooks';
 import { createAppwriteClient } from '../../../packages/shared/appwrite/client';
 import { Account, Databases, Functions } from 'appwrite';
 import './styles.css';
@@ -34,29 +35,32 @@ if (!convexUrl) {
 const convex = new ConvexReactClient(convexUrl);
 const convexDelegate = new ConvexBackendClient(convexUrl);
 
-const backendClient: AppwriteBackendClient | ConvexBackendClient =
+const awClient =
   appwriteEndpoint && appwriteProjectId
-    ? (() => {
-        const awClient = createAppwriteClient(appwriteEndpoint, appwriteProjectId);
-        return new AppwriteBackendClient(
-          new Account(awClient),
-          convexDelegate,
-          new Databases(awClient),
-          new Functions(awClient),
-          notesSyncFunctionId,
-          remindersApiFunctionId,
-          subscriptionsApiFunctionId,
-          aiVoiceFunctionId,
-          userDataMigrationFunctionId,
-          fcmProviderId,
-        );
-      })()
-    : convexDelegate;
+    ? createAppwriteClient(appwriteEndpoint, appwriteProjectId)
+    : null;
+
+const backendClient: AppwriteBackendClient | ConvexBackendClient = awClient
+  ? new AppwriteBackendClient(
+      new Account(awClient),
+      convexDelegate,
+      new Databases(awClient),
+      new Functions(awClient),
+      notesSyncFunctionId,
+      remindersApiFunctionId,
+      subscriptionsApiFunctionId,
+      aiVoiceFunctionId,
+      userDataMigrationFunctionId,
+      fcmProviderId,
+    )
+  : convexDelegate;
+
+const hooks = awClient ? createAppwriteBackendHooks(awClient) : convexBackendHooks;
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <ConvexProvider client={convex}>
-      <BackendContext.Provider value={{ client: backendClient, hooks: convexBackendHooks }}>
+      <BackendContext.Provider value={{ client: backendClient, hooks }}>
         <WebAuthProvider>
           <App />
         </WebAuthProvider>

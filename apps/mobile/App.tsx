@@ -36,8 +36,9 @@ import { getDb } from './src/db/bootstrap';
 import { BackendContext } from '../../packages/shared/backend/context';
 import { ConvexBackendClient, convexBackendHooks } from '../../packages/shared/backend/convex';
 import { AppwriteBackendClient } from '../../packages/shared/backend/appwrite';
+import { createAppwriteBackendHooks } from '../../packages/shared/backend/appwriteHooks';
 import { createAppwriteClient } from '../../packages/shared/appwrite/client';
-import { Account, Databases, Functions } from 'appwrite';
+import { Account, Client, Databases, Functions } from 'appwrite';
 
 // NOTE(Phase-3): The standard `appwrite` SDK persists sessions via window.localStorage,
 // which is unavailable in React Native. This means validateSession() will fail after an
@@ -60,21 +61,27 @@ const userDataMigrationFunctionId =
   process.env.EXPO_PUBLIC_APPWRITE_USER_DATA_MIGRATION_FUNCTION_ID;
 const fcmProviderId = process.env.EXPO_PUBLIC_APPWRITE_FCM_PROVIDER_ID;
 
-const backendClient: AppwriteBackendClient | null =
+const awClient: Client | null =
   appwriteEndpoint && appwriteProjectId
-    ? new AppwriteBackendClient(
-        new Account(createAppwriteClient(appwriteEndpoint, appwriteProjectId)),
-        convexDelegate ?? undefined,
-        new Databases(createAppwriteClient(appwriteEndpoint, appwriteProjectId)),
-        new Functions(createAppwriteClient(appwriteEndpoint, appwriteProjectId)),
-        notesSyncFunctionId,
-        remindersApiFunctionId,
-        subscriptionsApiFunctionId,
-        aiVoiceFunctionId,
-        userDataMigrationFunctionId,
-        fcmProviderId,
-      )
+    ? createAppwriteClient(appwriteEndpoint, appwriteProjectId)
     : null;
+
+const backendClient: AppwriteBackendClient | null = awClient
+  ? new AppwriteBackendClient(
+      new Account(awClient),
+      convexDelegate ?? undefined,
+      new Databases(awClient),
+      new Functions(awClient),
+      notesSyncFunctionId,
+      remindersApiFunctionId,
+      subscriptionsApiFunctionId,
+      aiVoiceFunctionId,
+      userDataMigrationFunctionId,
+      fcmProviderId,
+    )
+  : null;
+
+const appwriteHooks = awClient ? createAppwriteBackendHooks(awClient) : null;
 
 export default function App(): JSX.Element | null {
   const [isReady, setIsReady] = useState(false);
@@ -213,7 +220,9 @@ export default function App(): JSX.Element | null {
   return (
     <ThemeProvider>
       <ConvexProvider client={convexClient}>
-        <BackendContext.Provider value={{ client: backendClient, hooks: convexBackendHooks }}>
+        <BackendContext.Provider
+          value={{ client: backendClient, hooks: appwriteHooks ?? convexBackendHooks }}
+        >
           <AuthProvider>{content}</AuthProvider>
         </BackendContext.Provider>
       </ConvexProvider>
