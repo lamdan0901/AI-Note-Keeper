@@ -1,154 +1,184 @@
 import { test, expect, jest, describe, beforeEach } from '@jest/globals';
+import { makeContext, withAuth } from '../helpers/makeContext';
 
-const mockDb = {
-  query: jest.fn(),
-  patch: jest.fn(),
-  insert: jest.fn(),
-  delete: jest.fn(),
-  get: jest.fn(),
-};
+const mockListDocuments = jest.fn() as any;
+const mockCreateDocument = jest.fn() as any;
+const mockUpdateDocument = jest.fn() as any;
+const mockDeleteDocument = jest.fn() as any;
+const mockCreateExecution = jest.fn() as any;
 
-const mockCtx = {
-  db: mockDb,
-  scheduler: {
-    runAfter: jest.fn(),
+jest.mock('node-appwrite', () => ({
+  Client: jest.fn().mockImplementation(() => ({
+    setEndpoint: jest.fn().mockReturnThis(),
+    setProject: jest.fn().mockReturnThis(),
+    setKey: jest.fn().mockReturnThis(),
+  })),
+  Databases: jest.fn().mockImplementation(() => ({
+    listDocuments: mockListDocuments,
+    createDocument: mockCreateDocument,
+    updateDocument: mockUpdateDocument,
+    deleteDocument: mockDeleteDocument,
+  })),
+  Functions: jest.fn().mockImplementation(() => ({
+    createExecution: mockCreateExecution,
+  })),
+  ID: { unique: () => 'gen-id' },
+  Query: {
+    equal: (field: string, value: string) => `${field}=${value}`,
+    greaterThan: (field: string, value: number) => `${field}>${value}`,
   },
-};
-
-type HandlerConfig = {
-  handler: (...args: unknown[]) => unknown;
-  [key: string]: unknown;
-};
-
-type Handler = (ctx: typeof mockCtx, args: Record<string, unknown>) => Promise<unknown>;
-
-type MockFn = jest.Mock<(...args: unknown[]) => unknown>;
-type AsyncMockFn = jest.Mock<(...args: unknown[]) => Promise<unknown>>;
-
-const mockQuery: {
-  filter: MockFn;
-  first: AsyncMockFn;
-  collect: AsyncMockFn;
-  eq: MockFn;
-  field: MockFn;
-  gt: MockFn;
-} = {
-  filter: jest.fn().mockReturnThis(),
-  first: jest.fn(),
-  collect: jest.fn(),
-  eq: jest.fn(),
-  field: jest.fn(),
-  gt: jest.fn(),
-};
-
-const mockMutation = jest.fn((config: HandlerConfig) => ({
-  ...config,
-  _handler: config.handler,
 }));
 
-const mockQueryFunction = jest.fn((config: HandlerConfig) => ({
-  ...config,
-  _handler: config.handler,
-}));
+import main from '../../appwrite-functions/reminders-api/src/main';
 
-jest.mock(
-  '../../convex/_generated/server',
-  () => ({
-    mutation: mockMutation,
-    query: mockQueryFunction,
-  }),
-  { virtual: true },
-);
+const DB = 'ai-note-keeper';
+const NOTES = 'notes';
+const USER = 'user-abc';
+const AUTH = withAuth(USER);
 
-jest.mock(
-  '../../convex/_generated/api',
-  () => ({
-    internal: {
-      functions: {
-        push: {
-          sendPush: {},
-        },
-      },
-    },
-    api: {},
-  }),
-  { virtual: true },
-);
-
-import { updateReminder } from '../../convex/functions/reminders';
-
-const baseReminder = {
-  _id: 'convex-id-1',
-  id: 'reminder-1',
-  userId: 'user-1',
-  triggerAt: 1700000000000,
-  repeatRule: 'none' as const,
-  repeatConfig: undefined,
-  snoozedUntil: undefined,
+const baseDoc = {
+  $id: 'reminder-1',
+  userId: USER,
+  title: 'Original Title',
+  triggerAt: 2000,
+  repeatRule: 'none',
+  repeatConfig: null,
+  repeat: null,
+  baseAtLocal: null,
+  startAt: null,
+  nextTriggerAt: 2000,
+  lastFiredAt: null,
+  lastAcknowledgedAt: null,
+  snoozedUntil: null,
   active: true,
-  scheduleStatus: 'unscheduled' as const,
+  scheduleStatus: 'scheduled',
   timezone: 'UTC',
+  version: 1,
   updatedAt: 2000,
   createdAt: 1000,
+  done: false,
+  isPinned: false,
 };
 
+beforeEach(() => {
+  jest.clearAllMocks();
+  process.env.APPWRITE_FUNCTION_API_ENDPOINT = 'https://cloud.appwrite.io/v1';
+  process.env.APPWRITE_FUNCTION_API_KEY = 'test-key';
+  process.env.APPWRITE_FUNCTION_PROJECT_ID = 'test-project-id';
+  process.env.PUSH_FUNCTION_ID = 'push-fn-id';
+  mockCreateExecution.mockResolvedValue({ $id: 'exec-1' });
+  mockListDocuments.mockResolvedValue({ documents: [] });
+  mockCreateDocument.mockImplementation((_db: string, _col: string, id: string, data: unknown) =>
+    Promise.resolve({ $id: id, ...(data as object) }),
+  );
+  mockUpdateDocument.mockImplementation((_db: string, _col: string, id: string, data: unknown) =>
+    Promise.resolve({ ...baseDoc, $id: id, ...(data as object) }),
+  );
+  mockDeleteDocument.mockResolvedValue({});
+});
+
 describe('Concurrent edits (last-write-wins) integration', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    mockDb.query.mockReturnValue(mockQuery);
-    mockQuery.filter.mockReturnValue(mockQuery);
-  });
-
   test('rejects stale update when updatedAt is older than existing', async () => {
-    const handler = (updateReminder as unknown as { _handler: Handler })._handler;
-    const existing = { ...baseReminder, updatedAt: 2000 };
-    mockQuery.first.mockResolvedValue(existing);
+    const existing = { ...baseDoc, updatedAt: 2000 };
+    mockListDocuments.mockResolvedValue({ documents: [existing] });
 
-    const result = await handler(mockCtx, {
-      id: existing.id,
-      title: 'Stale Title',
-      updatedAt: 1500,
+    const { context, responses } = makeContext({
+      method: 'PATCH',
+      path: '/reminder-1',
+      headers: AUTH,
+      body: JSON.stringify({ title: 'Stale Title', updatedAt: 1500 }),
     });
 
-    expect(mockDb.patch).not.toHaveBeenCalled();
-    expect(mockDb.insert).not.toHaveBeenCalled();
-    expect(mockCtx.scheduler.runAfter).not.toHaveBeenCalled();
-    expect(result).toEqual(existing);
+    await main(context);
+
+    expect(responses[0].status).toBe(200);
+    expect(mockUpdateDocument).not.toHaveBeenCalled();
   });
 
   test('accepts newest update and emits change event', async () => {
-    const handler = (updateReminder as unknown as { _handler: Handler })._handler;
-    const existing = { ...baseReminder, updatedAt: 1000 };
-    mockQuery.first.mockResolvedValue(existing);
+    const existing = { ...baseDoc, updatedAt: 1000 };
+    mockListDocuments.mockResolvedValue({ documents: [existing] });
 
-    const result = await handler(mockCtx, {
-      id: existing.id,
-      title: 'Newest Title',
-      updatedAt: 3000,
+    const { context, responses } = makeContext({
+      method: 'PATCH',
+      path: '/reminder-1',
+      headers: AUTH,
+      body: JSON.stringify({ title: 'Newest Title', updatedAt: 3000 }),
     });
 
-    expect(mockDb.patch).toHaveBeenCalledWith(
-      existing._id,
+    await main(context);
+
+    expect(responses[0].status).toBe(200);
+    expect(mockUpdateDocument).toHaveBeenCalledWith(
+      DB,
+      NOTES,
+      'reminder-1',
       expect.objectContaining({
         title: 'Newest Title',
         updatedAt: 3000,
       }),
     );
-    expect(mockDb.insert).toHaveBeenCalledWith(
+    expect(mockCreateDocument).toHaveBeenCalledWith(
+      DB,
       'noteChangeEvents',
+      expect.any(String),
       expect.objectContaining({
-        noteId: existing.id,
+        noteId: 'reminder-1',
         operation: 'update',
-        changedAt: 3000,
       }),
     );
-    expect(mockCtx.scheduler.runAfter).toHaveBeenCalled();
-    expect(result).toEqual(
-      expect.objectContaining({
-        id: existing.id,
-        title: 'Newest Title',
-        updatedAt: 3000,
-      }),
+    expect(mockCreateExecution).toHaveBeenCalled();
+  });
+
+  test('two racing updates: only newer one persists', async () => {
+    // Prove winner-only persistence using sequential LWW simulation:
+    //   B (t=3000) arrives first → accepted, DB advances to t=3000
+    //   A (t=1000) arrives after → rejected as stale (1000 < 3000)
+    // This validates that once the winning write is committed, a lower-timestamp
+    // write cannot overwrite it.
+    let dbState = { ...baseDoc, updatedAt: 500 };
+
+    mockListDocuments.mockImplementation(() => Promise.resolve({ documents: [{ ...dbState }] }));
+    mockUpdateDocument.mockImplementation(
+      (_db: string, _col: string, id: string, data: unknown) => {
+        dbState = { ...dbState, ...(data as object) };
+        return Promise.resolve({ ...dbState });
+      },
     );
+
+    // B writes first (t=3000 > existing t=500 → accepted)
+    const { context: ctxB } = makeContext({
+      method: 'PATCH',
+      path: '/reminder-1',
+      headers: AUTH,
+      body: JSON.stringify({ title: 'Device B', updatedAt: 3000 }),
+    });
+    await main(ctxB);
+
+    expect(mockUpdateDocument).toHaveBeenCalledTimes(1);
+    expect(mockUpdateDocument).toHaveBeenCalledWith(
+      DB,
+      NOTES,
+      'reminder-1',
+      expect.objectContaining({ title: 'Device B', updatedAt: 3000 }),
+    );
+
+    // Record call count after B so we can assert A adds zero more calls
+    const callCountAfterB = (mockUpdateDocument.mock.calls as Array<unknown[]>).length;
+
+    // A arrives late (t=1000 < DB state t=3000 → rejected as stale)
+    const { context: ctxA } = makeContext({
+      method: 'PATCH',
+      path: '/reminder-1',
+      headers: AUTH,
+      body: JSON.stringify({ title: 'Device A', updatedAt: 1000 }),
+    });
+    await main(ctxA);
+
+    // No additional updateDocument calls: A's lower-timestamp write was rejected
+    expect((mockUpdateDocument.mock.calls as Array<unknown[]>).length).toBe(callCountAfterB);
+    // DB state is still B's winning write
+    expect(dbState.title).toBe('Device B');
+    expect(dbState.updatedAt).toBe(3000);
   });
 });

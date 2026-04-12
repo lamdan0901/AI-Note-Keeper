@@ -1,395 +1,227 @@
 import { test, expect, jest, describe, beforeEach } from '@jest/globals';
+import { makeContext, withAuth } from '../helpers/makeContext';
 
-// Mock external dependencies first
-jest.mock(
-  'js-sha256',
-  () => ({
-    sha256: jest.fn(() => 'mock-hash-value'),
-  }),
-  { virtual: true },
-);
+const mockListDocuments = jest.fn() as any;
+const mockCreateDocument = jest.fn() as any;
+const mockUpdateDocument = jest.fn() as any;
+const mockDeleteDocument = jest.fn() as any;
+const mockCreateExecution = jest.fn() as any;
 
-jest.mock(
-  '../../convex/utils/uuid',
-  () => ({
-    uuidv4: jest.fn(() => 'mock-uuid-value'),
-  }),
-  { virtual: true },
-);
-
-// Mock context
-const mockDb = {
-  query: jest.fn(),
-  patch: jest.fn(),
-  insert: jest.fn(),
-  delete: jest.fn(),
-  get: jest.fn(),
-};
-
-const mockCtx = {
-  db: mockDb,
-  scheduler: {
-    runAfter: jest.fn(),
+jest.mock('node-appwrite', () => ({
+  Client: jest.fn().mockImplementation(() => ({
+    setEndpoint: jest.fn().mockReturnThis(),
+    setProject: jest.fn().mockReturnThis(),
+    setKey: jest.fn().mockReturnThis(),
+  })),
+  Databases: jest.fn().mockImplementation(() => ({
+    listDocuments: mockListDocuments,
+    createDocument: mockCreateDocument,
+    updateDocument: mockUpdateDocument,
+    deleteDocument: mockDeleteDocument,
+  })),
+  Functions: jest.fn().mockImplementation(() => ({
+    createExecution: mockCreateExecution,
+  })),
+  ID: { unique: () => 'gen-id' },
+  Query: {
+    equal: (field: string, value: string) => `${field}=${value}`,
+    greaterThan: (field: string, value: number) => `${field}>${value}`,
   },
+}));
+
+import main from '../../appwrite-functions/reminders-api/src/main';
+
+const DB = 'ai-note-keeper';
+const NOTES = 'notes';
+const EVENTS = 'noteChangeEvents';
+const USER = 'user-abc';
+const AUTH = withAuth(USER);
+
+const sampleDoc = {
+  $id: 'reminder-1',
+  userId: USER,
+  title: 'Test reminder',
+  triggerAt: 2000,
+  repeatRule: 'none',
+  repeatConfig: null,
+  repeat: null,
+  baseAtLocal: null,
+  startAt: null,
+  nextTriggerAt: 2000,
+  lastFiredAt: null,
+  lastAcknowledgedAt: null,
+  snoozedUntil: null,
+  active: true,
+  scheduleStatus: 'scheduled',
+  timezone: 'UTC',
+  version: 1,
+  updatedAt: 1000,
+  createdAt: 900,
+  done: false,
+  isPinned: false,
 };
 
-type HandlerConfig = {
-  handler: (...args: unknown[]) => unknown;
-  [key: string]: unknown;
-};
-
-type MockFn = jest.Mock<(...args: unknown[]) => unknown>;
-type AsyncMockFn = jest.Mock<(...args: unknown[]) => Promise<unknown>>;
-type Handler = (ctx: typeof mockCtx, args: Record<string, unknown>) => Promise<unknown>;
-
-const mockQuery: {
-  filter: MockFn;
-  first: AsyncMockFn;
-  collect: AsyncMockFn;
-  eq: MockFn;
-  field: MockFn;
-  gt: MockFn;
-} = {
-  filter: jest.fn().mockReturnThis(),
-  first: jest.fn(),
-  collect: jest.fn(),
-  eq: jest.fn(),
-  field: jest.fn(),
-  gt: jest.fn(),
-};
-
-// Mock convex/server
-const mockMutation = jest.fn((config: HandlerConfig) => {
-  return {
-    ...config,
-    _handler: config.handler,
-  };
+beforeEach(() => {
+  jest.clearAllMocks();
+  process.env.APPWRITE_FUNCTION_API_ENDPOINT = 'https://cloud.appwrite.io/v1';
+  process.env.APPWRITE_FUNCTION_API_KEY = 'test-key';
+  process.env.APPWRITE_FUNCTION_PROJECT_ID = 'test-project-id';
+  process.env.PUSH_FUNCTION_ID = 'push-fn-id';
+  mockCreateExecution.mockResolvedValue({ $id: 'exec-1' });
+  mockListDocuments.mockResolvedValue({ documents: [] });
+  mockCreateDocument.mockImplementation(
+    (_db: string, _col: string, id: string, data: unknown) =>
+      Promise.resolve({ $id: id, ...(data as object) }),
+  );
+  mockUpdateDocument.mockImplementation(
+    (_db: string, _col: string, id: string, data: unknown) =>
+      Promise.resolve({ ...sampleDoc, $id: id, ...(data as object) }),
+  );
+  mockDeleteDocument.mockResolvedValue({});
 });
 
-const mockQueryFunction = jest.fn((config: HandlerConfig) => {
-  return {
-    ...config,
-    _handler: config.handler,
-  };
-});
-
-jest.mock(
-  '../../convex/_generated/server',
-  () => ({
-    mutation: mockMutation,
-    query: mockQueryFunction,
-  }),
-  { virtual: true },
-);
-
-jest.mock(
-  '../../convex/_generated/api',
-  () => ({
-    internal: {
-      functions: {
-        push: {
-          sendPush: {},
-        },
-      },
-    },
-    api: {},
-  }),
-  { virtual: true },
-);
-
-// Import after mocking
-import { snoozeReminder } from '../../convex/functions/reminders';
-
-describe('snoozeReminder Contract', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    mockDb.query.mockReturnValue(mockQuery);
-    mockQuery.filter.mockReturnValue(mockQuery);
-  });
+describe('snoozeReminder (POST /:id/snooze)', () => {
+  const snoozeTime = 1700010000000;
 
   test('should update snoozedUntil and nextTriggerAt', async () => {
-    const snoozeTime = 1700010000000;
+    mockListDocuments.mockResolvedValue({ documents: [sampleDoc] });
 
-    // Setup: Active reminder
-    const existingReminder = {
-      _id: 'mock-id',
-      id: 'reminder-123',
-      userId: 'user-1',
-      title: 'Reminder to snooze',
-      active: true,
-      scheduleStatus: 'scheduled',
-      nextTriggerAt: 1700000000000,
-      snoozedUntil: null,
-      updatedAt: 1699999999000,
-    };
+    const { context, responses } = makeContext({
+      method: 'POST',
+      path: '/reminder-1/snooze',
+      headers: AUTH,
+      body: JSON.stringify({ snoozedUntil: snoozeTime }),
+    });
 
-    mockQuery.first.mockResolvedValue(existingReminder);
+    await main(context);
 
-    const handler = (snoozeReminder as unknown as { _handler: Handler })._handler;
-    const args = {
-      id: 'reminder-123',
-      snoozedUntil: snoozeTime,
-    };
-
-    await handler(mockCtx, args);
-
-    // Verify snoozedUntil was updated
-    expect(mockDb.patch).toHaveBeenCalledWith(
-      'mock-id',
+    expect(responses[0].status).toBe(200);
+    expect(mockUpdateDocument).toHaveBeenCalledWith(
+      DB,
+      NOTES,
+      'reminder-1',
       expect.objectContaining({
         snoozedUntil: snoozeTime,
         nextTriggerAt: snoozeTime,
-      }),
-    );
-
-    // Verify updatedAt was set
-    expect(mockDb.patch).toHaveBeenCalledWith(
-      'mock-id',
-      expect.objectContaining({
-        updatedAt: expect.any(Number),
-      }),
-    );
-  });
-
-  test('should set scheduleStatus to scheduled', async () => {
-    const snoozeTime = 1700010000000;
-
-    // Setup: Unscheduled reminder
-    const existingReminder = {
-      _id: 'mock-id',
-      id: 'reminder-unscheduled',
-      userId: 'user-1',
-      active: false,
-      scheduleStatus: 'unscheduled',
-      nextTriggerAt: null,
-      snoozedUntil: null,
-    };
-
-    mockQuery.first.mockResolvedValue(existingReminder);
-
-    const handler = (snoozeReminder as unknown as { _handler: Handler })._handler;
-    const args = {
-      id: 'reminder-unscheduled',
-      snoozedUntil: snoozeTime,
-    };
-
-    await handler(mockCtx, args);
-
-    // Verify scheduleStatus was set to scheduled
-    expect(mockDb.patch).toHaveBeenCalledWith(
-      'mock-id',
-      expect.objectContaining({
         scheduleStatus: 'scheduled',
-      }),
-    );
-  });
-
-  test('should set active to true', async () => {
-    const snoozeTime = 1700010000000;
-
-    // Setup: Inactive reminder
-    const existingReminder = {
-      _id: 'mock-id',
-      id: 'reminder-inactive',
-      userId: 'user-1',
-      active: false,
-      scheduleStatus: 'unscheduled',
-      nextTriggerAt: null,
-      snoozedUntil: null,
-    };
-
-    mockQuery.first.mockResolvedValue(existingReminder);
-
-    const handler = (snoozeReminder as unknown as { _handler: Handler })._handler;
-    const args = {
-      id: 'reminder-inactive',
-      snoozedUntil: snoozeTime,
-    };
-
-    await handler(mockCtx, args);
-
-    // Verify active was set to true
-    expect(mockDb.patch).toHaveBeenCalledWith(
-      'mock-id',
-      expect.objectContaining({
         active: true,
       }),
     );
   });
 
-  test('should emit change event with correct operation', async () => {
-    const snoozeTime = 1700010000000;
+  test('should activate inactive reminder on snooze', async () => {
+    const inactiveDoc = { ...sampleDoc, active: false, scheduleStatus: 'unscheduled' };
+    mockListDocuments.mockResolvedValue({ documents: [inactiveDoc] });
 
-    const existingReminder = {
-      _id: 'mock-id',
-      id: 'reminder-123',
-      userId: 'user-1',
-      active: true,
-      scheduleStatus: 'scheduled',
-      nextTriggerAt: 1700000000000,
-      snoozedUntil: null,
-    };
+    const { context } = makeContext({
+      method: 'POST',
+      path: '/reminder-1/snooze',
+      headers: AUTH,
+      body: JSON.stringify({ snoozedUntil: snoozeTime }),
+    });
 
-    mockQuery.first.mockResolvedValue(existingReminder);
+    await main(context);
 
-    const handler = (snoozeReminder as unknown as { _handler: Handler })._handler;
-    const args = {
-      id: 'reminder-123',
-      snoozedUntil: snoozeTime,
-    };
-
-    await handler(mockCtx, args);
-
-    // Verify change event was emitted
-    expect(mockDb.insert).toHaveBeenCalledWith(
-      'noteChangeEvents',
+    expect(mockUpdateDocument).toHaveBeenCalledWith(
+      DB,
+      NOTES,
+      'reminder-1',
       expect.objectContaining({
-        noteId: 'reminder-123',
+        active: true,
+        scheduleStatus: 'scheduled',
+      }),
+    );
+  });
+
+  test('should emit change event on snooze', async () => {
+    mockListDocuments.mockResolvedValue({ documents: [sampleDoc] });
+
+    const { context } = makeContext({
+      method: 'POST',
+      path: '/reminder-1/snooze',
+      headers: AUTH,
+      body: JSON.stringify({ snoozedUntil: snoozeTime }),
+    });
+
+    await main(context);
+
+    expect(mockCreateDocument).toHaveBeenCalledWith(
+      DB,
+      EVENTS,
+      expect.any(String),
+      expect.objectContaining({
         operation: 'update',
-        userId: 'user-1',
-        changedAt: expect.any(Number),
-        deviceId: 'web',
-        payloadHash: expect.any(String),
+        noteId: 'reminder-1',
+        userId: USER,
       }),
     );
   });
 
-  test('should trigger push notification', async () => {
-    const snoozeTime = 1700010000000;
+  test('should fire push notification on snooze', async () => {
+    mockListDocuments.mockResolvedValue({ documents: [sampleDoc] });
 
-    const existingReminder = {
-      _id: 'mock-id',
-      id: 'reminder-123',
-      userId: 'user-1',
-      active: true,
-      scheduleStatus: 'scheduled',
-      nextTriggerAt: 1700000000000,
-      snoozedUntil: null,
-    };
+    const { context } = makeContext({
+      method: 'POST',
+      path: '/reminder-1/snooze',
+      headers: AUTH,
+      body: JSON.stringify({ snoozedUntil: snoozeTime }),
+    });
 
-    mockQuery.first.mockResolvedValue(existingReminder);
-    mockDb.insert = jest.fn(async () => 'change-event-id-456') as unknown as typeof mockDb.insert;
+    await main(context);
 
-    const handler = (snoozeReminder as unknown as { _handler: Handler })._handler;
-    const args = {
-      id: 'reminder-123',
-      snoozedUntil: snoozeTime,
-      deviceId: 'mobile-device-2',
-    };
-
-    await handler(mockCtx, args);
-
-    // Verify scheduler was called with correct parameters
-    expect(mockCtx.scheduler.runAfter).toHaveBeenCalledWith(
-      0,
-      expect.anything(),
-      expect.objectContaining({
-        userId: 'user-1',
-        excludeDeviceId: 'mobile-device-2',
-        reminderId: 'reminder-123',
-        changeEventId: 'change-event-id-456',
-      }),
-    );
+    expect(mockCreateExecution).toHaveBeenCalled();
   });
 
-  test('should return null for non-existent reminder', async () => {
-    mockQuery.first.mockResolvedValue(null);
+  test('should return 404 when reminder not found', async () => {
+    mockListDocuments.mockResolvedValue({ documents: [] });
 
-    const handler = (snoozeReminder as unknown as { _handler: Handler })._handler;
-    const args = {
-      id: 'reminder-missing',
-      snoozedUntil: 1700010000000,
-    };
+    const { context, responses } = makeContext({
+      method: 'POST',
+      path: '/reminder-missing/snooze',
+      headers: AUTH,
+      body: JSON.stringify({ snoozedUntil: snoozeTime }),
+    });
 
-    const result = await handler(mockCtx, args);
+    await main(context);
 
-    // Verify nothing was patched
-    expect(mockDb.patch).not.toHaveBeenCalled();
-    expect(mockDb.insert).not.toHaveBeenCalled();
-    expect(mockCtx.scheduler.runAfter).not.toHaveBeenCalled();
-
-    // Verify null was returned
-    expect(result).toBeNull();
+    expect(responses[0].status).toBe(404);
+    expect(mockUpdateDocument).not.toHaveBeenCalled();
   });
 
-  test('should preserve recurrence configuration', async () => {
-    const snoozeTime = 1700010000000;
+  test('should return 400 when snoozedUntil missing', async () => {
+    mockListDocuments.mockResolvedValue({ documents: [sampleDoc] });
 
-    // Setup: Recurring reminder with full configuration
-    const existingReminder = {
-      _id: 'mock-id',
-      id: 'reminder-recurring',
-      userId: 'user-1',
-      repeat: { kind: 'daily', interval: 1 },
-      startAt: 1700000000000,
-      baseAtLocal: '2026-02-01T09:00:00',
-      active: true,
-      scheduleStatus: 'scheduled',
-      nextTriggerAt: 1700000000000,
-      snoozedUntil: null,
-    };
+    const { context, responses } = makeContext({
+      method: 'POST',
+      path: '/reminder-1/snooze',
+      headers: AUTH,
+      body: JSON.stringify({}),
+    });
 
-    mockQuery.first.mockResolvedValue(existingReminder);
+    await main(context);
 
-    const handler = (snoozeReminder as unknown as { _handler: Handler })._handler;
-    const args = {
-      id: 'reminder-recurring',
-      snoozedUntil: snoozeTime,
-    };
-
-    await handler(mockCtx, args);
-
-    // Verify recurrence fields were NOT modified
-    // The patch should only include: snoozedUntil, updatedAt, nextTriggerAt, scheduleStatus, active
-    expect(mockDb.patch).toHaveBeenCalledWith(
-      'mock-id',
-      expect.objectContaining({
-        snoozedUntil: snoozeTime,
-        nextTriggerAt: snoozeTime,
-        scheduleStatus: 'scheduled',
-        active: true,
-      }),
-    );
-
-    // Verify repeat, startAt, baseAtLocal are NOT in the patch
-    const patchCall = mockDb.patch.mock.calls[0][1];
-    expect(patchCall).not.toHaveProperty('repeat');
-    expect(patchCall).not.toHaveProperty('startAt');
-    expect(patchCall).not.toHaveProperty('baseAtLocal');
+    expect(responses[0].status).toBe(400);
   });
 
-  test('should handle snoozing already-snoozed reminder', async () => {
+  test('should re-snooze already-snoozed reminder', async () => {
     const originalSnooze = 1700005000000;
     const newSnooze = 1700010000000;
+    const snoozedDoc = { ...sampleDoc, snoozedUntil: originalSnooze };
+    mockListDocuments.mockResolvedValue({ documents: [snoozedDoc] });
 
-    // Setup: Already snoozed reminder
-    const existingReminder = {
-      _id: 'mock-id',
-      id: 'reminder-snoozed',
-      userId: 'user-1',
-      active: true,
-      scheduleStatus: 'scheduled',
-      nextTriggerAt: originalSnooze,
-      snoozedUntil: originalSnooze, // Already snoozed
-    };
+    const { context } = makeContext({
+      method: 'POST',
+      path: '/reminder-1/snooze',
+      headers: AUTH,
+      body: JSON.stringify({ snoozedUntil: newSnooze }),
+    });
 
-    mockQuery.first.mockResolvedValue(existingReminder);
+    await main(context);
 
-    const handler = (
-      snoozeReminder as unknown as {
-        _handler: (ctx: typeof mockCtx, args: Record<string, unknown>) => Promise<unknown>;
-      }
-    )._handler;
-    const args = {
-      id: 'reminder-snoozed',
-      snoozedUntil: newSnooze,
-    };
-
-    await handler(mockCtx, args);
-
-    // Verify snoozedUntil was updated to new value
-    expect(mockDb.patch).toHaveBeenCalledWith(
-      'mock-id',
+    expect(mockUpdateDocument).toHaveBeenCalledWith(
+      DB,
+      NOTES,
+      'reminder-1',
       expect.objectContaining({
         snoozedUntil: newSnooze,
         nextTriggerAt: newSnooze,

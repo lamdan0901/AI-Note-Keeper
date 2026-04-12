@@ -1,40 +1,5 @@
 import { beforeEach, describe, expect, jest, test } from '@jest/globals';
-
-type HandlerConfig = {
-  handler: (...args: unknown[]) => unknown;
-  [key: string]: unknown;
-};
-
-type Handler = (ctx: Record<string, never>, args: Record<string, unknown>) => Promise<unknown>;
-
-const mockAction = jest.fn((config: HandlerConfig) => ({
-  ...config,
-  _handler: config.handler,
-}));
-
-jest.mock(
-  '../../convex/_generated/server',
-  () => ({
-    action: mockAction,
-  }),
-  { virtual: true },
-);
-
-jest.mock(
-  'convex/values',
-  () => {
-    const v: Record<string, jest.Mock> = {};
-    const pass = () => ({});
-    ['string', 'number', 'boolean', 'any', 'null'].forEach((k) => (v[k] = jest.fn(pass)));
-    v['optional'] = jest.fn(pass);
-    v['union'] = jest.fn(pass);
-    v['array'] = jest.fn(pass);
-    v['object'] = jest.fn(pass);
-    v['literal'] = jest.fn(pass);
-    return { v };
-  },
-  { virtual: true },
-);
+import { makeContext } from '../helpers/makeContext';
 
 type FetchResponse = {
   ok: boolean;
@@ -50,10 +15,9 @@ Object.defineProperty(globalThis, 'fetch', {
   writable: true,
 });
 
-import {
-  continueVoiceClarification,
-  parseVoiceNoteIntent,
-} from '../../convex/functions/aiNoteCapture';
+import main from '../../appwrite-functions/ai-voice-capture/src/main';
+
+const AUTH_HEADER = { 'x-appwrite-user-id': 'user-1' };
 
 const baseRequest = {
   transcript: 'Remind me to call mom tomorrow at 7',
@@ -63,6 +27,24 @@ const baseRequest = {
   locale: 'en-US',
   sessionId: 'session-1',
 };
+
+function callParse(bodyOverrides: Record<string, unknown> = {}) {
+  return makeContext({
+    method: 'POST',
+    path: '/parse',
+    body: JSON.stringify({ ...baseRequest, ...bodyOverrides }),
+    headers: AUTH_HEADER,
+  });
+}
+
+function callClarify(body: Record<string, unknown>) {
+  return makeContext({
+    method: 'POST',
+    path: '/clarify',
+    body: JSON.stringify(body),
+    headers: AUTH_HEADER,
+  });
+}
 
 describe('aiNoteCapture Contract', () => {
   beforeEach(() => {
@@ -74,9 +56,9 @@ describe('aiNoteCapture Contract', () => {
   });
 
   test('returns deterministic transcript fallback when provider is not configured', async () => {
-    const handler = (parseVoiceNoteIntent as unknown as { _handler: Handler })._handler;
-
-    const result = (await handler({}, baseRequest)) as {
+    const { context, responses } = callParse();
+    await main(context as never);
+    const result = responses[0].data as {
       draft: {
         content: string | null;
         keepTranscriptInContent: boolean;
@@ -95,15 +77,11 @@ describe('aiNoteCapture Contract', () => {
   });
 
   test('extracts reminder time from explicit tomorrow + PM phrase when provider is not configured', async () => {
-    const handler = (parseVoiceNoteIntent as unknown as { _handler: Handler })._handler;
-
-    const result = (await handler(
-      {},
-      {
-        ...baseRequest,
-        transcript: 'remind me to eat a bread at tomorrow 7 pm',
-      },
-    )) as {
+    const { context, responses } = callParse({
+      transcript: 'remind me to eat a bread at tomorrow 7 pm',
+    });
+    await main(context as never);
+    const result = responses[0].data as {
       draft: {
         content: string | null;
         reminderAtEpochMs: number | null;
@@ -120,147 +98,68 @@ describe('aiNoteCapture Contract', () => {
 
   describe('generalized deterministic extraction', () => {
     test('extracts title from reminder command when provider is not configured', async () => {
-      const handler = (parseVoiceNoteIntent as unknown as { _handler: Handler })._handler;
-
-      const result = (await handler(
-        {},
-        {
-          ...baseRequest,
-          transcript: 'remind me to submit tax report tomorrow at 9 am',
-        },
-      )) as {
-        draft: {
-          title: string | null;
-        };
-      };
-
+      const { context, responses } = callParse({
+        transcript: 'remind me to submit tax report tomorrow at 9 am',
+      });
+      await main(context as never);
+      const result = responses[0].data as { draft: { title: string | null } };
       expect(result.draft.title).toBe('Submit tax report');
     });
 
     test("supports misspelled 'tommorow' for deterministic reminder extraction", async () => {
-      const handler = (parseVoiceNoteIntent as unknown as { _handler: Handler })._handler;
-
-      const result = (await handler(
-        {},
-        {
-          ...baseRequest,
-          transcript: 'remind me to call mom tommorow at 7 pm',
-        },
-      )) as {
-        draft: {
-          reminderAtEpochMs: number | null;
-        };
-      };
-
+      const { context, responses } = callParse({
+        transcript: 'remind me to call mom tommorow at 7 pm',
+      });
+      await main(context as never);
+      const result = responses[0].data as { draft: { reminderAtEpochMs: number | null } };
       expect(result.draft.reminderAtEpochMs).toBe(1_700_074_800_000);
     });
 
     test("extracts reminder time from '7:00 p.m. tomorrow' phrase", async () => {
-      const handler = (parseVoiceNoteIntent as unknown as { _handler: Handler })._handler;
-
-      const result = (await handler(
-        {},
-        {
-          ...baseRequest,
-          transcript: 'do exercise 7:00 p.m. tomorrow',
-        },
-      )) as {
-        draft: {
-          reminderAtEpochMs: number | null;
-        };
-      };
-
+      const { context, responses } = callParse({ transcript: 'do exercise 7:00 p.m. tomorrow' });
+      await main(context as never);
+      const result = responses[0].data as { draft: { reminderAtEpochMs: number | null } };
       expect(result.draft.reminderAtEpochMs).toBe(1_700_074_800_000);
     });
 
     test("extracts reminder time from 'tomorrow 7:00 p.m.' phrase", async () => {
-      const handler = (parseVoiceNoteIntent as unknown as { _handler: Handler })._handler;
-
-      const result = (await handler(
-        {},
-        {
-          ...baseRequest,
-          transcript: 'do exercise tomorrow 7:00 p.m.',
-        },
-      )) as {
-        draft: {
-          reminderAtEpochMs: number | null;
-        };
-      };
-
+      const { context, responses } = callParse({ transcript: 'do exercise tomorrow 7:00 p.m.' });
+      await main(context as never);
+      const result = responses[0].data as { draft: { reminderAtEpochMs: number | null } };
       expect(result.draft.reminderAtEpochMs).toBe(1_700_074_800_000);
     });
 
     test("extracts reminder time from '7:00 a.m. tomorrow' phrase", async () => {
-      const handler = (parseVoiceNoteIntent as unknown as { _handler: Handler })._handler;
-
-      const result = (await handler(
-        {},
-        {
-          ...baseRequest,
-          transcript: 'do exercise 7:00 a.m. tomorrow',
-        },
-      )) as {
-        draft: {
-          reminderAtEpochMs: number | null;
-        };
-      };
-
+      const { context, responses } = callParse({ transcript: 'do exercise 7:00 a.m. tomorrow' });
+      await main(context as never);
+      const result = responses[0].data as { draft: { reminderAtEpochMs: number | null } };
       expect(result.draft.reminderAtEpochMs).toBe(1_700_031_600_000);
     });
 
     test("extracts reminder time from 'tomorrow 7:00 a.m.' phrase", async () => {
-      const handler = (parseVoiceNoteIntent as unknown as { _handler: Handler })._handler;
-
-      const result = (await handler(
-        {},
-        {
-          ...baseRequest,
-          transcript: 'do exercise tomorrow 7:00 a.m.',
-        },
-      )) as {
-        draft: {
-          reminderAtEpochMs: number | null;
-        };
-      };
-
+      const { context, responses } = callParse({ transcript: 'do exercise tomorrow 7:00 a.m.' });
+      await main(context as never);
+      const result = responses[0].data as { draft: { reminderAtEpochMs: number | null } };
       expect(result.draft.reminderAtEpochMs).toBe(1_700_031_600_000);
     });
 
     test('extracts reminder time from 24-hour tomorrow phrase', async () => {
-      const handler = (parseVoiceNoteIntent as unknown as { _handler: Handler })._handler;
-
-      const result = (await handler(
-        {},
-        {
-          ...baseRequest,
-          transcript: 'remind me to call mom tomorrow at 19:30',
-        },
-      )) as {
-        draft: {
-          reminderAtEpochMs: number | null;
-        };
-      };
-
+      const { context, responses } = callParse({
+        transcript: 'remind me to call mom tomorrow at 19:30',
+      });
+      await main(context as never);
+      const result = responses[0].data as { draft: { reminderAtEpochMs: number | null } };
       expect(result.draft.reminderAtEpochMs).toBe(1_700_076_600_000);
     });
 
     test('extracts repeat daily rule from reminder command', async () => {
-      const handler = (parseVoiceNoteIntent as unknown as { _handler: Handler })._handler;
-
-      const result = (await handler(
-        {},
-        {
-          ...baseRequest,
-          transcript: 'remind me to take vitamins tomorrow at 7 pm every day',
-        },
-      )) as {
-        draft: {
-          reminderAtEpochMs: number | null;
-          repeat: unknown;
-        };
+      const { context, responses } = callParse({
+        transcript: 'remind me to take vitamins tomorrow at 7 pm every day',
+      });
+      await main(context as never);
+      const result = responses[0].data as {
+        draft: { reminderAtEpochMs: number | null; repeat: unknown };
       };
-
       expect(result.draft.reminderAtEpochMs).toBe(1_700_074_800_000);
       expect(result.draft.repeat).toEqual({ kind: 'daily', interval: 1 });
     });
@@ -279,17 +178,8 @@ describe('aiNoteCapture Contract', () => {
           keepTranscriptInContent: false,
           normalizedTranscript: 'remind me to take vitamins tomorrow at 7 pm every day',
         },
-        confidence: {
-          title: 0.1,
-          content: 0.95,
-          reminder: 0.1,
-          repeat: 0.1,
-        },
-        clarification: {
-          required: false,
-          question: null,
-          missingFields: [],
-        },
+        confidence: { title: 0.1, content: 0.95, reminder: 0.1, repeat: 0.1 },
+        clarification: { required: false, question: null, missingFields: [] },
       };
 
       mockFetch.mockResolvedValue({
@@ -297,35 +187,18 @@ describe('aiNoteCapture Contract', () => {
         status: 200,
         headers: new Headers({ 'content-type': 'application/json' }),
         json: async () => ({
-          choices: [
-            {
-              message: { content: JSON.stringify(providerPayload) },
-            },
-          ],
+          choices: [{ message: { content: JSON.stringify(providerPayload) } }],
         }),
         text: async () =>
-          JSON.stringify({
-            choices: [
-              {
-                message: { content: JSON.stringify(providerPayload) },
-              },
-            ],
-          }),
+          JSON.stringify({ choices: [{ message: { content: JSON.stringify(providerPayload) } }] }),
       });
 
-      const handler = (parseVoiceNoteIntent as unknown as { _handler: Handler })._handler;
-      const result = (await handler(
-        {},
-        {
-          ...baseRequest,
-          transcript: 'remind me to take vitamins tomorrow at 7 pm every day',
-        },
-      )) as {
-        draft: {
-          title: string | null;
-          reminderAtEpochMs: number | null;
-          repeat: unknown;
-        };
+      const { context, responses } = callParse({
+        transcript: 'remind me to take vitamins tomorrow at 7 pm every day',
+      });
+      await main(context as never);
+      const result = responses[0].data as {
+        draft: { title: string | null; reminderAtEpochMs: number | null; repeat: unknown };
       };
 
       expect(result.draft.title).toBe(null);
@@ -348,17 +221,8 @@ describe('aiNoteCapture Contract', () => {
         keepTranscriptInContent: false,
         normalizedTranscript: 'Remind me to call mom tomorrow at 7',
       },
-      confidence: {
-        title: 0.93,
-        content: 0.42,
-        reminder: 0.88,
-        repeat: 0.91,
-      },
-      clarification: {
-        required: false,
-        question: null,
-        missingFields: [],
-      },
+      confidence: { title: 0.93, content: 0.42, reminder: 0.88, repeat: 0.91 },
+      clarification: { required: false, question: null, missingFields: [] },
     };
 
     mockFetch.mockResolvedValue({
@@ -366,24 +230,15 @@ describe('aiNoteCapture Contract', () => {
       status: 200,
       headers: new Headers({ 'content-type': 'application/json' }),
       json: async () => ({
-        choices: [
-          {
-            message: { content: JSON.stringify(providerPayload) },
-          },
-        ],
+        choices: [{ message: { content: JSON.stringify(providerPayload) } }],
       }),
       text: async () =>
-        JSON.stringify({
-          choices: [
-            {
-              message: { content: JSON.stringify(providerPayload) },
-            },
-          ],
-        }),
+        JSON.stringify({ choices: [{ message: { content: JSON.stringify(providerPayload) } }] }),
     });
 
-    const handler = (parseVoiceNoteIntent as unknown as { _handler: Handler })._handler;
-    const result = (await handler({}, baseRequest)) as {
+    const { context, responses } = callParse();
+    await main(context as never);
+    const result = responses[0].data as {
       draft: {
         keepTranscriptInContent: boolean;
         reminderAtEpochMs: number | null;
@@ -410,12 +265,7 @@ describe('aiNoteCapture Contract', () => {
         keepTranscriptInContent: false,
         normalizedTranscript: 'Remind me to call mom tomorrow at 7',
       },
-      confidence: {
-        title: 0.93,
-        content: 0.93,
-        reminder: 0.9,
-        repeat: 0.2,
-      },
+      confidence: { title: 0.93, content: 0.93, reminder: 0.9, repeat: 0.2 },
       clarification: {
         required: true,
         question: 'Should this reminder repeat, and how often?',
@@ -428,29 +278,16 @@ describe('aiNoteCapture Contract', () => {
       status: 200,
       headers: new Headers({ 'content-type': 'application/json' }),
       json: async () => ({
-        choices: [
-          {
-            message: { content: JSON.stringify(providerPayload) },
-          },
-        ],
+        choices: [{ message: { content: JSON.stringify(providerPayload) } }],
       }),
       text: async () =>
-        JSON.stringify({
-          choices: [
-            {
-              message: { content: JSON.stringify(providerPayload) },
-            },
-          ],
-        }),
+        JSON.stringify({ choices: [{ message: { content: JSON.stringify(providerPayload) } }] }),
     });
 
-    const handler = (parseVoiceNoteIntent as unknown as { _handler: Handler })._handler;
-    const result = (await handler({}, baseRequest)) as {
-      clarification: {
-        required: boolean;
-        question: string | null;
-        missingFields: string[];
-      };
+    const { context, responses } = callParse();
+    await main(context as never);
+    const result = responses[0].data as {
+      clarification: { required: boolean; question: string | null; missingFields: string[] };
     };
 
     expect(result.clarification.required).toBe(false);
@@ -467,20 +304,12 @@ describe('aiNoteCapture Contract', () => {
       draft: {
         title: 'Call mom',
         content: 'Call mom tomorrow morning',
-        reminder: {
-          date: '2020-01-01',
-          time: '07:00',
-        },
+        reminder: { date: '2020-01-01', time: '07:00' },
         repeat: null,
         keepTranscriptInContent: false,
         normalizedTranscript: 'Remind me to call mom tomorrow at 7',
       },
-      confidence: {
-        title: 0.93,
-        content: 0.93,
-        reminder: 0.9,
-        repeat: 0.2,
-      },
+      confidence: { title: 0.93, content: 0.93, reminder: 0.9, repeat: 0.2 },
       clarification: {
         required: true,
         question: 'Should this reminder repeat, and how often?',
@@ -493,29 +322,16 @@ describe('aiNoteCapture Contract', () => {
       status: 200,
       headers: new Headers({ 'content-type': 'application/json' }),
       json: async () => ({
-        choices: [
-          {
-            message: { content: JSON.stringify(providerPayload) },
-          },
-        ],
+        choices: [{ message: { content: JSON.stringify(providerPayload) } }],
       }),
       text: async () =>
-        JSON.stringify({
-          choices: [
-            {
-              message: { content: JSON.stringify(providerPayload) },
-            },
-          ],
-        }),
+        JSON.stringify({ choices: [{ message: { content: JSON.stringify(providerPayload) } }] }),
     });
 
-    const handler = (parseVoiceNoteIntent as unknown as { _handler: Handler })._handler;
-    const result = (await handler({}, baseRequest)) as {
-      clarification: {
-        required: boolean;
-        question: string | null;
-        missingFields: string[];
-      };
+    const { context, responses } = callParse();
+    await main(context as never);
+    const result = responses[0].data as {
+      clarification: { required: boolean; question: string | null; missingFields: string[] };
     };
 
     expect(result.clarification.required).toBe(true);
@@ -537,17 +353,8 @@ describe('aiNoteCapture Contract', () => {
         keepTranscriptInContent: false,
         normalizedTranscript: 'remind me to eat a bread at tomorrow 7 pm',
       },
-      confidence: {
-        title: 0.93,
-        content: 0.9,
-        reminder: 0.2,
-        repeat: 0,
-      },
-      clarification: {
-        required: false,
-        question: null,
-        missingFields: [],
-      },
+      confidence: { title: 0.93, content: 0.9, reminder: 0.2, repeat: 0 },
+      clarification: { required: false, question: null, missingFields: [] },
     };
 
     mockFetch.mockResolvedValue({
@@ -555,34 +362,18 @@ describe('aiNoteCapture Contract', () => {
       status: 200,
       headers: new Headers({ 'content-type': 'application/json' }),
       json: async () => ({
-        choices: [
-          {
-            message: { content: JSON.stringify(providerPayload) },
-          },
-        ],
+        choices: [{ message: { content: JSON.stringify(providerPayload) } }],
       }),
       text: async () =>
-        JSON.stringify({
-          choices: [
-            {
-              message: { content: JSON.stringify(providerPayload) },
-            },
-          ],
-        }),
+        JSON.stringify({ choices: [{ message: { content: JSON.stringify(providerPayload) } }] }),
     });
 
-    const handler = (parseVoiceNoteIntent as unknown as { _handler: Handler })._handler;
-    const result = (await handler(
-      {},
-      {
-        ...baseRequest,
-        transcript: 'remind me to eat a bread at tomorrow 7 pm',
-      },
-    )) as {
-      draft: {
-        reminderAtEpochMs: number | null;
-        repeat: unknown;
-      };
+    const { context, responses } = callParse({
+      transcript: 'remind me to eat a bread at tomorrow 7 pm',
+    });
+    await main(context as never);
+    const result = responses[0].data as {
+      draft: { reminderAtEpochMs: number | null; repeat: unknown };
     };
 
     expect(result.draft.reminderAtEpochMs).toBe(1_700_074_800_000);
@@ -603,17 +394,8 @@ describe('aiNoteCapture Contract', () => {
         keepTranscriptInContent: false,
         normalizedTranscript: 'remind me to eat a bread at tomorrow 7 pm',
       },
-      confidence: {
-        title: 0.93,
-        content: 0.9,
-        reminder: 0.2,
-        repeat: 0,
-      },
-      clarification: {
-        required: false,
-        question: null,
-        missingFields: [],
-      },
+      confidence: { title: 0.93, content: 0.9, reminder: 0.2, repeat: 0 },
+      clarification: { required: false, question: null, missingFields: [] },
     };
 
     mockFetch.mockResolvedValue({
@@ -621,34 +403,15 @@ describe('aiNoteCapture Contract', () => {
       status: 200,
       headers: new Headers({ 'content-type': 'application/json' }),
       json: async () => ({
-        choices: [
-          {
-            message: { content: JSON.stringify(providerPayload) },
-          },
-        ],
+        choices: [{ message: { content: JSON.stringify(providerPayload) } }],
       }),
       text: async () =>
-        JSON.stringify({
-          choices: [
-            {
-              message: { content: JSON.stringify(providerPayload) },
-            },
-          ],
-        }),
+        JSON.stringify({ choices: [{ message: { content: JSON.stringify(providerPayload) } }] }),
     });
 
-    const handler = (parseVoiceNoteIntent as unknown as { _handler: Handler })._handler;
-    const result = (await handler(
-      {},
-      {
-        ...baseRequest,
-        transcript: 'buy milk and eggs',
-      },
-    )) as {
-      draft: {
-        reminderAtEpochMs: number | null;
-      };
-    };
+    const { context, responses } = callParse({ transcript: 'buy milk and eggs' });
+    await main(context as never);
+    const result = responses[0].data as { draft: { reminderAtEpochMs: number | null } };
 
     expect(result.draft.reminderAtEpochMs).toBeNull();
   });
@@ -667,17 +430,8 @@ describe('aiNoteCapture Contract', () => {
         keepTranscriptInContent: false,
         normalizedTranscript: 'malicious provider transcript content',
       },
-      confidence: {
-        title: 0.9,
-        content: 0.9,
-        reminder: 0,
-        repeat: 0,
-      },
-      clarification: {
-        required: false,
-        question: null,
-        missingFields: [],
-      },
+      confidence: { title: 0.9, content: 0.9, reminder: 0, repeat: 0 },
+      clarification: { required: false, question: null, missingFields: [] },
     };
 
     mockFetch.mockResolvedValue({
@@ -685,35 +439,16 @@ describe('aiNoteCapture Contract', () => {
       status: 200,
       headers: new Headers({ 'content-type': 'application/json' }),
       json: async () => ({
-        choices: [
-          {
-            message: { content: JSON.stringify(providerPayload) },
-          },
-        ],
+        choices: [{ message: { content: JSON.stringify(providerPayload) } }],
       }),
       text: async () =>
-        JSON.stringify({
-          choices: [
-            {
-              message: { content: JSON.stringify(providerPayload) },
-            },
-          ],
-        }),
+        JSON.stringify({ choices: [{ message: { content: JSON.stringify(providerPayload) } }] }),
     });
 
-    const handler = (parseVoiceNoteIntent as unknown as { _handler: Handler })._handler;
-    const result = (await handler(
-      {},
-      {
-        ...baseRequest,
-        transcript: 'buy milk and eggs',
-      },
-    )) as {
-      draft: {
-        title: string | null;
-        content: string | null;
-        normalizedTranscript: string;
-      };
+    const { context, responses } = callParse({ transcript: 'buy milk and eggs' });
+    await main(context as never);
+    const result = responses[0].data as {
+      draft: { title: string | null; content: string | null; normalizedTranscript: string };
     };
 
     expect(result.draft.title).toBe('Buy milk');
@@ -722,20 +457,12 @@ describe('aiNoteCapture Contract', () => {
   });
 
   test('handles invalid timezone safely when transcript contains tomorrow + PM phrase', async () => {
-    const handler = (parseVoiceNoteIntent as unknown as { _handler: Handler })._handler;
-
-    const result = (await handler(
-      {},
-      {
-        ...baseRequest,
-        transcript: 'remind me to eat a bread at tomorrow 7 pm',
-        timezone: 'Invalid/Timezone',
-      },
-    )) as {
-      draft: {
-        reminderAtEpochMs: number | null;
-      };
-    };
+    const { context, responses } = callParse({
+      transcript: 'remind me to eat a bread at tomorrow 7 pm',
+      timezone: 'Invalid/Timezone',
+    });
+    await main(context as never);
+    const result = responses[0].data as { draft: { reminderAtEpochMs: number | null } };
 
     expect(result.draft.reminderAtEpochMs).toBeNull();
   });
@@ -754,17 +481,8 @@ describe('aiNoteCapture Contract', () => {
         keepTranscriptInContent: false,
         normalizedTranscript: '',
       },
-      confidence: {
-        title: 0.3,
-        content: 0.1,
-        reminder: 0.7,
-        repeat: 0.8,
-      },
-      clarification: {
-        required: false,
-        question: null,
-        missingFields: [],
-      },
+      confidence: { title: 0.3, content: 0.1, reminder: 0.7, repeat: 0.8 },
+      clarification: { required: false, question: null, missingFields: [] },
     };
 
     mockFetch.mockResolvedValue({
@@ -772,24 +490,15 @@ describe('aiNoteCapture Contract', () => {
       status: 200,
       headers: new Headers({ 'content-type': 'application/json' }),
       json: async () => ({
-        choices: [
-          {
-            message: { content: JSON.stringify(providerPayload) },
-          },
-        ],
+        choices: [{ message: { content: JSON.stringify(providerPayload) } }],
       }),
       text: async () =>
-        JSON.stringify({
-          choices: [
-            {
-              message: { content: JSON.stringify(providerPayload) },
-            },
-          ],
-        }),
+        JSON.stringify({ choices: [{ message: { content: JSON.stringify(providerPayload) } }] }),
     });
 
-    const handler = (parseVoiceNoteIntent as unknown as { _handler: Handler })._handler;
-    const result = (await handler({}, baseRequest)) as {
+    const { context, responses } = callParse();
+    await main(context as never);
+    const result = responses[0].data as {
       draft: {
         title: string | null;
         content: string | null;
@@ -815,25 +524,13 @@ describe('aiNoteCapture Contract', () => {
       draft: {
         title: null,
         content: 'jogging',
-        reminder: {
-          date: '2020-01-01',
-          time: '19:00',
-        },
+        reminder: { date: '2020-01-01', time: '19:00' },
         repeat: { kind: 'weekly', interval: 1, weekdays: [6, 0] },
         keepTranscriptInContent: false,
         normalizedTranscript: 'tomorrow 7:00 p.m. repeat every Saturday and Sunday jogging',
       },
-      confidence: {
-        title: 0.2,
-        content: 0.8,
-        reminder: 0.9,
-        repeat: 0.9,
-      },
-      clarification: {
-        required: false,
-        question: null,
-        missingFields: [],
-      },
+      confidence: { title: 0.2, content: 0.8, reminder: 0.9, repeat: 0.9 },
+      clarification: { required: false, question: null, missingFields: [] },
     };
 
     mockFetch.mockResolvedValue({
@@ -841,38 +538,19 @@ describe('aiNoteCapture Contract', () => {
       status: 200,
       headers: new Headers({ 'content-type': 'application/json' }),
       json: async () => ({
-        choices: [
-          {
-            message: { content: JSON.stringify(providerPayload) },
-          },
-        ],
+        choices: [{ message: { content: JSON.stringify(providerPayload) } }],
       }),
       text: async () =>
-        JSON.stringify({
-          choices: [
-            {
-              message: { content: JSON.stringify(providerPayload) },
-            },
-          ],
-        }),
+        JSON.stringify({ choices: [{ message: { content: JSON.stringify(providerPayload) } }] }),
     });
 
-    const handler = (parseVoiceNoteIntent as unknown as { _handler: Handler })._handler;
-    const result = (await handler(
-      {},
-      {
-        ...baseRequest,
-        transcript: 'tomorrow 7:00 p.m. repeat every Saturday and Sunday jogging',
-      },
-    )) as {
-      draft: {
-        reminderAtEpochMs: number | null;
-        repeat: unknown;
-      };
-      clarification: {
-        required: boolean;
-        missingFields: string[];
-      };
+    const { context, responses } = callParse({
+      transcript: 'tomorrow 7:00 p.m. repeat every Saturday and Sunday jogging',
+    });
+    await main(context as never);
+    const result = responses[0].data as {
+      draft: { reminderAtEpochMs: number | null; repeat: unknown };
+      clarification: { required: boolean; missingFields: string[] };
     };
 
     expect(result.draft.reminderAtEpochMs).toBe(1_700_074_800_000);
@@ -889,25 +567,13 @@ describe('aiNoteCapture Contract', () => {
       draft: {
         title: null,
         content: 'jogging',
-        reminder: {
-          date: '2026-02-31',
-          time: '19:00',
-        },
+        reminder: { date: '2026-02-31', time: '19:00' },
         repeat: { kind: 'weekly', interval: 1, weekdays: [6, 0] },
         keepTranscriptInContent: false,
         normalizedTranscript: 'tomorrow 7:00 p.m. repeat every Saturday and Sunday jogging',
       },
-      confidence: {
-        title: 0.2,
-        content: 0.8,
-        reminder: 0.9,
-        repeat: 0.9,
-      },
-      clarification: {
-        required: false,
-        question: null,
-        missingFields: [],
-      },
+      confidence: { title: 0.2, content: 0.8, reminder: 0.9, repeat: 0.9 },
+      clarification: { required: false, question: null, missingFields: [] },
     };
 
     mockFetch.mockResolvedValue({
@@ -915,38 +581,19 @@ describe('aiNoteCapture Contract', () => {
       status: 200,
       headers: new Headers({ 'content-type': 'application/json' }),
       json: async () => ({
-        choices: [
-          {
-            message: { content: JSON.stringify(providerPayload) },
-          },
-        ],
+        choices: [{ message: { content: JSON.stringify(providerPayload) } }],
       }),
       text: async () =>
-        JSON.stringify({
-          choices: [
-            {
-              message: { content: JSON.stringify(providerPayload) },
-            },
-          ],
-        }),
+        JSON.stringify({ choices: [{ message: { content: JSON.stringify(providerPayload) } }] }),
     });
 
-    const handler = (parseVoiceNoteIntent as unknown as { _handler: Handler })._handler;
-    const result = (await handler(
-      {},
-      {
-        ...baseRequest,
-        transcript: 'tomorrow 7:00 p.m. repeat every Saturday and Sunday jogging',
-      },
-    )) as {
-      draft: {
-        reminderAtEpochMs: number | null;
-        repeat: unknown;
-      };
-      clarification: {
-        required: boolean;
-        missingFields: string[];
-      };
+    const { context, responses } = callParse({
+      transcript: 'tomorrow 7:00 p.m. repeat every Saturday and Sunday jogging',
+    });
+    await main(context as never);
+    const result = responses[0].data as {
+      draft: { reminderAtEpochMs: number | null; repeat: unknown };
+      clarification: { required: boolean; missingFields: string[] };
     };
 
     expect(result.draft.reminderAtEpochMs).toBe(1_700_074_800_000);
@@ -963,25 +610,13 @@ describe('aiNoteCapture Contract', () => {
       draft: {
         title: null,
         content: 'have breakfast',
-        reminder: {
-          date: '2020-01-01',
-          time: '07:00',
-        },
+        reminder: { date: '2020-01-01', time: '07:00' },
         repeat: null,
         keepTranscriptInContent: false,
         normalizedTranscript: 'have breakfast tomorrow morning',
       },
-      confidence: {
-        title: 0.2,
-        content: 0.8,
-        reminder: 0.9,
-        repeat: 0.1,
-      },
-      clarification: {
-        required: false,
-        question: null,
-        missingFields: [],
-      },
+      confidence: { title: 0.2, content: 0.8, reminder: 0.9, repeat: 0.1 },
+      clarification: { required: false, question: null, missingFields: [] },
     };
 
     mockFetch.mockResolvedValue({
@@ -989,37 +624,17 @@ describe('aiNoteCapture Contract', () => {
       status: 200,
       headers: new Headers({ 'content-type': 'application/json' }),
       json: async () => ({
-        choices: [
-          {
-            message: { content: JSON.stringify(providerPayload) },
-          },
-        ],
+        choices: [{ message: { content: JSON.stringify(providerPayload) } }],
       }),
       text: async () =>
-        JSON.stringify({
-          choices: [
-            {
-              message: { content: JSON.stringify(providerPayload) },
-            },
-          ],
-        }),
+        JSON.stringify({ choices: [{ message: { content: JSON.stringify(providerPayload) } }] }),
     });
 
-    const handler = (parseVoiceNoteIntent as unknown as { _handler: Handler })._handler;
-    const result = (await handler(
-      {},
-      {
-        ...baseRequest,
-        transcript: 'have breakfast tomorrow morning',
-      },
-    )) as {
-      draft: {
-        reminderAtEpochMs: number | null;
-      };
-      clarification: {
-        required: boolean;
-        missingFields: string[];
-      };
+    const { context, responses } = callParse({ transcript: 'have breakfast tomorrow morning' });
+    await main(context as never);
+    const result = responses[0].data as {
+      draft: { reminderAtEpochMs: number | null };
+      clarification: { required: boolean; missingFields: string[] };
     };
 
     expect(result.draft.reminderAtEpochMs).toBeNull();
@@ -1037,33 +652,27 @@ describe('aiNoteCapture Contract', () => {
       status: 200,
       headers: new Headers({ 'content-type': 'application/json' }),
       json: async () => ({
-        choices: [
-          {
-            message: { content: '{}' },
-          },
-        ],
+        choices: [{ message: { content: '{}' } }],
       }),
       text: async () => '{not-json',
     });
 
-    const handler = (continueVoiceClarification as unknown as { _handler: Handler })._handler;
-    const result = (await handler(
-      {},
-      {
-        sessionId: 'session-1',
-        clarificationAnswer: '7 PM',
-        timezone: 'UTC',
-        nowEpochMs: 1_700_000_000_000,
-        priorDraft: {
-          title: 'Call mom',
-          content: 'Call mom',
-          reminderAtEpochMs: 1_700_003_600_000,
-          repeat: null,
-          keepTranscriptInContent: false,
-          normalizedTranscript: 'Remind me to call mom tomorrow at 7',
-        },
+    const { context, responses } = callClarify({
+      sessionId: 'session-1',
+      clarificationAnswer: '7 PM',
+      timezone: 'UTC',
+      nowEpochMs: 1_700_000_000_000,
+      priorDraft: {
+        title: 'Call mom',
+        content: 'Call mom',
+        reminderAtEpochMs: 1_700_003_600_000,
+        repeat: null,
+        keepTranscriptInContent: false,
+        normalizedTranscript: 'Remind me to call mom tomorrow at 7',
       },
-    )) as {
+    });
+    await main(context as never);
+    const result = responses[0].data as {
       draft: { title: string | null; reminderAtEpochMs: number | null };
       clarification: { required: boolean };
     };

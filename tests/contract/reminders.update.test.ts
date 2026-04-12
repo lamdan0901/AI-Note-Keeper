@@ -1,150 +1,207 @@
 import { test, expect, jest, describe, beforeEach } from '@jest/globals';
+import { makeContext, withAuth } from '../helpers/makeContext';
 
-jest.mock(
-  'js-sha256',
-  () => ({
-    sha256: jest.fn(() => 'mock-hash-value'),
-  }),
-  { virtual: true },
-);
+const mockListDocuments = jest.fn() as any;
+const mockCreateDocument = jest.fn() as any;
+const mockUpdateDocument = jest.fn() as any;
+const mockDeleteDocument = jest.fn() as any;
+const mockCreateExecution = jest.fn() as any;
 
-jest.mock(
-  '../../convex/utils/uuid',
-  () => ({
-    uuidv4: jest.fn(() => 'mock-uuid-value'),
-  }),
-  { virtual: true },
-);
-
-jest.mock(
-  '../../packages/shared/utils/hash',
-  () => ({
-    calculatePayloadHash: jest.fn(() => 'mock-payload-hash'),
-  }),
-  { virtual: true },
-);
-
-// Mock context
-const mockDb = {
-  query: jest.fn(),
-  patch: jest.fn(),
-  insert: jest.fn(),
-  delete: jest.fn(),
-  get: jest.fn(),
-};
-
-const mockCtx = {
-  db: mockDb,
-  scheduler: {
-    runAfter: jest.fn(),
+jest.mock('node-appwrite', () => ({
+  Client: jest.fn().mockImplementation(() => ({
+    setEndpoint: jest.fn().mockReturnThis(),
+    setProject: jest.fn().mockReturnThis(),
+    setKey: jest.fn().mockReturnThis(),
+  })),
+  Databases: jest.fn().mockImplementation(() => ({
+    listDocuments: mockListDocuments,
+    createDocument: mockCreateDocument,
+    updateDocument: mockUpdateDocument,
+    deleteDocument: mockDeleteDocument,
+  })),
+  Functions: jest.fn().mockImplementation(() => ({
+    createExecution: mockCreateExecution,
+  })),
+  ID: { unique: () => 'gen-id' },
+  Query: {
+    equal: (field: string, value: string) => `${field}=${value}`,
+    greaterThan: (field: string, value: number) => `${field}>${value}`,
   },
+}));
+
+import main from '../../appwrite-functions/reminders-api/src/main';
+
+const DB = 'ai-note-keeper';
+const NOTES = 'notes';
+const EVENTS = 'noteChangeEvents';
+const USER = 'user-abc';
+const AUTH = withAuth(USER);
+
+const sampleDoc = {
+  $id: 'reminder-1',
+  userId: USER,
+  title: 'Test reminder',
+  triggerAt: 2000,
+  repeatRule: 'none',
+  repeatConfig: null,
+  repeat: null,
+  baseAtLocal: null,
+  startAt: null,
+  nextTriggerAt: 2000,
+  lastFiredAt: null,
+  lastAcknowledgedAt: null,
+  snoozedUntil: null,
+  active: true,
+  scheduleStatus: 'scheduled',
+  timezone: 'UTC',
+  version: 1,
+  updatedAt: 1000,
+  createdAt: 900,
+  done: false,
+  isPinned: false,
 };
 
-type HandlerConfig = {
-  handler: (...args: unknown[]) => unknown;
-  [key: string]: unknown;
-};
-
-type MockFn = jest.Mock<(...args: unknown[]) => unknown>;
-type AsyncMockFn = jest.Mock<(...args: unknown[]) => Promise<unknown>>;
-type Handler = (ctx: typeof mockCtx, args: Record<string, unknown>) => Promise<unknown>;
-
-const mockQuery: {
-  filter: MockFn;
-  first: AsyncMockFn;
-  collect: AsyncMockFn;
-  eq: MockFn;
-  field: MockFn;
-  gt: MockFn;
-} = {
-  filter: jest.fn().mockReturnThis(),
-  first: jest.fn(),
-  collect: jest.fn(),
-  eq: jest.fn(),
-  field: jest.fn(),
-  gt: jest.fn(),
-};
-
-// Mock convex/server
-const mockMutation = jest.fn((config: HandlerConfig) => {
-  // Return a mock object that acts like the mutation but exposes the handler
-  return {
-    ...config,
-    _handler: config.handler, // Expose handler for testing
-  };
+beforeEach(() => {
+  jest.clearAllMocks();
+  process.env.APPWRITE_FUNCTION_API_ENDPOINT = 'https://cloud.appwrite.io/v1';
+  process.env.APPWRITE_FUNCTION_API_KEY = 'test-key';
+  process.env.APPWRITE_FUNCTION_PROJECT_ID = 'test-project-id';
+  process.env.PUSH_FUNCTION_ID = 'push-fn-id';
+  mockCreateExecution.mockResolvedValue({ $id: 'exec-1' });
+  mockListDocuments.mockResolvedValue({ documents: [] });
+  mockCreateDocument.mockImplementation(
+    (_db: string, _col: string, id: string, data: unknown) =>
+      Promise.resolve({ $id: id, ...(data as object) }),
+  );
+  mockUpdateDocument.mockImplementation(
+    (_db: string, _col: string, id: string, data: unknown) =>
+      Promise.resolve({ ...sampleDoc, $id: id, ...(data as object) }),
+  );
+  mockDeleteDocument.mockResolvedValue({});
 });
 
-const mockQueryFunction = jest.fn((config: HandlerConfig) => {
-  return {
-    ...config,
-    _handler: config.handler,
-  };
-});
+describe('updateReminder (PATCH /:id)', () => {
+  test('should update reminder fields and return updated doc', async () => {
+    mockListDocuments.mockResolvedValue({ documents: [sampleDoc] });
 
-jest.mock(
-  '../../convex/_generated/server',
-  () => ({
-    mutation: mockMutation,
-    query: mockQueryFunction,
-  }),
-  { virtual: true },
-);
+    const { context, responses } = makeContext({
+      method: 'PATCH',
+      path: '/reminder-1',
+      headers: AUTH,
+      body: JSON.stringify({
+        title: 'Updated Title',
+        updatedAt: 5000, // > sampleDoc.updatedAt (1000)
+      }),
+    });
 
-jest.mock(
-  '../../convex/_generated/api',
-  () => ({
-    internal: {
-      functions: {
-        push: {
-          sendPush: {},
-        },
-      },
-    },
-    api: {},
-  }),
-  { virtual: true },
-);
+    await main(context);
 
-// We need to import after mocking
-import { updateReminder } from '../../convex/functions/reminders';
-
-describe('updateReminder Contract', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    mockDb.query.mockReturnValue(mockQuery);
-    // Default setup: finding the reminder returns a reminder
-    mockQuery.first.mockResolvedValue({ _id: 'mock-id', id: 'reminder-123', userId: 'user-1' });
-    mockQuery.filter.mockReturnValue(mockQuery); // Chainable
-  });
-
-  test('should update the reminder and emit a change event', async () => {
-    const handler = (updateReminder as unknown as { _handler: Handler })._handler;
-    const args = {
-      id: 'reminder-123',
-      title: 'Updated Title',
-      updatedAt: 1234567890,
-    };
-
-    await handler(mockCtx, args);
-
-    // Verify reminder was patched
-    expect(mockDb.patch).toHaveBeenCalledWith(
-      'mock-id',
+    expect(responses[0].status).toBe(200);
+    expect(mockUpdateDocument).toHaveBeenCalledWith(
+      DB,
+      NOTES,
+      'reminder-1',
       expect.objectContaining({
         title: 'Updated Title',
+        updatedAt: 5000,
       }),
     );
+  });
 
-    // Verify change event was emitted (CRITICAL for US1)
-    expect(mockDb.insert).toHaveBeenCalledWith(
-      'noteChangeEvents',
+  test('should skip update when incoming updatedAt is older (LWW)', async () => {
+    mockListDocuments.mockResolvedValue({ documents: [sampleDoc] });
+
+    const { context, responses } = makeContext({
+      method: 'PATCH',
+      path: '/reminder-1',
+      headers: AUTH,
+      body: JSON.stringify({
+        title: 'Stale Update',
+        updatedAt: 500, // < sampleDoc.updatedAt (1000)
+      }),
+    });
+
+    await main(context);
+
+    expect(responses[0].status).toBe(200);
+    expect(mockUpdateDocument).not.toHaveBeenCalled();
+  });
+
+  test('should emit change event on update', async () => {
+    mockListDocuments.mockResolvedValue({ documents: [sampleDoc] });
+
+    const { context } = makeContext({
+      method: 'PATCH',
+      path: '/reminder-1',
+      headers: AUTH,
+      body: JSON.stringify({ title: 'New Title', updatedAt: 5000 }),
+    });
+
+    await main(context);
+
+    expect(mockCreateDocument).toHaveBeenCalledWith(
+      DB,
+      EVENTS,
+      expect.any(String),
       expect.objectContaining({
-        noteId: 'reminder-123',
         operation: 'update',
+        noteId: 'reminder-1',
+        userId: USER,
       }),
     );
+  });
 
-    // Verify scheduler was called
-    expect(mockCtx.scheduler.runAfter).toHaveBeenCalled();
+  test('should fire push notification on update', async () => {
+    mockListDocuments.mockResolvedValue({ documents: [sampleDoc] });
+
+    const { context } = makeContext({
+      method: 'PATCH',
+      path: '/reminder-1',
+      headers: AUTH,
+      body: JSON.stringify({ title: 'New Title', updatedAt: 5000 }),
+    });
+
+    await main(context);
+
+    expect(mockCreateExecution).toHaveBeenCalled();
+  });
+
+  test('should return 404 when reminder not found', async () => {
+    mockListDocuments.mockResolvedValue({ documents: [] });
+
+    const { context, responses } = makeContext({
+      method: 'PATCH',
+      path: '/reminder-missing',
+      headers: AUTH,
+      body: JSON.stringify({ title: 'X', updatedAt: 5000 }),
+    });
+
+    await main(context);
+
+    expect(responses[0].status).toBe(404);
+    expect(mockUpdateDocument).not.toHaveBeenCalled();
+  });
+
+  test('should serialize repeat field to JSON string', async () => {
+    mockListDocuments.mockResolvedValue({ documents: [sampleDoc] });
+
+    const repeat = { kind: 'daily', interval: 1 };
+    const { context } = makeContext({
+      method: 'PATCH',
+      path: '/reminder-1',
+      headers: AUTH,
+      body: JSON.stringify({ repeat, updatedAt: 5000 }),
+    });
+
+    await main(context);
+
+    expect(mockUpdateDocument).toHaveBeenCalledWith(
+      DB,
+      NOTES,
+      'reminder-1',
+      expect.objectContaining({
+        repeat: JSON.stringify(repeat),
+      }),
+    );
   });
 });

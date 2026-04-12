@@ -1,140 +1,103 @@
-import { beforeEach, describe, expect, jest, test } from '@jest/globals';
+import { test, expect, jest, describe, beforeEach } from '@jest/globals';
+import { makeContext, withAuth } from '../helpers/makeContext';
 
-type HandlerConfig = {
-  handler: (...args: unknown[]) => unknown;
-  [key: string]: unknown;
-};
+const mockListDocuments = jest.fn() as any;
+const mockCreateDocument = jest.fn() as any;
+const mockUpdateDocument = jest.fn() as any;
+const mockDeleteDocument = jest.fn() as any;
+const mockCreateExecution = jest.fn() as any;
 
-type Handler = (ctx: typeof mockCtx, args: Record<string, unknown>) => Promise<unknown>;
-
-type MockQuery = {
-  filter: jest.Mock<(...args: unknown[]) => MockQuery>;
-  collect: jest.Mock<(...args: unknown[]) => Promise<unknown[]>>;
-};
-
-const mockQuery: MockQuery = {
-  filter: jest.fn(),
-  collect: jest.fn(),
-};
-mockQuery.filter.mockReturnValue(mockQuery);
-
-const mockDb: {
-  query: jest.Mock<(...args: unknown[]) => MockQuery>;
-  patch: jest.Mock<(...args: unknown[]) => unknown>;
-  delete: jest.Mock<(...args: unknown[]) => unknown>;
-  get: jest.Mock<(...args: unknown[]) => Promise<unknown>>;
-  insert: jest.Mock<(...args: unknown[]) => Promise<string>>;
-} = {
-  query: jest.fn(),
-  patch: jest.fn(),
-  delete: jest.fn(),
-  get: jest.fn(),
-  insert: jest.fn(),
-};
-
-const mockCtx = {
-  db: mockDb,
-};
-
-const mockMutation = jest.fn((config: HandlerConfig) => ({
-  ...config,
-  _handler: config.handler,
-}));
-
-const mockQueryFunction = jest.fn((config: HandlerConfig) => ({
-  ...config,
-  _handler: config.handler,
-}));
-
-const mockInternalMutation = jest.fn((config: HandlerConfig) => ({
-  ...config,
-  _handler: config.handler,
-}));
-
-const mockInternalQuery = jest.fn((config: HandlerConfig) => ({
-  ...config,
-  _handler: config.handler,
-}));
-
-const mockInternalAction = jest.fn((config: HandlerConfig) => ({
-  ...config,
-  _handler: config.handler,
-}));
-
-jest.mock(
-  '../../convex/_generated/server',
-  () => ({
-    mutation: mockMutation,
-    query: mockQueryFunction,
-    internalMutation: mockInternalMutation,
-    internalQuery: mockInternalQuery,
-    internalAction: mockInternalAction,
-  }),
-  { virtual: true },
-);
-
-jest.mock(
-  '../../convex/_generated/api',
-  () => ({
-    internal: {
-      functions: {
-        subscriptions: {
-          getDueSubscriptionReminders: {},
-          getDueTrialReminders: {},
-          getSubscriptionsWithOverdueBilling: {},
-          advanceSubscriptionAfterReminder: {},
-          advanceSubscriptionAfterTrialReminder: {},
-          advanceBillingSubscription: {},
-        },
-        push: {
-          sendSubscriptionPush: {},
-        },
-      },
-    },
-  }),
-  { virtual: true },
-);
-
-jest.mock(
-  'convex/values',
-  () => {
-    const v: Record<string, jest.Mock> = {};
-    const pass = () => ({});
-    ['string', 'number', 'boolean', 'any', 'null', 'id'].forEach((k) => (v[k] = jest.fn(pass)));
-    v['optional'] = jest.fn(pass);
-    v['union'] = jest.fn(pass);
-    v['array'] = jest.fn(pass);
-    v['object'] = jest.fn(pass);
-    return { v };
+jest.mock('node-appwrite', () => ({
+  Client: jest.fn().mockImplementation(() => ({
+    setEndpoint: jest.fn().mockReturnThis(),
+    setProject: jest.fn().mockReturnThis(),
+    setKey: jest.fn().mockReturnThis(),
+  })),
+  Databases: jest.fn().mockImplementation(() => ({
+    listDocuments: mockListDocuments,
+    createDocument: mockCreateDocument,
+    updateDocument: mockUpdateDocument,
+    deleteDocument: mockDeleteDocument,
+  })),
+  Functions: jest.fn().mockImplementation(() => ({
+    createExecution: mockCreateExecution,
+  })),
+  ID: { unique: () => 'gen-id' },
+  Query: {
+    equal: (field: string, value: unknown) => `${field}=${String(value)}`,
+    greaterThan: (field: string, value: number) => `${field}>${value}`,
   },
-  { virtual: true },
-);
+}));
 
-import {
-  createSubscription,
-  deleteSubscription,
-  emptySubscriptionTrash,
-  listSubscriptions,
-  listDeletedSubscriptions,
-  permanentlyDeleteSubscription,
-  purgeExpiredSubscriptionTrash,
-  restoreSubscription,
-} from '../../convex/functions/subscriptions';
+import main from '../../appwrite-functions/subscriptions-api/src/main';
 
-describe('subscriptions trash lifecycle contract', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    mockDb.query.mockReturnValue(mockQuery);
-    mockQuery.filter.mockReturnValue(mockQuery);
-    mockQuery.collect.mockResolvedValue([]);
-  });
+const DB = 'ai-note-keeper';
+const SUBS = 'subscriptions';
+const USER = 'user-abc';
+const AUTH = withAuth(USER);
+const DAY_MS = 24 * 60 * 60 * 1000;
 
-  test('deleteSubscription marks active=false and stamps deletedAt', async () => {
-    const handler = (deleteSubscription as unknown as { _handler: Handler })._handler;
+const NOW_BILLING = Date.now() + 30 * DAY_MS;
 
-    await handler(mockCtx, { id: 'sub-1' });
+const sampleSub = {
+  $id: 'sub-1',
+  userId: USER,
+  serviceName: 'Netflix',
+  category: 'streaming',
+  price: 14.99,
+  currency: 'USD',
+  billingCycle: 'monthly',
+  nextBillingDate: NOW_BILLING,
+  reminderDaysBefore: JSON.stringify([3, 7]),
+  status: 'active',
+  active: true,
+  createdAt: 1000,
+  updatedAt: 1000,
+  notes: null,
+  deletedAt: null,
+};
 
-    expect(mockDb.patch).toHaveBeenCalledWith(
+beforeEach(() => {
+  jest.clearAllMocks();
+  process.env.APPWRITE_FUNCTION_API_ENDPOINT = 'https://cloud.appwrite.io/v1';
+  process.env.APPWRITE_FUNCTION_API_KEY = 'test-key';
+  process.env.APPWRITE_FUNCTION_PROJECT_ID = 'test-project-id';
+  process.env.PUSH_FUNCTION_ID = 'push-fn-id';
+  mockCreateExecution.mockResolvedValue({ $id: 'exec-1' });
+  mockListDocuments.mockResolvedValue({ documents: [] });
+  mockCreateDocument.mockImplementation(
+    (_db: string, _col: string, id: string, data: unknown) =>
+      Promise.resolve({ $id: id, ...(data as object) }),
+  );
+  mockUpdateDocument.mockImplementation(
+    (_db: string, _col: string, id: string, data: unknown) =>
+      Promise.resolve({ ...sampleSub, $id: id, ...(data as object) }),
+  );
+  mockDeleteDocument.mockResolvedValue({});
+});
+
+const deletedSub = {
+  ...sampleSub,
+  active: false,
+  deletedAt: 500,
+};
+
+describe('deleteSubscription (DELETE /subscriptions/:id)', () => {
+  test('should soft-delete by setting active=false and deletedAt', async () => {
+    mockListDocuments.mockResolvedValue({ documents: [sampleSub] });
+
+    const { context, responses } = makeContext({
+      method: 'DELETE',
+      path: '/subscriptions/sub-1',
+      headers: AUTH,
+    });
+
+    await main(context);
+
+    expect(responses[0].status).toBe(200);
+    expect(mockUpdateDocument).toHaveBeenCalledWith(
+      DB,
+      SUBS,
       'sub-1',
       expect.objectContaining({
         active: false,
@@ -144,144 +107,185 @@ describe('subscriptions trash lifecycle contract', () => {
     );
   });
 
-  test('listDeletedSubscriptions returns most recently deleted first', async () => {
-    const handler = (listDeletedSubscriptions as unknown as { _handler: Handler })._handler;
+  test('should return 404 when subscription not found', async () => {
+    mockListDocuments.mockResolvedValue({ documents: [] });
 
-    mockQuery.collect.mockResolvedValue([
-      { _id: 'a', userId: 'u1', active: false, deletedAt: 100 },
-      { _id: 'b', userId: 'u1', active: false, deletedAt: 300 },
-      { _id: 'c', userId: 'u1', active: false, deletedAt: 200 },
-    ]);
+    const { context, responses } = makeContext({
+      method: 'DELETE',
+      path: '/subscriptions/missing',
+      headers: AUTH,
+    });
 
-    const result = (await handler(mockCtx, { userId: 'u1' })) as Array<{ _id: string }>;
+    await main(context);
 
-    expect(result.map((r) => r._id)).toEqual(['b', 'c', 'a']);
+    expect(responses[0].status).toBe(404);
+    expect(mockUpdateDocument).not.toHaveBeenCalled();
+  });
+});
+
+describe('listDeletedSubscriptions (GET /subscriptions/deleted)', () => {
+  test('should return deleted subscriptions sorted by deletedAt descending', async () => {
+    mockListDocuments.mockResolvedValue({
+      documents: [
+        { ...sampleSub, $id: 'sub-a', active: false, deletedAt: 100, updatedAt: 100 },
+        { ...sampleSub, $id: 'sub-b', active: false, deletedAt: 300, updatedAt: 300 },
+        { ...sampleSub, $id: 'sub-c', active: false, deletedAt: 200, updatedAt: 200 },
+      ],
+    });
+
+    const { context, responses } = makeContext({
+      method: 'GET',
+      path: '/subscriptions/deleted',
+      headers: AUTH,
+    });
+
+    await main(context);
+
+    expect(responses[0].status).toBe(200);
+    const data = responses[0].data as Array<{ id: string }>;
+    expect(data.map((d) => d.id)).toEqual(['sub-b', 'sub-c', 'sub-a']);
   });
 
-  test('restoreSubscription re-activates and clears deletedAt', async () => {
-    const handler = (restoreSubscription as unknown as { _handler: Handler })._handler;
+  test('should query with active=false filter', async () => {
+    const { context } = makeContext({
+      method: 'GET',
+      path: '/subscriptions/deleted',
+      headers: AUTH,
+    });
 
-    await handler(mockCtx, { id: 'sub-1' });
+    await main(context);
 
-    expect(mockDb.patch).toHaveBeenCalledWith(
+    expect(mockListDocuments).toHaveBeenCalledWith(
+      DB,
+      SUBS,
+      expect.arrayContaining(['active=false', `userId=${USER}`]),
+    );
+  });
+});
+
+describe('restoreSubscription (POST /subscriptions/:id/restore)', () => {
+  test('should restore subscription to active', async () => {
+    mockListDocuments.mockResolvedValue({ documents: [deletedSub] });
+
+    const { context, responses } = makeContext({
+      method: 'POST',
+      path: '/subscriptions/sub-1/restore',
+      headers: AUTH,
+    });
+
+    await main(context);
+
+    expect(responses[0].status).toBe(200);
+    expect(mockUpdateDocument).toHaveBeenCalledWith(
+      DB,
+      SUBS,
       'sub-1',
       expect.objectContaining({
         active: true,
-        deletedAt: undefined,
+        deletedAt: null,
         updatedAt: expect.any(Number),
       }),
     );
   });
 
-  test('permanentlyDeleteSubscription removes only inactive records', async () => {
-    const handler = (permanentlyDeleteSubscription as unknown as { _handler: Handler })._handler;
+  test('should return 404 when subscription not found', async () => {
+    mockListDocuments.mockResolvedValue({ documents: [] });
 
-    mockDb.get.mockResolvedValue({ _id: 'sub-1', active: false });
-    const deletedResult = await handler(mockCtx, { id: 'sub-1' });
-    expect(mockDb.delete).toHaveBeenCalledWith('sub-1');
-    expect(deletedResult).toEqual({ deleted: true });
-
-    mockDb.delete.mockClear();
-    mockDb.get.mockResolvedValue({ _id: 'sub-2', active: true });
-    const skippedResult = await handler(mockCtx, { id: 'sub-2' });
-    expect(mockDb.delete).not.toHaveBeenCalled();
-    expect(skippedResult).toEqual({ deleted: false });
-  });
-
-  test('emptySubscriptionTrash removes all inactive subscriptions for user', async () => {
-    const handler = (emptySubscriptionTrash as unknown as { _handler: Handler })._handler;
-
-    mockQuery.collect.mockResolvedValue([
-      { _id: 'sub-1', userId: 'u1', active: false },
-      { _id: 'sub-2', userId: 'u1', active: false },
-    ]);
-
-    const result = await handler(mockCtx, { userId: 'u1' });
-
-    expect(mockDb.delete).toHaveBeenCalledTimes(2);
-    expect(mockDb.delete).toHaveBeenNthCalledWith(1, 'sub-1');
-    expect(mockDb.delete).toHaveBeenNthCalledWith(2, 'sub-2');
-    expect(result).toEqual({ deleted: 2 });
-  });
-
-  test('purgeExpiredSubscriptionTrash deletes all expired entries returned by query', async () => {
-    const handler = (purgeExpiredSubscriptionTrash as unknown as { _handler: Handler })._handler;
-
-    mockQuery.collect.mockResolvedValue([
-      { _id: 'sub-10', active: false, deletedAt: 100 },
-      { _id: 'sub-11', active: false, deletedAt: 200 },
-    ]);
-
-    const result = await handler(mockCtx, {});
-
-    expect(mockDb.delete).toHaveBeenCalledTimes(2);
-    expect(mockDb.delete).toHaveBeenNthCalledWith(1, 'sub-10');
-    expect(mockDb.delete).toHaveBeenNthCalledWith(2, 'sub-11');
-    expect(result).toEqual({ purged: 2 });
-  });
-
-  test('create-then-delete race ends with no active subscription', async () => {
-    const createHandler = (createSubscription as unknown as { _handler: Handler })._handler;
-    const deleteHandler = (deleteSubscription as unknown as { _handler: Handler })._handler;
-    const listHandler = (listSubscriptions as unknown as { _handler: Handler })._handler;
-
-    const userId = 'u-race';
-    const createdId = 'sub-race-1';
-    const docs = new Map<string, Record<string, unknown>>();
-    let releaseInsert: (() => void) | null = null;
-
-    mockDb.insert.mockImplementation(
-      async (_table: unknown, doc: unknown): Promise<string> =>
-        await new Promise<string>((resolve) => {
-          releaseInsert = () => {
-            docs.set(createdId, { ...(doc as Record<string, unknown>), _id: createdId });
-            resolve(createdId);
-          };
-        }),
-    );
-
-    mockDb.patch.mockImplementation((id: unknown, patch: unknown) => {
-      const existing = docs.get(id as string);
-      if (!existing) {
-        throw new Error('missing subscription');
-      }
-      docs.set(id as string, { ...existing, ...(patch as Record<string, unknown>) });
+    const { context, responses } = makeContext({
+      method: 'POST',
+      path: '/subscriptions/missing/restore',
+      headers: AUTH,
     });
 
-    mockQuery.collect.mockImplementation(async () =>
-      Array.from(docs.values()).filter((doc) => doc.userId === userId && doc.active === true),
-    );
+    await main(context);
 
-    const createPromise = createHandler(mockCtx, {
-      userId,
-      serviceName: 'Race Sub',
-      category: 'tools',
-      price: 9.99,
-      currency: 'USD',
-      billingCycle: 'monthly',
-      nextBillingDate: Date.now() + 7 * 24 * 60 * 60 * 1000,
-      status: 'active',
-      reminderDaysBefore: [3],
-    }) as Promise<string>;
+    expect(responses[0].status).toBe(404);
+  });
+});
 
-    const deleteAfterAck = createPromise.then(async (id) => {
-      await deleteHandler(mockCtx, { id });
-      return id;
+describe('permanentlyDeleteSubscription (POST /subscriptions/:id/permanent-delete)', () => {
+  test('should permanently delete inactive subscription', async () => {
+    mockListDocuments.mockResolvedValue({ documents: [deletedSub] });
+
+    const { context, responses } = makeContext({
+      method: 'POST',
+      path: '/subscriptions/sub-1/permanent-delete',
+      headers: AUTH,
     });
 
-    expect(releaseInsert).not.toBeNull();
-    releaseInsert?.();
+    await main(context);
 
-    const id = await deleteAfterAck;
-    const stored = docs.get(id);
-    expect(stored).toEqual(
-      expect.objectContaining({
-        _id: createdId,
-        active: false,
-      }),
-    );
+    expect(responses[0].status).toBe(200);
+    expect(mockDeleteDocument).toHaveBeenCalledWith(DB, SUBS, 'sub-1');
+  });
 
-    const activeList = (await listHandler(mockCtx, { userId })) as Array<Record<string, unknown>>;
-    expect(activeList).toHaveLength(0);
+  test('should reject permanently deleting active subscription', async () => {
+    mockListDocuments.mockResolvedValue({ documents: [sampleSub] }); // active=true
+
+    const { context, responses } = makeContext({
+      method: 'POST',
+      path: '/subscriptions/sub-1/permanent-delete',
+      headers: AUTH,
+    });
+
+    await main(context);
+
+    expect(responses[0].status).toBe(400);
+    expect(mockDeleteDocument).not.toHaveBeenCalled();
+  });
+
+  test('should return 404 when subscription not found', async () => {
+    mockListDocuments.mockResolvedValue({ documents: [] });
+
+    const { context, responses } = makeContext({
+      method: 'POST',
+      path: '/subscriptions/missing/permanent-delete',
+      headers: AUTH,
+    });
+
+    await main(context);
+
+    expect(responses[0].status).toBe(404);
+  });
+});
+
+describe('emptySubscriptionTrash (DELETE /subscriptions/trash)', () => {
+  test('should delete all inactive subscriptions for user', async () => {
+    mockListDocuments.mockResolvedValue({
+      documents: [
+        { ...deletedSub, $id: 'sub-1' },
+        { ...deletedSub, $id: 'sub-2' },
+      ],
+    });
+
+    const { context, responses } = makeContext({
+      method: 'DELETE',
+      path: '/subscriptions/trash',
+      headers: AUTH,
+    });
+
+    await main(context);
+
+    expect(responses[0].status).toBe(200);
+    expect((responses[0].data as { deleted: number }).deleted).toBe(2);
+    expect(mockDeleteDocument).toHaveBeenCalledTimes(2);
+    expect(mockDeleteDocument).toHaveBeenCalledWith(DB, SUBS, 'sub-1');
+    expect(mockDeleteDocument).toHaveBeenCalledWith(DB, SUBS, 'sub-2');
+  });
+
+  test('should return deleted=0 when trash is already empty', async () => {
+    mockListDocuments.mockResolvedValue({ documents: [] });
+
+    const { context, responses } = makeContext({
+      method: 'DELETE',
+      path: '/subscriptions/trash',
+      headers: AUTH,
+    });
+
+    await main(context);
+
+    expect(responses[0].status).toBe(200);
+    expect((responses[0].data as { deleted: number }).deleted).toBe(0);
+    expect(mockDeleteDocument).not.toHaveBeenCalled();
   });
 });

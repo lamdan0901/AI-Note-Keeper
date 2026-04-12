@@ -11,7 +11,7 @@ describe('createHoldInteraction', () => {
   });
 
   test('does not fire hold at 240ms', () => {
-    const onHold = jest.fn();
+    const onHold = jest.fn() as any;
     const hold = createHoldInteraction({ delayMs: 250, onHold });
 
     hold.start();
@@ -22,7 +22,7 @@ describe('createHoldInteraction', () => {
   });
 
   test('fires hold at 250ms', () => {
-    const onHold = jest.fn();
+    const onHold = jest.fn() as any;
     const hold = createHoldInteraction({ delayMs: 250, onHold });
 
     hold.start();
@@ -33,7 +33,7 @@ describe('createHoldInteraction', () => {
   });
 
   test('fires hold at 300ms', () => {
-    const onHold = jest.fn();
+    const onHold = jest.fn() as any;
     const hold = createHoldInteraction({ delayMs: 250, onHold });
 
     hold.start();
@@ -44,7 +44,7 @@ describe('createHoldInteraction', () => {
   });
 
   test('restarting hold resets timer and fires once from latest start', () => {
-    const onHold = jest.fn();
+    const onHold = jest.fn() as any;
     const hold = createHoldInteraction({ delayMs: 250, onHold });
 
     hold.start();
@@ -63,7 +63,7 @@ describe('createHoldInteraction', () => {
   });
 
   test('consumeHoldFired is one-shot after hold fires', () => {
-    const onHold = jest.fn();
+    const onHold = jest.fn() as any;
     const hold = createHoldInteraction({ delayMs: 250, onHold });
 
     hold.start();
@@ -75,7 +75,7 @@ describe('createHoldInteraction', () => {
   });
 
   test('short presses never suppress the next tap action', () => {
-    const onHold = jest.fn();
+    const onHold = jest.fn() as any;
     const hold = createHoldInteraction({ delayMs: 250, onHold });
 
     hold.start();

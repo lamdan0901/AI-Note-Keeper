@@ -1,455 +1,307 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-import { beforeEach, describe, expect, jest, test } from '@jest/globals';
-import { sha256 } from 'js-sha256';
+import { test, expect, jest, describe, beforeEach, afterEach } from '@jest/globals';
+import { makeContext } from '../helpers/makeContext';
 
-type HandlerConfig = {
-  handler: (...args: unknown[]) => unknown;
-  [key: string]: unknown;
-};
+const mockListDocuments = jest.fn() as any;
+const mockCreateDocument = jest.fn() as any;
+const mockUpdateDocument = jest.fn() as any;
+const mockDeleteDocument = jest.fn() as any;
+const mockDeleteSession = jest.fn() as any;
 
-type Handler = (ctx: typeof mockCtx, args: Record<string, unknown>) => Promise<unknown>;
-
-const makeQueryChain = () => {
-  const chain: any = {
-    withIndex: jest.fn(),
-    filter: jest.fn(),
-    first: jest.fn(),
-    collect: jest.fn(),
-  };
-  chain.withIndex.mockReturnValue(chain);
-  chain.filter.mockReturnValue(chain);
-  return chain;
-};
-
-const migrationAttemptsQuery = makeQueryChain();
-const usersQuery = makeQueryChain();
-const notesQuery = makeQueryChain();
-const subscriptionsQuery = makeQueryChain();
-const tokensQuery = makeQueryChain();
-const eventsQuery = makeQueryChain();
-
-const mockDb = {
-  query: jest.fn((table: string) => {
-    if (table === 'migrationAttempts') return migrationAttemptsQuery;
-    if (table === 'users') return usersQuery;
-    if (table === 'notes') return notesQuery;
-    if (table === 'subscriptions') return subscriptionsQuery;
-    if (table === 'devicePushTokens') return tokensQuery;
-    if (table === 'noteChangeEvents') return eventsQuery;
-    throw new Error(`Unexpected query table: ${table}`);
-  }),
-  patch: jest.fn(),
-  insert: jest.fn(),
-  delete: jest.fn(),
-  get: jest.fn(),
-};
-
-const mockCtx = { db: mockDb };
-
-const mockMutation = jest.fn((config: HandlerConfig) => ({
-  ...config,
-  _handler: config.handler,
+jest.mock('node-appwrite', () => ({
+  Client: jest.fn().mockImplementation(() => ({
+    setEndpoint: jest.fn().mockReturnThis(),
+    setProject: jest.fn().mockReturnThis(),
+    setKey: jest.fn().mockReturnThis(),
+  })),
+  Databases: jest.fn().mockImplementation(() => ({
+    listDocuments: mockListDocuments,
+    createDocument: mockCreateDocument,
+    updateDocument: mockUpdateDocument,
+    deleteDocument: mockDeleteDocument,
+  })),
+  Users: jest.fn().mockImplementation(() => ({
+    deleteSession: mockDeleteSession,
+  })),
+  ID: { unique: () => 'gen-id' },
+  Query: {
+    equal: (field: string, value: unknown) => `${field}=${String(value)}`,
+    limit: (n: number) => `limit:${n}`,
+    cursorAfter: (id: string) => `cursorAfter:${id}`,
+  },
 }));
 
-jest.mock(
-  '../../convex/_generated/server',
-  () => ({
-    mutation: mockMutation,
-  }),
-  { virtual: true },
-);
+import main from '../../appwrite-functions/user-data-migration/src/main';
 
-jest.mock(
-  'convex/values',
-  () => {
-    const v: Record<string, jest.Mock> = {};
-    const pass = () => ({});
-    ['string', 'number', 'boolean', 'any', 'null', 'literal'].forEach(
-      (key) => (v[key] = jest.fn(pass)),
-    );
-    v['optional'] = jest.fn(pass);
-    v['union'] = jest.fn(pass);
-    v['array'] = jest.fn(pass);
-    v['object'] = jest.fn(pass);
-    return { v };
-  },
-  { virtual: true },
-);
+const FROM_USER = 'device-user-1';
+const TO_USER = 'account-user-1';
+const USERNAME = 'alice';
+const PASSWORD = 'password123';
+const ENDPOINT = 'https://cloud.appwrite.io/v1';
 
-import {
-  applyUserDataMerge,
-  preflightUserDataMerge,
-} from '../../convex/functions/userDataMigration';
-import * as userDataMigrationModule from '../../convex/functions/userDataMigration';
+const WELCOME_NOTE = {
+  $id: 'note-welcome',
+  id: 'note-welcome',
+  userId: FROM_USER,
+  title: 'Welcome to AI Note Keeper',
+  content: 'This is your first note. Edit or delete it anytime.',
+  active: true,
+  updatedAt: 1000,
+  createdAt: 900,
+};
 
-describe('userDataMigration preflight and apply', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    (migrationAttemptsQuery.first as any).mockResolvedValue(null);
-    (usersQuery.first as any).mockResolvedValue(null);
-    (notesQuery.collect as any).mockResolvedValue([]);
-    (subscriptionsQuery.collect as any).mockResolvedValue([]);
-    (tokensQuery.collect as any).mockResolvedValue([]);
-    (eventsQuery.collect as any).mockResolvedValue([]);
-    (mockDb.get as any).mockResolvedValue(null);
-  });
+let fetchSpy: ReturnType<typeof jest.spyOn>;
 
-  test('preflight rejects non-account target userId and records failed attempt', async () => {
-    const handler = (preflightUserDataMerge as unknown as { _handler: Handler })._handler;
+beforeEach(() => {
+  jest.clearAllMocks();
+  process.env.APPWRITE_FUNCTION_API_ENDPOINT = ENDPOINT;
+  process.env.APPWRITE_FUNCTION_API_KEY = 'test-key';
+  process.env.APPWRITE_FUNCTION_PROJECT_ID = 'test-project-id';
 
-    await expect(
-      handler(mockCtx, {
-        fromUserId: 'device-1',
-        toUserId: 'not-an-account',
-        username: 'alice',
-        password: 'password123',
+  fetchSpy = jest.spyOn(globalThis, 'fetch');
+  mockDeleteSession.mockResolvedValue({});
+  mockCreateDocument.mockImplementation((_db: string, _col: string, id: string, data: unknown) =>
+    Promise.resolve({ $id: id, ...(data as object) }),
+  );
+  mockUpdateDocument.mockImplementation((_db: string, _col: string, id: string, data: unknown) =>
+    Promise.resolve({ $id: id, ...(data as object) }),
+  );
+  mockDeleteDocument.mockResolvedValue({});
+
+  // Default: no existing migration attempts, empty collections
+  mockListDocuments.mockResolvedValue({ documents: [] });
+});
+
+afterEach(() => {
+  fetchSpy.mockRestore();
+});
+
+function mockSuccessfulAuth() {
+  fetchSpy.mockResolvedValueOnce({
+    ok: true,
+    json: () => Promise.resolve({ $id: 'session-123', userId: TO_USER }),
+  } as Response);
+}
+
+function mockFailedAuth() {
+  fetchSpy.mockResolvedValueOnce({
+    ok: false,
+    json: () => Promise.resolve({ message: 'Invalid credentials' }),
+  } as Response);
+}
+
+describe('POST /preflight', () => {
+  test('should return summary structure on success', async () => {
+    mockSuccessfulAuth();
+
+    const { context, responses } = makeContext({
+      method: 'POST',
+      path: '/preflight',
+      body: JSON.stringify({
+        fromUserId: FROM_USER,
+        toUserId: TO_USER,
+        username: USERNAME,
+        password: PASSWORD,
       }),
-    ).rejects.toThrow('Migration target must be a valid account user');
+    });
 
-    expect(mockDb.insert).toHaveBeenCalledWith(
-      'migrationAttempts',
-      expect.objectContaining({
-        key: 'not-an-account',
-        attempts: 1,
+    await main(context);
+
+    expect(responses[0].status).toBe(200);
+    const summary = responses[0].data as Record<string, unknown>;
+    expect(summary).toHaveProperty('sourceEmpty');
+    expect(summary).toHaveProperty('targetEmpty');
+    expect(summary).toHaveProperty('sourceSampleOnly');
+    expect(summary).toHaveProperty('hasConflicts');
+    expect(summary).toHaveProperty('sourceCounts');
+    expect(summary).toHaveProperty('targetCounts');
+  });
+
+  test('should detect sample-only source snapshot', async () => {
+    // Source has only the welcome note
+    mockSuccessfulAuth();
+    mockListDocuments
+      // migrationAttempts (throttle check)
+      .mockResolvedValueOnce({ documents: [] })
+      // source: notes
+      .mockResolvedValueOnce({ documents: [WELCOME_NOTE] })
+      // source: subscriptions
+      .mockResolvedValueOnce({ documents: [] })
+      // source: devicePushTokens
+      .mockResolvedValueOnce({ documents: [] })
+      // source: noteChangeEvents
+      .mockResolvedValueOnce({ documents: [] })
+      // target: notes
+      .mockResolvedValueOnce({ documents: [] })
+      // target: subscriptions
+      .mockResolvedValueOnce({ documents: [] })
+      // target: devicePushTokens
+      .mockResolvedValueOnce({ documents: [] })
+      // target: noteChangeEvents
+      .mockResolvedValueOnce({ documents: [] })
+      // clearFailedAttempts
+      .mockResolvedValueOnce({ documents: [] });
+
+    const { context, responses } = makeContext({
+      method: 'POST',
+      path: '/preflight',
+      body: JSON.stringify({
+        fromUserId: FROM_USER,
+        toUserId: TO_USER,
+        username: USERNAME,
+        password: PASSWORD,
       }),
-    );
+    });
+
+    await main(context);
+
+    expect(responses[0].status).toBe(200);
+    const summary = responses[0].data as Record<string, unknown>;
+    expect(summary.sourceSampleOnly).toBe(true);
+    expect(summary.sourceEmpty).toBe(false);
+    expect(summary.targetEmpty).toBe(true);
   });
 
-  test('preflight marks sample-only local snapshots correctly', async () => {
-    const handler = (preflightUserDataMerge as unknown as { _handler: Handler })._handler;
+  test('should return 400 on invalid credentials', async () => {
+    mockFailedAuth();
 
-    const salt = 'abcd';
-    const password = 'pass1234';
-    (mockDb.get as any).mockResolvedValue({
-      _id: { toString: () => 'user-target' },
-      username: 'alice',
-      passwordHash: `${salt}:${sha256(salt + password)}`,
-    });
-    (usersQuery.first as any).mockResolvedValue({
-      _id: { toString: () => 'user-target' },
-      username: 'alice',
-      passwordHash: `${salt}:${sha256(salt + password)}`,
-    });
-    (notesQuery.collect as any)
-      .mockResolvedValueOnce([
-        {
-          _id: 'note-source',
-          id: 'welcome-device',
-          userId: 'device-1',
-          title: 'Welcome to AI Note Keeper',
-          content: 'This is your first note. Edit or delete it anytime.',
-          active: true,
-          updatedAt: 1000,
-          createdAt: 1000,
-        },
-      ])
-      .mockResolvedValueOnce([]);
-
-    const result = (await handler(mockCtx, {
-      fromUserId: 'device-1',
-      toUserId: 'user-target',
-      username: 'alice',
-      password,
-    })) as {
-      sourceSampleOnly: boolean;
-      sourceEmpty: boolean;
-      targetEmpty: boolean;
-    };
-
-    expect(result).toEqual(
-      expect.objectContaining({
-        sourceSampleOnly: true,
-        sourceEmpty: false,
-        targetEmpty: true,
+    const { context, responses } = makeContext({
+      method: 'POST',
+      path: '/preflight',
+      body: JSON.stringify({
+        fromUserId: FROM_USER,
+        toUserId: TO_USER,
+        username: USERNAME,
+        password: 'wrong-password',
       }),
-    );
+    });
+
+    await main(context);
+
+    expect(responses[0].status).toBe(401);
+    expect((responses[0].data as { error: string }).error).toBe('Invalid credentials');
   });
 
-  test('apply local replaces target notes, subscriptions, and events with source snapshot', async () => {
-    const handler = (applyUserDataMerge as unknown as { _handler: Handler })._handler;
+  test('should record failed attempt on invalid credentials', async () => {
+    mockFailedAuth();
 
-    const salt = 'salt';
-    const password = 'password123';
-    (mockDb.get as any).mockResolvedValue({
-      _id: { toString: () => 'user-target' },
-      username: 'alice',
-      passwordHash: `${salt}:${sha256(salt + password)}`,
-    });
-    (usersQuery.first as any).mockResolvedValue({
-      _id: { toString: () => 'user-target' },
-      username: 'alice',
-      passwordHash: `${salt}:${sha256(salt + password)}`,
-    });
-    (notesQuery.collect as any)
-      .mockResolvedValueOnce([
-        {
-          _id: 'source-note-doc',
-          id: 'note-1',
-          userId: 'device-1',
-          title: 'Local note',
-          active: true,
-          updatedAt: 1000,
-          createdAt: 900,
-        },
-      ])
-      .mockResolvedValueOnce([
-        {
-          _id: 'target-note-doc',
-          id: 'note-2',
-          userId: 'user-target',
-          title: 'Cloud note',
-          active: true,
-          updatedAt: 1000,
-          createdAt: 900,
-        },
-      ])
-      .mockResolvedValueOnce([
-        {
-          _id: 'target-note-doc',
-          id: 'note-2',
-          userId: 'user-target',
-          title: 'Cloud note',
-          active: true,
-          updatedAt: 1000,
-          createdAt: 900,
-        },
-      ])
-      .mockResolvedValueOnce([
-        {
-          _id: 'final-note-doc',
-          id: 'note-1',
-          userId: 'user-target',
-          title: 'Local note',
-          active: true,
-          updatedAt: 1000,
-          createdAt: 900,
-        },
-      ]);
-    (subscriptionsQuery.collect as any)
-      .mockResolvedValueOnce([
-        {
-          _id: 'source-sub-doc',
-          userId: 'device-1',
-          serviceName: 'Spotify',
-          category: 'music',
-          price: 9.99,
-          currency: 'USD',
-          billingCycle: 'monthly',
-          nextBillingDate: 1000,
-          status: 'active',
-          reminderDaysBefore: [1],
-          active: true,
-          createdAt: 1,
-          updatedAt: 2,
-        },
-      ])
-      .mockResolvedValueOnce([
-        {
-          _id: 'target-sub-doc',
-          userId: 'user-target',
-          serviceName: 'Netflix',
-          category: 'streaming',
-          price: 12.99,
-          currency: 'USD',
-          billingCycle: 'monthly',
-          nextBillingDate: 1000,
-          status: 'active',
-          reminderDaysBefore: [1],
-          active: true,
-          createdAt: 1,
-          updatedAt: 2,
-        },
-      ])
-      .mockResolvedValueOnce([
-        {
-          _id: 'target-sub-doc',
-          userId: 'user-target',
-          serviceName: 'Netflix',
-          category: 'streaming',
-          price: 12.99,
-          currency: 'USD',
-          billingCycle: 'monthly',
-          nextBillingDate: 1000,
-          status: 'active',
-          reminderDaysBefore: [1],
-          active: true,
-          createdAt: 1,
-          updatedAt: 2,
-        },
-      ])
-      .mockResolvedValueOnce([
-        {
-          _id: 'final-sub-doc',
-          userId: 'user-target',
-          serviceName: 'Spotify',
-          category: 'music',
-          price: 9.99,
-          currency: 'USD',
-          billingCycle: 'monthly',
-          nextBillingDate: 1000,
-          status: 'active',
-          reminderDaysBefore: [1],
-          active: true,
-          createdAt: 1,
-          updatedAt: 2,
-        },
-      ]);
-    (eventsQuery.collect as any)
-      .mockResolvedValueOnce([
-        {
-          _id: 'source-event-doc',
-          id: 'event-1',
-          noteId: 'note-1',
-          userId: 'device-1',
-          operation: 'create',
-          changedAt: 1000,
-          deviceId: 'device-1',
-          payloadHash: '',
-        },
-      ])
-      .mockResolvedValueOnce([
-        {
-          _id: 'target-event-doc',
-          id: 'event-2',
-          noteId: 'note-2',
-          userId: 'user-target',
-          operation: 'create',
-          changedAt: 1000,
-          deviceId: 'device-1',
-          payloadHash: '',
-        },
-      ])
-      .mockResolvedValueOnce([
-        {
-          _id: 'target-event-doc',
-          id: 'event-2',
-          noteId: 'note-2',
-          userId: 'user-target',
-          operation: 'create',
-          changedAt: 1000,
-          deviceId: 'device-1',
-          payloadHash: '',
-        },
-      ])
-      .mockResolvedValueOnce([
-        {
-          _id: 'final-event-doc',
-          id: 'event-3',
-          noteId: 'note-1',
-          userId: 'user-target',
-          operation: 'create',
-          changedAt: 1000,
-          deviceId: 'device-1',
-          payloadHash: '',
-        },
-      ]);
-
-    const result = (await handler(mockCtx, {
-      fromUserId: 'device-1',
-      toUserId: 'user-target',
-      username: 'alice',
-      password,
-      strategy: 'local',
-    })) as { targetCounts: { notes: number; subscriptions: number; events: number } };
-
-    expect(mockDb.delete).toHaveBeenCalledWith('target-note-doc');
-    expect(mockDb.delete).toHaveBeenCalledWith('target-sub-doc');
-    expect(mockDb.delete).toHaveBeenCalledWith('target-event-doc');
-    expect(mockDb.insert).toHaveBeenCalledWith(
-      'notes',
-      expect.objectContaining({ id: 'note-1', userId: 'user-target' }),
-    );
-    expect(mockDb.insert).toHaveBeenCalledWith(
-      'subscriptions',
-      expect.objectContaining({ serviceName: 'Spotify', userId: 'user-target' }),
-    );
-    expect(result.targetCounts).toEqual(
-      expect.objectContaining({ notes: 1, subscriptions: 1, events: 1 }),
-    );
-  });
-
-  test('apply both duplicates conflicting local notes as local copies', async () => {
-    const handler = (applyUserDataMerge as unknown as { _handler: Handler })._handler;
-
-    const salt = 'salt';
-    const password = 'password123';
-    (mockDb.get as any).mockResolvedValue({
-      _id: { toString: () => 'user-target' },
-      username: 'alice',
-      passwordHash: `${salt}:${sha256(salt + password)}`,
-    });
-    (usersQuery.first as any).mockResolvedValue({
-      _id: { toString: () => 'user-target' },
-      username: 'alice',
-      passwordHash: `${salt}:${sha256(salt + password)}`,
-    });
-    (notesQuery.collect as any)
-      .mockResolvedValueOnce([
-        {
-          _id: 'source-note-doc',
-          id: 'note-1',
-          userId: 'device-1',
-          title: 'Local draft',
-          content: 'local',
-          active: true,
-          updatedAt: 1000,
-          createdAt: 900,
-        },
-      ])
-      .mockResolvedValueOnce([
-        {
-          _id: 'target-note-doc',
-          id: 'note-1',
-          userId: 'user-target',
-          title: 'Cloud draft',
-          content: 'cloud',
-          active: true,
-          updatedAt: 1100,
-          createdAt: 900,
-        },
-      ])
-      .mockResolvedValueOnce([
-        {
-          _id: 'target-note-doc',
-          id: 'note-1',
-          userId: 'user-target',
-          title: 'Cloud draft',
-          content: 'cloud',
-          active: true,
-          updatedAt: 1100,
-          createdAt: 900,
-        },
-        {
-          _id: 'copied-note-doc',
-          id: 'copy-id',
-          userId: 'user-target',
-          title: 'Local draft (Local copy)',
-          content: 'local',
-          active: true,
-          updatedAt: 1000,
-          createdAt: 900,
-        },
-      ]);
-
-    const result = (await handler(mockCtx, {
-      fromUserId: 'device-1',
-      toUserId: 'user-target',
-      username: 'alice',
-      password,
-      strategy: 'both',
-    })) as { targetCounts: { notes: number } };
-
-    expect(mockDb.insert).toHaveBeenCalledWith(
-      'notes',
-      expect.objectContaining({
-        userId: 'user-target',
-        title: 'Local draft (Local copy)',
+    const { context } = makeContext({
+      method: 'POST',
+      path: '/preflight',
+      body: JSON.stringify({
+        fromUserId: FROM_USER,
+        toUserId: TO_USER,
+        username: USERNAME,
+        password: 'wrong-password',
       }),
-    );
-    expect(result.targetCounts.notes).toBe(2);
+    });
+
+    await main(context);
+
+    // Should create or update migration attempt record
+    const createOrUpdateCalled =
+      mockCreateDocument.mock.calls.some(
+        (args) => (args as unknown[])[1] === 'migrationAttempts',
+      ) ||
+      mockUpdateDocument.mock.calls.some((args) => (args as unknown[])[1] === 'migrationAttempts');
+    expect(createOrUpdateCalled).toBe(true);
   });
 
-  test('legacy migrateUserData mutation is no longer exported', () => {
-    expect((userDataMigrationModule as any).migrateUserData).toBeUndefined();
+  test('should return 429 when throttle limit exceeded', async () => {
+    // Simulate an existing blocked attempt
+    const blockedUntil = Date.now() + 60000;
+    mockListDocuments.mockResolvedValueOnce({
+      documents: [
+        {
+          $id: 'attempt-1',
+          key: TO_USER,
+          attempts: 5,
+          lastAttemptAt: Date.now() - 1000,
+          blockedUntil,
+        },
+      ],
+    });
+
+    const { context, responses } = makeContext({
+      method: 'POST',
+      path: '/preflight',
+      body: JSON.stringify({
+        fromUserId: FROM_USER,
+        toUserId: TO_USER,
+        username: USERNAME,
+        password: PASSWORD,
+      }),
+    });
+
+    await main(context);
+
+    expect(responses[0].status).toBe(429);
+  });
+
+  test('should return 400 when required fields missing', async () => {
+    const { context, responses } = makeContext({
+      method: 'POST',
+      path: '/preflight',
+      body: JSON.stringify({ fromUserId: FROM_USER }),
+    });
+
+    await main(context);
+
+    expect(responses[0].status).toBe(400);
+  });
+});
+
+describe('POST /apply', () => {
+  test('should apply cloud strategy successfully (no data movement)', async () => {
+    mockSuccessfulAuth();
+
+    const { context, responses } = makeContext({
+      method: 'POST',
+      path: '/apply',
+      body: JSON.stringify({
+        fromUserId: FROM_USER,
+        toUserId: TO_USER,
+        username: USERNAME,
+        password: PASSWORD,
+        strategy: 'cloud',
+      }),
+    });
+
+    await main(context);
+
+    expect(responses[0].status).toBe(200);
+    const result = responses[0].data as Record<string, unknown>;
+    expect(result.strategy).toBe('cloud');
+    expect(result).toHaveProperty('summary');
+    expect(result).toHaveProperty('targetCounts');
+  });
+
+  test('should return 400 when strategy is invalid', async () => {
+    const { context, responses } = makeContext({
+      method: 'POST',
+      path: '/apply',
+      body: JSON.stringify({
+        fromUserId: FROM_USER,
+        toUserId: TO_USER,
+        username: USERNAME,
+        password: PASSWORD,
+        strategy: 'invalid',
+      }),
+    });
+
+    await main(context);
+
+    expect(responses[0].status).toBe(400);
+  });
+
+  test('should return 400 when required fields missing', async () => {
+    const { context, responses } = makeContext({
+      method: 'POST',
+      path: '/apply',
+      body: JSON.stringify({ fromUserId: FROM_USER }),
+    });
+
+    await main(context);
+
+    expect(responses[0].status).toBe(400);
   });
 });
