@@ -94,6 +94,37 @@ export class AppwriteBackendClient implements BackendClient {
     private readonly fcmProviderId?: string,
   ) {}
 
+  private requireUserDataMigrationFunction(operation: string): {
+    functions: Functions;
+    functionId: string;
+  } {
+    if (this.functions && this.userDataMigrationFunctionId) {
+      return {
+        functions: this.functions,
+        functionId: this.userDataMigrationFunctionId,
+      };
+    }
+
+    throw new Error(
+      `${operation}: Appwrite auth is enabled, but the Appwrite user-data-migration ` +
+        'function is not configured. Set EXPO_PUBLIC_APPWRITE_USER_DATA_MIGRATION_FUNCTION_ID ' +
+        '(mobile) or VITE_APPWRITE_USER_DATA_MIGRATION_FUNCTION_ID (web).',
+    );
+  }
+
+  private parseMigrationExecutionResponse<T extends { error?: string; status?: number }>(
+    operation: string,
+    responseBody: string,
+  ): T {
+    try {
+      return JSON.parse(responseBody) as T;
+    } catch {
+      throw new Error(
+        `${operation}: invalid response from Appwrite user-data-migration function: ${responseBody.slice(0, 200)}`,
+      );
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // Auth — implemented with Appwrite
   // ---------------------------------------------------------------------------
@@ -122,78 +153,61 @@ export class AppwriteBackendClient implements BackendClient {
   // All remaining methods — delegated to ConvexBackendClient until later phases
   // ---------------------------------------------------------------------------
 
-  preflightUserDataMerge(
+  async preflightUserDataMerge(
     fromUserId: string,
     toUserId: string,
     username: string,
     password: string,
   ): Promise<MergeSummary> {
-    if (this.functions && this.userDataMigrationFunctionId) {
-      return this.functions
-        .createExecution(
-          this.userDataMigrationFunctionId,
-          JSON.stringify({ fromUserId, toUserId, username, password }),
-          false,
-          '/preflight',
-          ExecutionMethod.POST,
-        )
-        .then((exec) => {
-          const parsed = JSON.parse(exec.responseBody) as MergeSummary & {
-            error?: string;
-            status?: number;
-          };
-          if (parsed.error) {
-            throw new Error(
-              `user-data-migration preflight error: ${parsed.error} (status ${
-                parsed.status ?? 'unknown'
-              })`,
-            );
-          }
-          return parsed;
-        });
-    }
-    if (this.delegate)
-      return this.delegate.preflightUserDataMerge(fromUserId, toUserId, username, password);
-    throw new Error(
-      'preflightUserDataMerge: neither userDataMigrationFunctionId nor delegate is configured',
+    const { functions, functionId } =
+      this.requireUserDataMigrationFunction('preflightUserDataMerge');
+
+    const exec = await functions.createExecution(
+      functionId,
+      JSON.stringify({ fromUserId, toUserId, username, password }),
+      false,
+      '/preflight',
+      ExecutionMethod.POST,
     );
+    const parsed = this.parseMigrationExecutionResponse<
+      MergeSummary & {
+        error?: string;
+        status?: number;
+      }
+    >('preflightUserDataMerge', exec.responseBody);
+    if (parsed.error) {
+      throw new Error(
+        `user-data-migration preflight error: ${parsed.error} (status ${parsed.status ?? 'unknown'})`,
+      );
+    }
+    return parsed;
   }
 
-  applyUserDataMerge(
+  async applyUserDataMerge(
     fromUserId: string,
     toUserId: string,
     username: string,
     password: string,
     strategy: MergeStrategy,
   ): Promise<void> {
-    if (this.functions && this.userDataMigrationFunctionId) {
-      return this.functions
-        .createExecution(
-          this.userDataMigrationFunctionId,
-          JSON.stringify({ fromUserId, toUserId, username, password, strategy }),
-          false,
-          '/apply',
-          ExecutionMethod.POST,
-        )
-        .then((exec) => {
-          const parsed = JSON.parse(exec.responseBody) as {
-            error?: string;
-            status?: number;
-          };
-          if (parsed.error) {
-            throw new Error(
-              `user-data-migration apply error: ${parsed.error} (status ${
-                parsed.status ?? 'unknown'
-              })`,
-            );
-          }
-        });
-    }
-    if (this.delegate)
-      return this.delegate.applyUserDataMerge(fromUserId, toUserId, username, password, strategy);
-    throw new Error(
-      'applyUserDataMerge: neither userDataMigrationFunctionId nor delegate is configured',
+    const { functions, functionId } = this.requireUserDataMigrationFunction('applyUserDataMerge');
+
+    const exec = await functions.createExecution(
+      functionId,
+      JSON.stringify({ fromUserId, toUserId, username, password, strategy }),
+      false,
+      '/apply',
+      ExecutionMethod.POST,
     );
+    const parsed = this.parseMigrationExecutionResponse<{
+      error?: string;
+      status?: number;
+    }>('applyUserDataMerge', exec.responseBody);
+    if (parsed.error) {
+      throw new Error(
+        `user-data-migration apply error: ${parsed.error} (status ${parsed.status ?? 'unknown'})`,
+      );
+    }
   }
 
   getNotes(userId: string): Promise<Note[]> {

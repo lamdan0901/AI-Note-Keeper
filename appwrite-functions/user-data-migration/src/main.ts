@@ -221,7 +221,7 @@ async function listAllDocuments(
   const docs: NoteRecord[] = [];
   let cursor: string | undefined;
 
-  while (true) {
+  for (;;) {
     const queries = [Query.equal('userId', userId), Query.limit(PAGE_LIMIT)];
     if (cursor) queries.push(Query.cursorAfter(cursor));
 

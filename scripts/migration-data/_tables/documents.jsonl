@@ -1,0 +1,9 @@
+{"name":"devicePushTokens","id":10001}
+{"name":"reminderChangeEvents","id":10002}
+{"name":"reminders","id":10003}
+{"name":"noteChangeEvents","id":10004}
+{"name":"notes","id":10005}
+{"name":"cronState","id":10006}
+{"name":"subscriptions","id":10007}
+{"name":"migrationAttempts","id":10008}
+{"name":"users","id":10009}

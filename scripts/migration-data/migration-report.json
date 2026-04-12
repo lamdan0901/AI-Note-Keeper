@@ -1,0 +1,23 @@
+{
+  "migratedAt": "2026-04-12T13:49:06.482Z",
+  "users": {
+    "jsonlLines": 13,
+    "appwriteTotal": 13
+  },
+  "notes": {
+    "jsonlLines": 134,
+    "appwriteTotal": 82
+  },
+  "noteChangeEvents": {
+    "jsonlLines": 4047,
+    "appwriteTotal": 4030
+  },
+  "subscriptions": {
+    "jsonlLines": 3,
+    "appwriteTotal": 3
+  },
+  "devicePushTokens": {
+    "jsonlLines": 8,
+    "appwriteTotal": 8
+  }
+}
