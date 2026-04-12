@@ -1,3 +1,4 @@
+/// <reference types="node" />
 /**
  * scripts/migrate-convex-to-appwrite.ts
  *

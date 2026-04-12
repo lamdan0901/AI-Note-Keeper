@@ -1,3 +1,4 @@
+/// <reference types="node" />
 /**
  * scripts/rollback-appwrite-migration.ts
  *
@@ -65,7 +66,7 @@ async function deleteAllDocumentsForUser(
 ): Promise<number> {
   let deleted = 0;
 
-  while (true) {
+  for (;;) {
     const result = await db.listDocuments(DATABASE_ID, collectionId, [
       Query.equal('userId', appwriteUserId),
       Query.limit(PAGE_LIMIT),

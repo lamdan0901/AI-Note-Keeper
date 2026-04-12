@@ -1,3 +1,4 @@
+/// <reference types="node" />
 /**
  * scripts/setup-appwrite-schema.ts
  *
