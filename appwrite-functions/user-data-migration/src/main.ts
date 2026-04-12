@@ -1,4 +1,4 @@
-import { Client, Databases, ID, Query, Users } from 'node-appwrite';
+import { Client, Databases, ID, Permission, Query, Role, Users } from 'node-appwrite';
 
 // ---------------------------------------------------------------------------
 // Appwrite function context types
@@ -41,6 +41,10 @@ const MAX_BLOCK_MS = 15 * 60 * 1000;
 
 const WELCOME_NOTE_TITLE = 'Welcome to AI Note Keeper';
 const WELCOME_NOTE_CONTENT = 'This is your first note. Edit or delete it anytime.';
+
+function userDocumentPermissions(userId: string): string[] {
+  return [Permission.read(Role.user(userId)), Permission.write(Role.user(userId))];
+}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -441,6 +445,7 @@ async function writeLocalStrategy(
       NOTES_COLLECTION,
       (note.id ?? note.$id) as string,
       cloneNoteForUser(note, targetUserId),
+      userDocumentPermissions(targetUserId),
     );
   }
 
@@ -450,6 +455,7 @@ async function writeLocalStrategy(
       SUBSCRIPTIONS_COLLECTION,
       ID.unique(),
       cloneSubscriptionForUser(sub, targetUserId),
+      userDocumentPermissions(targetUserId),
     );
   }
 
@@ -459,6 +465,7 @@ async function writeLocalStrategy(
       NOTE_CHANGE_EVENTS_COLLECTION,
       ID.unique(),
       cloneEventForUser(event, targetUserId),
+      userDocumentPermissions(targetUserId),
     );
   }
 }
@@ -480,6 +487,7 @@ async function writeBothStrategy(
         NOTES_COLLECTION,
         noteId(note),
         cloneNoteForUser(note, targetUserId),
+        userDocumentPermissions(targetUserId),
       );
       continue;
     }
@@ -491,6 +499,7 @@ async function writeBothStrategy(
       NOTES_COLLECTION,
       ID.unique(),
       cloneNoteForUser(note, targetUserId, { id: crypto.randomUUID(), title }),
+      userDocumentPermissions(targetUserId),
     );
   }
 
@@ -500,6 +509,7 @@ async function writeBothStrategy(
       SUBSCRIPTIONS_COLLECTION,
       ID.unique(),
       cloneSubscriptionForUser(sub, targetUserId),
+      userDocumentPermissions(targetUserId),
     );
   }
 
@@ -511,6 +521,7 @@ async function writeBothStrategy(
       NOTE_CHANGE_EVENTS_COLLECTION,
       ID.unique(),
       cloneEventForUser(event, targetUserId),
+      userDocumentPermissions(targetUserId),
     );
   }
 }

@@ -27,6 +27,13 @@ jest.mock('node-appwrite', () => ({
     equal: (field: string, value: string) => `${field}=${value}`,
     greaterThan: (field: string, value: number) => `${field}>${value}`,
   },
+  Permission: {
+    read: (role: string) => `read:${role}`,
+    write: (role: string) => `write:${role}`,
+  },
+  Role: {
+    user: (userId: string) => `user:${userId}`,
+  },
 }));
 
 import main from '../../appwrite-functions/reminders-api/src/main';
@@ -109,6 +116,7 @@ describe('createReminder (POST /)', () => {
         triggerAt: 1700000000000,
         scheduleStatus: 'unscheduled',
       }),
+      expect.any(Array),
     );
   });
 
@@ -136,6 +144,7 @@ describe('createReminder (POST /)', () => {
         userId: USER,
         changedAt: expect.any(Number),
       }),
+      expect.any(Array),
     );
   });
 
@@ -173,7 +182,13 @@ describe('createReminder (POST /)', () => {
 
     await main(context);
 
-    expect(mockCreateDocument).toHaveBeenCalledWith(DB, NOTES, 'my-custom-id', expect.any(Object));
+    expect(mockCreateDocument).toHaveBeenCalledWith(
+      DB,
+      NOTES,
+      'my-custom-id',
+      expect.any(Object),
+      expect.any(Array),
+    );
   });
 
   test('should reject mismatched userId with 403', async () => {
@@ -240,6 +255,7 @@ describe('deleteReminder (DELETE /:id)', () => {
         noteId: 'reminder-1',
         userId: USER,
       }),
+      expect.any(Array),
     );
   });
 

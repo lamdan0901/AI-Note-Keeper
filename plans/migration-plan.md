@@ -87,6 +87,9 @@ Feature-flag cutover: swap `BackendClient` from Convex → Appwrite implementati
 
 ### Open Questions
 
-1. **Anonymous session limits** — Does Appwrite Cloud auto-expire anonymous sessions or cap count? Needs verification.
-2. **Rate limits** — Free tier write limits sufficient for production volume?
-3. **Function cold-start** — 2-5s overhead on the every-minute reminder cron acceptable?
+1. **Function cold-start** — 2-5s overhead on the every-minute reminder cron acceptable?
+
+### Resolved Questions
+
+1. **Anonymous session limits** — No count cap beyond MAU plan limits. Sessions are stored locally and can be lost on app uninstall (same risk profile as current local identity model). Mitigation: refresh current session on startup and keep account-upgrade prompts.
+2. **Rate limits / plan** — Free plan is not suitable for production reliability (project pause behavior). Production requires Pro.

@@ -27,6 +27,13 @@ jest.mock('node-appwrite', () => ({
     equal: (field: string, value: string) => `${field}=${value}`,
     greaterThan: (field: string, value: number) => `${field}>${value}`,
   },
+  Permission: {
+    read: (role: string) => `read:${role}`,
+    write: (role: string) => `write:${role}`,
+  },
+  Role: {
+    user: (userId: string) => `user:${userId}`,
+  },
 }));
 
 import main from '../../appwrite-functions/reminders-api/src/main';
@@ -126,6 +133,7 @@ describe('Concurrent edits (last-write-wins) integration', () => {
         noteId: 'reminder-1',
         operation: 'update',
       }),
+      expect.any(Array),
     );
     expect(mockCreateExecution).toHaveBeenCalled();
   });

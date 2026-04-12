@@ -144,7 +144,14 @@ async function ensureCollection(id: string, name: string) {
   if (RESET) {
     await safeRun(`delete collection: ${id}`, () => db.deleteCollection(DATABASE_ID, id));
   }
-  await safeRun(`collection: ${id}`, () => db.createCollection(DATABASE_ID, id, name, []));
+  const created = await safeRun(`collection: ${id}`, () =>
+    db.createCollection(DATABASE_ID, id, name, [], true),
+  );
+  if (!created && !RESET) {
+    await safeRun(`collection config: ${id}`, () =>
+      db.updateCollection(DATABASE_ID, id, name, [], true, true),
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -163,6 +170,8 @@ async function setupNotesCollection() {
   const C = 'notes';
   await ensureCollection(C, 'Notes');
 
+  // mirrors Convex note id for migration/debug parity ($id remains canonical)
+  await createStringAttr(C, 'id', 36, false);
   // userId kept at 36 (UUID/Appwrite $id length)
   await createStringAttr(C, 'userId', 36, true);
   // title: 300 chars is ample for note titles (~50 words)
@@ -233,6 +242,7 @@ async function setupNoteChangeEventsCollection() {
   const C = 'noteChangeEvents';
   await ensureCollection(C, 'Note Change Events');
 
+  await createStringAttr(C, 'id', 36, false);
   await createStringAttr(C, 'noteId', 36, true);
   await createStringAttr(C, 'userId', 36, true);
   await createStringAttr(C, 'operation', 20, true);

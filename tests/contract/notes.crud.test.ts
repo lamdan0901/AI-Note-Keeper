@@ -24,6 +24,13 @@ jest.mock('node-appwrite', () => ({
   Query: {
     equal: (field: string, value: string) => `${field}=${value}`,
   },
+  Permission: {
+    read: (role: string) => `read:${role}`,
+    write: (role: string) => `write:${role}`,
+  },
+  Role: {
+    user: (userId: string) => `user:${userId}`,
+  },
 }));
 
 import main from '../../appwrite-functions/notes-sync/src/main';
@@ -152,6 +159,7 @@ describe('syncNotes Contract – create', () => {
         active: true,
         version: 1,
       }),
+      expect.any(Array),
     );
     expect(mockCreateDocument).toHaveBeenCalledWith(
       DB,
@@ -163,6 +171,7 @@ describe('syncNotes Contract – create', () => {
         userId: USER,
         deviceId: 'device-1',
       }),
+      expect.any(Array),
     );
   });
 
@@ -275,6 +284,7 @@ describe('syncNotes Contract – update', () => {
       NOTES,
       'note-missing',
       expect.objectContaining({ userId: USER, version: 1 }),
+      expect.any(Array),
     );
   });
 
@@ -308,6 +318,7 @@ describe('syncNotes Contract – update', () => {
       NOTES,
       'note-1',
       expect.objectContaining({ userId: 'user-2' }),
+      expect.any(Array),
     );
   });
 
@@ -461,6 +472,7 @@ describe('syncNotes Contract – delete', () => {
       EVENTS,
       expect.any(String),
       expect.objectContaining({ noteId: 'note-3', operation: 'delete', userId: USER }),
+      expect.any(Array),
     );
   });
 
@@ -537,6 +549,7 @@ describe('syncNotes Contract – batch operations', () => {
       NOTES,
       'note-4',
       expect.objectContaining({ title: 'Batch create', active: true }),
+      expect.any(Array),
     );
     expect(mockUpdateDocument).toHaveBeenCalledWith(
       DB,
@@ -589,6 +602,7 @@ describe('syncNotes Contract – checklist contentType', () => {
       NOTES,
       'note-checklist',
       expect.objectContaining({ content: checklistContent, contentType: 'checklist', version: 1 }),
+      expect.any(Array),
     );
   });
 

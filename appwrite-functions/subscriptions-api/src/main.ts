@@ -1,4 +1,4 @@
-import { Client, Databases, Functions, ID, Query } from 'node-appwrite';
+import { Client, Databases, Functions, ID, Permission, Query, Role } from 'node-appwrite';
 import { computeNextReminderAt } from './utils/billing.js';
 
 // ---------------------------------------------------------------------------
@@ -47,6 +47,10 @@ function deserializeReminderDays(value: string | null | undefined): number[] {
   } catch {
     return [];
   }
+}
+
+function userDocumentPermissions(userId: string): string[] {
+  return [Permission.read(Role.user(userId)), Permission.write(Role.user(userId))];
 }
 
 // ---------------------------------------------------------------------------
@@ -269,6 +273,7 @@ export default async function main(context: AppwriteContext): Promise<void> {
         SUBSCRIPTIONS_COLLECTION,
         ID.unique(),
         docFields,
+        userDocumentPermissions(userId),
       );
       log(`Created subscription ${created.$id as string}`);
       await firePushAsync(functions, pushFunctionId, {

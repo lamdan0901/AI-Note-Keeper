@@ -1,4 +1,4 @@
-import { Client, Databases, Functions, ID, Query } from 'node-appwrite';
+import { Client, Databases, Functions, ID, Permission, Query, Role } from 'node-appwrite';
 import { computeNextTrigger } from './utils/recurrence.js';
 import type { RepeatRule } from './utils/recurrence.js';
 
@@ -49,6 +49,10 @@ function deserializeJsonField(value: string | null | undefined): Record<string, 
   } catch {
     return null;
   }
+}
+
+function userDocumentPermissions(userId: string): string[] {
+  return [Permission.read(Role.user(userId)), Permission.write(Role.user(userId))];
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -224,16 +228,28 @@ export default async function main(context: AppwriteContext): Promise<void> {
     };
 
     try {
-      const created = await databases.createDocument(DATABASE_ID, NOTES_COLLECTION, id, docFields);
+      const created = await databases.createDocument(
+        DATABASE_ID,
+        NOTES_COLLECTION,
+        id,
+        docFields,
+        userDocumentPermissions(userId),
+      );
 
-      await databases.createDocument(DATABASE_ID, NOTE_CHANGE_EVENTS_COLLECTION, ID.unique(), {
-        noteId: id,
-        userId,
-        operation: 'create',
-        changedAt: now,
-        deviceId: (body['deviceId'] as string | undefined) ?? 'server',
-        payloadHash: '',
-      });
+      await databases.createDocument(
+        DATABASE_ID,
+        NOTE_CHANGE_EVENTS_COLLECTION,
+        ID.unique(),
+        {
+          noteId: id,
+          userId,
+          operation: 'create',
+          changedAt: now,
+          deviceId: (body['deviceId'] as string | undefined) ?? 'server',
+          payloadHash: '',
+        },
+        userDocumentPermissions(userId),
+      );
 
       await firePushAsync(functions, pushFunctionId, {
         type: 'reminder',
@@ -315,14 +331,20 @@ export default async function main(context: AppwriteContext): Promise<void> {
         patch,
       );
 
-      await databases.createDocument(DATABASE_ID, NOTE_CHANGE_EVENTS_COLLECTION, ID.unique(), {
-        noteId: reminderId,
-        userId,
-        operation: 'update',
-        changedAt: updatedAt,
-        deviceId: (body['deviceId'] as string | undefined) ?? 'server',
-        payloadHash: '',
-      });
+      await databases.createDocument(
+        DATABASE_ID,
+        NOTE_CHANGE_EVENTS_COLLECTION,
+        ID.unique(),
+        {
+          noteId: reminderId,
+          userId,
+          operation: 'update',
+          changedAt: updatedAt,
+          deviceId: (body['deviceId'] as string | undefined) ?? 'server',
+          payloadHash: '',
+        },
+        userDocumentPermissions(userId),
+      );
 
       await firePushAsync(functions, pushFunctionId, {
         type: 'reminder',
@@ -362,14 +384,20 @@ export default async function main(context: AppwriteContext): Promise<void> {
 
       await databases.deleteDocument(DATABASE_ID, NOTES_COLLECTION, reminderId);
 
-      await databases.createDocument(DATABASE_ID, NOTE_CHANGE_EVENTS_COLLECTION, ID.unique(), {
-        noteId: reminderId,
-        userId,
-        operation: 'delete',
-        changedAt: Date.now(),
-        deviceId: bodyDeviceId ?? 'server',
-        payloadHash: '',
-      });
+      await databases.createDocument(
+        DATABASE_ID,
+        NOTE_CHANGE_EVENTS_COLLECTION,
+        ID.unique(),
+        {
+          noteId: reminderId,
+          userId,
+          operation: 'delete',
+          changedAt: Date.now(),
+          deviceId: bodyDeviceId ?? 'server',
+          payloadHash: '',
+        },
+        userDocumentPermissions(userId),
+      );
 
       await firePushAsync(functions, pushFunctionId, {
         type: 'reminder',
@@ -462,14 +490,20 @@ export default async function main(context: AppwriteContext): Promise<void> {
         updates,
       );
 
-      await databases.createDocument(DATABASE_ID, NOTE_CHANGE_EVENTS_COLLECTION, ID.unique(), {
-        noteId: reminderId,
-        userId,
-        operation: 'update',
-        changedAt: now,
-        deviceId: (body['deviceId'] as string | undefined) ?? 'server',
-        payloadHash: '',
-      });
+      await databases.createDocument(
+        DATABASE_ID,
+        NOTE_CHANGE_EVENTS_COLLECTION,
+        ID.unique(),
+        {
+          noteId: reminderId,
+          userId,
+          operation: 'update',
+          changedAt: now,
+          deviceId: (body['deviceId'] as string | undefined) ?? 'server',
+          payloadHash: '',
+        },
+        userDocumentPermissions(userId),
+      );
 
       await firePushAsync(functions, pushFunctionId, {
         type: 'reminder',
@@ -528,14 +562,20 @@ export default async function main(context: AppwriteContext): Promise<void> {
         updates,
       );
 
-      await databases.createDocument(DATABASE_ID, NOTE_CHANGE_EVENTS_COLLECTION, ID.unique(), {
-        noteId: reminderId,
-        userId,
-        operation: 'update',
-        changedAt: now,
-        deviceId: (body['deviceId'] as string | undefined) ?? 'server',
-        payloadHash: '',
-      });
+      await databases.createDocument(
+        DATABASE_ID,
+        NOTE_CHANGE_EVENTS_COLLECTION,
+        ID.unique(),
+        {
+          noteId: reminderId,
+          userId,
+          operation: 'update',
+          changedAt: now,
+          deviceId: (body['deviceId'] as string | undefined) ?? 'server',
+          payloadHash: '',
+        },
+        userDocumentPermissions(userId),
+      );
 
       await firePushAsync(functions, pushFunctionId, {
         type: 'reminder',

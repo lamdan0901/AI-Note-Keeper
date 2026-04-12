@@ -28,6 +28,13 @@ jest.mock('node-appwrite', () => ({
     limit: (n: number) => `limit:${n}`,
     cursorAfter: (id: string) => `cursorAfter:${id}`,
   },
+  Permission: {
+    read: (role: string) => `read:${role}`,
+    write: (role: string) => `write:${role}`,
+  },
+  Role: {
+    user: (userId: string) => `user:${userId}`,
+  },
 }));
 
 import main from '../../appwrite-functions/user-data-migration/src/main';

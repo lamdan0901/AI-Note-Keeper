@@ -25,7 +25,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { Client, Databases, ID, Query, Users } from 'node-appwrite';
+import { Client, Databases, ID, Permission, Query, Role, Users } from 'node-appwrite';
 
 // ---------------------------------------------------------------------------
 // Bootstrap
@@ -55,6 +55,7 @@ const DEVICE_PUSH_TOKENS_COLLECTION = 'devicePushTokens';
 const DATA_DIR = path.join(__dirname, 'migration-data');
 const USER_ID_MAP_PATH = path.join(DATA_DIR, 'user-id-map.json');
 const REPORT_PATH = path.join(DATA_DIR, 'migration-report.json');
+const PASSWORD_RESET_USERS_PATH = path.join(DATA_DIR, 'password-reset-users.json');
 
 const BATCH_SIZE = 25;
 const BATCH_PAUSE_MS = 100;
@@ -69,6 +70,10 @@ function toSyntheticEmail(username: string): string {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function userDocumentPermissions(userId: string): string[] {
+  return [Permission.read(Role.user(userId)), Permission.write(Role.user(userId))];
 }
 
 function readJsonl(filePath: string): Record<string, unknown>[] {
@@ -167,7 +172,7 @@ async function phaseB(userRows: Record<string, unknown>[]): Promise<Map<string, 
       undefined,
       username,
     );
-    await users.updateLabels(appwriteUser.$id, ['migrated']);
+    await users.updateLabels(appwriteUser.$id, ['migrated', 'password-reset-required']);
     userIdMap.set(convexId, appwriteUser.$id);
     return true;
   });
@@ -176,8 +181,34 @@ async function phaseB(userRows: Record<string, unknown>[]): Promise<Map<string, 
   const tmpPath = `${USER_ID_MAP_PATH}.tmp`;
   fs.writeFileSync(tmpPath, JSON.stringify(Object.fromEntries(userIdMap), null, 2));
   fs.renameSync(tmpPath, USER_ID_MAP_PATH);
+
+  const passwordResetUsers = userRows
+    .map((row) => {
+      const convexUserId = row['_id'] as string | undefined;
+      const username = row['username'] as string | undefined;
+      if (!convexUserId || !username) {
+        throw new Error(`User row missing _id or username: ${JSON.stringify(row)}`);
+      }
+      const appwriteUserId = userIdMap.get(convexUserId);
+      if (!appwriteUserId) {
+        throw new Error(`Missing Appwrite user mapping for Convex user ${convexUserId}`);
+      }
+      return {
+        convexUserId,
+        appwriteUserId,
+        username,
+        syntheticEmail: toSyntheticEmail(username),
+      };
+    })
+    .sort((a, b) => a.username.localeCompare(b.username));
+
+  fs.writeFileSync(PASSWORD_RESET_USERS_PATH, JSON.stringify(passwordResetUsers, null, 2));
+
   console.log(
     `  ✓ Created ${succeeded} users, ${skipped} already mapped/skipped. Map written to ${USER_ID_MAP_PATH}`,
+  );
+  console.log(
+    `  ✓ Password-reset list written to ${PASSWORD_RESET_USERS_PATH} (${passwordResetUsers.length} users)`,
   );
 
   return userIdMap;
@@ -250,7 +281,13 @@ async function phaseC(
       }
     }
 
-    await db.createDocument(DATABASE_ID, NOTES_COLLECTION, noteId, payload);
+    await db.createDocument(
+      DATABASE_ID,
+      NOTES_COLLECTION,
+      noteId,
+      payload,
+      userDocumentPermissions(appwriteUserId),
+    );
     return true;
   });
 
@@ -293,7 +330,13 @@ async function phaseD(
       }
     }
 
-    await db.createDocument(DATABASE_ID, NOTE_CHANGE_EVENTS_COLLECTION, eventId, payload);
+    await db.createDocument(
+      DATABASE_ID,
+      NOTE_CHANGE_EVENTS_COLLECTION,
+      eventId,
+      payload,
+      userDocumentPermissions(appwriteUserId),
+    );
     return true;
   });
 
@@ -354,7 +397,13 @@ async function phaseE(
       }
     }
 
-    await db.createDocument(DATABASE_ID, SUBSCRIPTIONS_COLLECTION, ID.unique(), payload);
+    await db.createDocument(
+      DATABASE_ID,
+      SUBSCRIPTIONS_COLLECTION,
+      ID.unique(),
+      payload,
+      userDocumentPermissions(appwriteUserId),
+    );
     return true;
   });
 
@@ -388,7 +437,13 @@ async function phaseF(
       updatedAt: row['updatedAt'],
     };
 
-    await db.createDocument(DATABASE_ID, DEVICE_PUSH_TOKENS_COLLECTION, tokenId, payload);
+    await db.createDocument(
+      DATABASE_ID,
+      DEVICE_PUSH_TOKENS_COLLECTION,
+      tokenId,
+      payload,
+      userDocumentPermissions(appwriteUserId),
+    );
     return true;
   });
 

@@ -1,4 +1,4 @@
-import { Client, Databases, ID, Query } from 'node-appwrite';
+import { Client, Databases, ID, Permission, Query, Role } from 'node-appwrite';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -90,6 +90,10 @@ function deserializeJsonField(value: string | null | undefined): Record<string, 
   } catch {
     return null;
   }
+}
+
+function userDocumentPermissions(userId: string): string[] {
+  return [Permission.read(Role.user(userId)), Permission.write(Role.user(userId))];
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -200,14 +204,20 @@ export default async function main(context: AppwriteContext): Promise<void> {
 
       // Emit change event
       try {
-        await databases.createDocument(DATABASE_ID, NOTE_CHANGE_EVENTS_COLLECTION, ID.unique(), {
-          noteId: id,
-          userId,
-          operation,
-          changedAt: Date.now(),
-          deviceId: change.deviceId ?? 'server',
-          payloadHash: '',
-        });
+        await databases.createDocument(
+          DATABASE_ID,
+          NOTE_CHANGE_EVENTS_COLLECTION,
+          ID.unique(),
+          {
+            noteId: id,
+            userId,
+            operation,
+            changedAt: Date.now(),
+            deviceId: change.deviceId ?? 'server',
+            payloadHash: '',
+          },
+          userDocumentPermissions(userId),
+        );
       } catch (err) {
         log(`Failed to write change event for ${id}: ${String(err)}`);
       }
@@ -278,10 +288,16 @@ export default async function main(context: AppwriteContext): Promise<void> {
           }
         } else {
           try {
-            await databases.createDocument(DATABASE_ID, NOTES_COLLECTION, id, {
-              ...noteFields,
-              version: 1,
-            });
+            await databases.createDocument(
+              DATABASE_ID,
+              NOTES_COLLECTION,
+              id,
+              {
+                ...noteFields,
+                version: 1,
+              },
+              userDocumentPermissions(userId),
+            );
           } catch (err) {
             error(`Failed to create note ${id}: ${String(err)}`);
           }
