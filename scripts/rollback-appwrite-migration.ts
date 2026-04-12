@@ -14,15 +14,19 @@
  *   APPWRITE_ENDPOINT
  *   APPWRITE_PROJECT_ID
  *   APPWRITE_API_KEY   (needs users.write + databases.write scopes)
+ *   (loaded automatically from project-root .env.local / .env when present)
  */
 
 import * as fs from 'fs';
 import * as path from 'path';
 import { Client, Databases, Query, Users } from 'node-appwrite';
+import { loadScriptEnv } from './loadEnv';
 
 // ---------------------------------------------------------------------------
 // Bootstrap
 // ---------------------------------------------------------------------------
+
+loadScriptEnv(__dirname);
 
 const endpoint = process.env.APPWRITE_ENDPOINT;
 const projectId = process.env.APPWRITE_PROJECT_ID;

@@ -9,6 +9,7 @@
  *   APPWRITE_ENDPOINT      e.g. https://cloud.appwrite.io/v1
  *   APPWRITE_PROJECT_ID
  *   APPWRITE_API_KEY       Admin API key with databases.write scope
+ *   (loaded automatically from project-root .env.local / .env when present)
  *
  * Usage:
  *   npm run setup-appwrite-schema
@@ -23,10 +24,13 @@
  */
 
 import { Client, Databases, IndexType } from 'node-appwrite';
+import { loadScriptEnv } from './loadEnv';
 
 // ---------------------------------------------------------------------------
 // Bootstrap
 // ---------------------------------------------------------------------------
+
+loadScriptEnv(__dirname);
 
 const endpoint = process.env.APPWRITE_ENDPOINT;
 const projectId = process.env.APPWRITE_PROJECT_ID;

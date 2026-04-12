@@ -353,10 +353,9 @@ const createSummary = (source: UserSnapshot, target: UserSnapshot): MergeSummary
 function cloneNoteForUser(
   note: NoteRecord,
   userId: string,
-  overrides?: { id?: string; title?: string },
+  overrides?: { title?: string },
 ): Record<string, unknown> {
   return {
-    id: overrides?.id ?? note.id ?? note.$id,
     userId,
     title: overrides?.title ?? note.title,
     content: note.content,
@@ -418,7 +417,6 @@ function cloneEventForUser(
   noteId?: string,
 ): Record<string, unknown> {
   return {
-    id: crypto.randomUUID(),
     noteId: noteId ?? event.noteId,
     userId,
     operation: event.operation,
@@ -498,7 +496,7 @@ async function writeBothStrategy(
       DATABASE_ID,
       NOTES_COLLECTION,
       ID.unique(),
-      cloneNoteForUser(note, targetUserId, { id: crypto.randomUUID(), title }),
+      cloneNoteForUser(note, targetUserId, { title }),
       userDocumentPermissions(targetUserId),
     );
   }

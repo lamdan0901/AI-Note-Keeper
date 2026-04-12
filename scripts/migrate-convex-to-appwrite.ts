@@ -7,17 +7,15 @@
  *
  * PRE-REQUISITE (manual step before running):
  *   npx convex export --prod --path scripts/migration-data/
- *   # Produces (one file per table):
- *     scripts/migration-data/users.jsonl
- *     scripts/migration-data/notes.jsonl
- *     scripts/migration-data/noteChangeEvents.jsonl
- *     scripts/migration-data/subscriptions.jsonl
- *     scripts/migration-data/devicePushTokens.jsonl
+ *   # This script supports BOTH Convex export layouts:
+ *   #   1) flat files: scripts/migration-data/<table>.jsonl
+ *   #   2) table folders: scripts/migration-data/<table>/documents.jsonl
  *
  * Required env vars:
  *   APPWRITE_ENDPOINT      e.g. https://cloud.appwrite.io/v1
  *   APPWRITE_PROJECT_ID
  *   APPWRITE_API_KEY       Admin key with users.write + databases.write scopes
+ *   (loaded automatically from project-root .env.local / .env when present)
  *
  * Usage:
  *   npm run migrate-convex-to-appwrite
@@ -26,10 +24,13 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { Client, Databases, ID, Permission, Query, Role, Users } from 'node-appwrite';
+import { loadScriptEnv } from './loadEnv';
 
 // ---------------------------------------------------------------------------
 // Bootstrap
 // ---------------------------------------------------------------------------
+
+loadScriptEnv(__dirname);
 
 const endpoint = process.env.APPWRITE_ENDPOINT;
 const projectId = process.env.APPWRITE_PROJECT_ID;
@@ -90,13 +91,74 @@ function readJsonl(filePath: string): Record<string, unknown>[] {
     });
 }
 
-function requireFile(filePath: string, label: string): void {
-  if (!fs.existsSync(filePath)) {
-    console.error(`  ✗ Missing required file: ${filePath}`);
-    console.error(`    Run: npx convex export --prod --path scripts/migration-data/`);
-    console.error(`    Then re-run this script.`);
-    throw new Error(`Missing ${label} export file`);
+function resolveTableExportPath(tableName: string): string | null {
+  const flatPath = path.join(DATA_DIR, `${tableName}.jsonl`);
+  if (fs.existsSync(flatPath) && fs.statSync(flatPath).isFile()) {
+    return flatPath;
   }
+  const nestedPath = path.join(DATA_DIR, tableName, 'documents.jsonl');
+  if (fs.existsSync(nestedPath) && fs.statSync(nestedPath).isFile()) {
+    return nestedPath;
+  }
+  return null;
+}
+
+function readTableExport(
+  tableName: string,
+  options: { required: boolean },
+): Record<string, unknown>[] {
+  const resolvedPath = resolveTableExportPath(tableName);
+  if (!resolvedPath) {
+    if (!options.required) return [];
+    const expectedFlat = path.join(DATA_DIR, `${tableName}.jsonl`);
+    const expectedNested = path.join(DATA_DIR, tableName, 'documents.jsonl');
+    throw new Error(
+      `Missing required export for "${tableName}". Expected one of:\n` +
+        `  - ${expectedFlat}\n` +
+        `  - ${expectedNested}`,
+    );
+  }
+  return readJsonl(resolvedPath);
+}
+
+function collectUserIds(rows: Array<Record<string, unknown>>): string[] {
+  const uniqueUserIds = new Set<string>();
+  for (const row of rows) {
+    const userId = row['userId'];
+    if (typeof userId === 'string' && userId.trim().length > 0) {
+      uniqueUserIds.add(userId);
+    }
+  }
+  return Array.from(uniqueUserIds);
+}
+
+function deriveUsersFromIds(
+  userIds: string[],
+  existingUsernames: Iterable<string> = [],
+): Array<{ _id: string; username: string }> {
+  const taken = new Set<string>(existingUsernames);
+  const toUsername = (userId: string, index: number): string => {
+    const base = userId
+      .toLowerCase()
+      .replace(/[^a-z0-9._-]/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '')
+      .slice(0, 24);
+    const prefix = base || `user-${index + 1}`;
+    let candidate = `legacy-${prefix}`;
+    let suffix = 1;
+    while (taken.has(candidate)) {
+      candidate = `legacy-${prefix}-${suffix}`;
+      suffix++;
+    }
+    taken.add(candidate);
+    return candidate;
+  };
+
+  return userIds.map((userId, index) => ({
+    _id: userId,
+    username: toUsername(userId, index),
+  }));
 }
 
 /**
@@ -147,9 +209,26 @@ async function phaseB(userRows: Record<string, unknown>[]): Promise<Map<string, 
   const existingRaw: Record<string, string> = fs.existsSync(USER_ID_MAP_PATH)
     ? (JSON.parse(fs.readFileSync(USER_ID_MAP_PATH, 'utf-8')) as Record<string, string>)
     : {};
-  const userIdMap = new Map<string, string>(Object.entries(existingRaw));
+  const userIdMap = new Map<string, string>();
+  let staleMappings = 0;
+  for (const [convexId, mappedAppwriteUserId] of Object.entries(existingRaw)) {
+    try {
+      await users.get(mappedAppwriteUserId);
+      userIdMap.set(convexId, mappedAppwriteUserId);
+    } catch (err: unknown) {
+      const code = (err as { code?: number }).code;
+      if (code === 404) {
+        staleMappings++;
+        continue;
+      }
+      throw err;
+    }
+  }
   if (userIdMap.size > 0) {
     console.log(`  ↺ Resuming — ${userIdMap.size} users already mapped from prior run`);
+  }
+  if (staleMappings > 0) {
+    console.log(`  ↺ Ignored ${staleMappings} stale user mappings (users no longer exist in Appwrite)`);
   }
 
   const { succeeded, skipped } = await batchProcess(userRows, async (row) => {
@@ -165,15 +244,38 @@ async function phaseB(userRows: Record<string, unknown>[]): Promise<Map<string, 
       return false;
     }
 
-    const appwriteUser = await users.create(
-      ID.unique(),
-      toSyntheticEmail(username),
-      undefined,
-      undefined,
-      username,
-    );
-    await users.updateLabels(appwriteUser.$id, ['migrated', 'password-reset-required']);
-    userIdMap.set(convexId, appwriteUser.$id);
+    const syntheticEmail = toSyntheticEmail(username);
+
+    let appwriteUserId: string;
+    try {
+      const appwriteUser = await users.create(
+        ID.unique(),
+        syntheticEmail,
+        undefined,
+        undefined,
+        username,
+      );
+      appwriteUserId = appwriteUser.$id;
+    } catch (err: unknown) {
+      const code = (err as { code?: number }).code;
+      if (code !== 409) throw err;
+
+      const existing = await users.list([Query.equal('email', syntheticEmail), Query.limit(1)]);
+      const first = existing.users[0];
+      if (!first) {
+        throw new Error(`User already exists for ${syntheticEmail} but could not be looked up`);
+      }
+      appwriteUserId = first.$id;
+    }
+
+    try {
+      await users.updateLabels(appwriteUserId, ['migrated', 'passwordresetrequired']);
+    } catch (err: unknown) {
+      console.warn(
+        `  ⚠ failed to update labels for ${syntheticEmail}: ${(err as Error).message ?? String(err)}`,
+      );
+    }
+    userIdMap.set(convexId, appwriteUserId);
     return true;
   });
 
@@ -237,7 +339,6 @@ async function phaseC(
     const repeatConfig = row['repeatConfig'];
 
     const payload: Record<string, unknown> = {
-      id: noteId,
       userId: appwriteUserId,
       title: row['title'] ?? null,
       content: row['content'] ?? null,
@@ -315,7 +416,6 @@ async function phaseD(
     if (!eventId) throw new Error(`NoteChangeEvent row missing id: ${JSON.stringify(row)}`);
 
     const payload: Record<string, unknown> = {
-      id: eventId,
       noteId: row['noteId'],
       userId: appwriteUserId,
       operation: row['operation'],
@@ -554,28 +654,84 @@ async function main(): Promise<void> {
   // Validate data directory and required files
   if (!fs.existsSync(DATA_DIR)) {
     console.error(`Data directory not found: ${DATA_DIR}`);
-    console.error('Run: npx convex export --prod --path scripts/migration-data/');
+    console.error('Run: npx convex export --path scripts/migration-data/');
+    process.exit(1);
+  }
+  if (fs.statSync(DATA_DIR).isFile()) {
+    console.error(`Expected "${DATA_DIR}" to be a directory, but found a file archive.`);
+    console.error('Your Convex export is zipped. Extract it to scripts/migration-data/ first.');
+    console.error(
+      'PowerShell:\n' +
+        '  Rename-Item scripts\\migration-data scripts\\migration-data.zip\n' +
+        '  Expand-Archive -LiteralPath scripts\\migration-data.zip -DestinationPath scripts\\migration-data -Force',
+    );
     process.exit(1);
   }
 
-  const requiredFiles: [string, string][] = [
-    [path.join(DATA_DIR, 'users.jsonl'), 'users'],
-    [path.join(DATA_DIR, 'notes.jsonl'), 'notes'],
-    [path.join(DATA_DIR, 'noteChangeEvents.jsonl'), 'noteChangeEvents'],
-    [path.join(DATA_DIR, 'subscriptions.jsonl'), 'subscriptions'],
-    [path.join(DATA_DIR, 'devicePushTokens.jsonl'), 'devicePushTokens'],
-  ];
-
-  for (const [filePath, label] of requiredFiles) {
-    requireFile(filePath, label);
-  }
-
   console.log('Reading JSONL export files…');
-  const userRows = readJsonl(path.join(DATA_DIR, 'users.jsonl'));
-  const noteRows = readJsonl(path.join(DATA_DIR, 'notes.jsonl'));
-  const eventRows = readJsonl(path.join(DATA_DIR, 'noteChangeEvents.jsonl'));
-  const subRows = readJsonl(path.join(DATA_DIR, 'subscriptions.jsonl'));
-  const tokenRows = readJsonl(path.join(DATA_DIR, 'devicePushTokens.jsonl'));
+  let userRows = readTableExport('users', { required: false });
+  const noteRows = readTableExport('notes', { required: true });
+  const eventRows = readTableExport('noteChangeEvents', { required: false });
+  const subRows = readTableExport('subscriptions', { required: false });
+  const tokenRows = readTableExport('devicePushTokens', { required: false });
+
+  const allDataRows = [...noteRows, ...eventRows, ...subRows, ...tokenRows];
+  const allDataUserIds = collectUserIds(allDataRows);
+  if (userRows.length === 0) {
+    const derivedUsers = deriveUsersFromIds(allDataUserIds);
+    if (derivedUsers.length === 0) {
+      const totalUserScopedRows =
+        noteRows.length + eventRows.length + subRows.length + tokenRows.length;
+      if (totalUserScopedRows === 0) {
+        const emptyReport: MigrationReport = {
+          migratedAt: new Date().toISOString(),
+          users: { jsonlLines: 0, appwriteTotal: 0 },
+          notes: { jsonlLines: 0, appwriteTotal: 0 },
+          noteChangeEvents: { jsonlLines: 0, appwriteTotal: 0 },
+          subscriptions: { jsonlLines: 0, appwriteTotal: 0 },
+          devicePushTokens: { jsonlLines: 0, appwriteTotal: 0 },
+        };
+        fs.writeFileSync(REPORT_PATH, JSON.stringify(emptyReport, null, 2));
+        console.log('  users: 0');
+        console.log(`  notes: ${noteRows.length}`);
+        console.log(`  noteChangeEvents: ${eventRows.length}`);
+        console.log(`  subscriptions: ${subRows.length}`);
+        console.log(`  devicePushTokens: ${tokenRows.length}`);
+        console.log('\nNo user-scoped rows found in export. Nothing to migrate.');
+        console.log(`Report written to ${REPORT_PATH}`);
+        console.log('\n✅ Migration complete (no-op).');
+        return;
+      }
+      throw new Error(
+        'No users export found, and no userId values were discoverable in data rows to derive users.',
+      );
+    }
+    userRows = derivedUsers;
+    const derivedPath = path.join(DATA_DIR, 'derived-users.json');
+    fs.writeFileSync(derivedPath, JSON.stringify(derivedUsers, null, 2));
+    console.log(`  ⚠ users export missing. Derived ${derivedUsers.length} users from userId fields.`);
+    console.log(`    Derived user mapping written to ${derivedPath}`);
+  } else {
+    const existingIds = new Set(
+      userRows
+        .map((row) => row['_id'])
+        .filter((id): id is string => typeof id === 'string' && id.trim().length > 0),
+    );
+    const existingNames = userRows
+      .map((row) => row['username'])
+      .filter((name): name is string => typeof name === 'string' && name.trim().length > 0);
+    const missingIds = allDataUserIds.filter((id) => !existingIds.has(id));
+    if (missingIds.length > 0) {
+      const derivedUsers = deriveUsersFromIds(missingIds, existingNames);
+      userRows = [...userRows, ...derivedUsers];
+      const derivedPath = path.join(DATA_DIR, 'derived-users.json');
+      fs.writeFileSync(derivedPath, JSON.stringify(derivedUsers, null, 2));
+      console.log(
+        `  ⚠ users export incomplete. Derived ${derivedUsers.length} additional users from missing userId values.`,
+      );
+      console.log(`    Derived user mapping written to ${derivedPath}`);
+    }
+  }
 
   console.log(`  users: ${userRows.length}`);
   console.log(`  notes: ${noteRows.length}`);
