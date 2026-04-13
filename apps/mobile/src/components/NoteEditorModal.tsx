@@ -348,7 +348,7 @@ export const NoteEditorModal = forwardRef<NoteEditorModalRef, NoteEditorModalPro
 
                 <View style={styles.modalActions}>
                   <Pressable
-                    style={[styles.button, styles.buttonIconAction]}
+                    style={[styles.button, styles.buttonListAction]}
                     onPress={handleToggleContentType}
                     hitSlop={8}
                   >
@@ -363,7 +363,6 @@ export const NoteEditorModal = forwardRef<NoteEditorModalRef, NoteEditorModalPro
                       <Ionicons name="trash-outline" size={20} color={theme.colors.error} />
                     </Pressable>
                   )}
-                  <View style={{ flex: 1 }} />
                   <Pressable style={[styles.button, styles.buttonCancel]} onPress={handleClose}>
                     <Text style={styles.buttonTextCancel}>Cancel</Text>
                   </Pressable>
@@ -511,10 +510,11 @@ const createStyles = (theme: Theme) =>
       backgroundColor: '#fee2e2',
       paddingHorizontal: theme.spacing.md,
     },
-    buttonIconAction: {
+    buttonListAction: {
       paddingHorizontal: theme.spacing.md,
       borderWidth: 1,
       borderColor: theme.colors.border,
+      marginRight: 'auto',
     },
     buttonTextSave: {
       color: 'white',
