@@ -2,8 +2,6 @@
 
 ## Why this version
 
-This plan is rewritten from `docs/CONVEX_TO_EXPRESS_MIGRATION_DRAFT.md` as a **developer-friendly execution guide**:
-
 - Clear phase boundaries
 - Explicit TODOs you can execute in order
 - Backend learning goals per phase
@@ -86,20 +84,20 @@ Parallel windows:
 
 ## Phase dashboard
 
-| Phase | Primary outcome | Depends on | Learning focus |
-|---|---|---|---|
-| 0 | Express + Postgres foundation | - | app structure, migrations, errors |
-| 0.5 | Docker + CI + pg-boss baseline | 0 | deployment shape, async jobs |
-| 1A | Auth parity + JWT session model | 0.5 | auth lifecycle, hash migration |
-| 1B | Notes CRUD + LWW sync parity | 1A | transactions, idempotency, conflict resolution |
-| 1C | Subscriptions + device tokens + AI APIs | 1A | modular services, external API resilience |
-| 2 | Reminder domain parity | 1B + 1C | recurrence, timezone correctness |
-| 3 | Cron + push workers parity | 2 | reliable background processing |
-| 4 | User merge + throttling parity | 3 | locking, anti-abuse controls |
-| 5 | Convex→PG migration execution | 4 | ETL safety, reconciliation |
-| 6 | Web client cutover | 5 | API adapter design, rollout safety |
-| 7 | Mobile client cutover | 5 | offline sync compatibility |
-| 8 | Convex decommission | 6 + 7 | cleanup discipline, rollback readiness |
+| Phase | Primary outcome                         | Depends on | Learning focus                                 |
+| ----- | --------------------------------------- | ---------- | ---------------------------------------------- |
+| 0     | Express + Postgres foundation           | -          | app structure, migrations, errors              |
+| 0.5   | Docker + CI + pg-boss baseline          | 0          | deployment shape, async jobs                   |
+| 1A    | Auth parity + JWT session model         | 0.5        | auth lifecycle, hash migration                 |
+| 1B    | Notes CRUD + LWW sync parity            | 1A         | transactions, idempotency, conflict resolution |
+| 1C    | Subscriptions + device tokens + AI APIs | 1A         | modular services, external API resilience      |
+| 2     | Reminder domain parity                  | 1B + 1C    | recurrence, timezone correctness               |
+| 3     | Cron + push workers parity              | 2          | reliable background processing                 |
+| 4     | User merge + throttling parity          | 3          | locking, anti-abuse controls                   |
+| 5     | Convex→PG migration execution           | 4          | ETL safety, reconciliation                     |
+| 6     | Web client cutover                      | 5          | API adapter design, rollout safety             |
+| 7     | Mobile client cutover                   | 5          | offline sync compatibility                     |
+| 8     | Convex decommission                     | 6 + 7      | cleanup discipline, rollback readiness         |
 
 ---
 
@@ -118,12 +116,12 @@ Create a production-grade backend skeleton with strict config validation, migrat
 
 ### TODOs
 
-1. **P0-01** Create `apps/backend` workspace package and scripts (`dev`, `build`, `start`, `test`, `migrate`).
-2. **P0-02** Define backend folder layout (`routes/services/repositories/jobs/middleware/db`).
-3. **P0-03** Add `config.ts` with fail-fast env validation.
-4. **P0-04** Add singleton Postgres pool module.
-5. **P0-05** Implement migration runner with `schema_migrations` tracking.
-6. **P0-06** Create schema migrations for:
+1. ~~**P0-01** Create `apps/backend` workspace package and scripts (`dev`, `build`, `start`, `test`, `migrate`).~~
+2. ~~**P0-02** Define backend folder layout (`routes/services/repositories/jobs/middleware/db`).~~
+3. ~~**P0-03** Add `config.ts` with fail-fast env validation.~~
+4. ~~**P0-04** Add singleton Postgres pool module.~~
+5. ~~**P0-05** Implement migration runner with `schema_migrations` tracking.~~
+6. ~~**P0-06** Create schema migrations for:~~
    - `users`
    - `notes`
    - `subscriptions`
@@ -132,11 +130,11 @@ Create a production-grade backend skeleton with strict config validation, migrat
    - `cron_state` (UNIQUE CONSTRAINT on key)
    - `migration_attempts`
    - `refresh_tokens`
-7. **P0-07** Add core indexes from draft (sync, reminder lookups, dedupe, token lookup).
-8. **P0-08** Add error catalog + global error middleware using standard error shape.
+7. ~~**P0-07** Add core indexes from draft (sync, reminder lookups, dedupe, token lookup).~~
+8. ~~**P0-08** Add error catalog + global error middleware using standard error shape.~~
 9. **P0-09** Add request validation pattern (schema-first, route-level).
 10. **P0-10** Add `/health/live` and `/health/ready`.
-11. **P0-11** Define API status mapping (validation/auth/forbidden/not-found/conflict/rate-limit/internal).
+11. ~~**P0-11** Define API status mapping (validation/auth/forbidden/not-found/conflict/rate-limit/internal).~~
 12. **P0-12** Start migration tooling skeleton (`export/import/reconcile` scaffolding only).
 13. **P0-13** Document polling contract baseline (focus + 30s notes sync; cron/push-driven updates).
 14. **P0-14** Set up HTTP integration test harness shape that can absorb converted contract tests in later phases.
@@ -633,4 +631,3 @@ Retire Convex safely after both clients run stably on new backend.
 1. New realtime channel (SSE/WebSocket)
 2. Non-parity product changes unrelated to migration
 3. `appwrite-functions/` changes unless explicitly requested in separate work
-

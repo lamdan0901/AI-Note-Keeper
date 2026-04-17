@@ -1,0 +1,29 @@
+{
+  "name": "@ai-note-keeper/backend",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "test": "npm run build && node --test \"dist/tests/**/*.test.js\"",
+    "migrate": "npm run build && node dist/migrate.js"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/node": "^20.11.30",
+    "@types/pg": "^8.20.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.4.0"
+  },
+  "dependencies": {
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "pg": "^8.20.0",
+    "zod": "^4.3.6"
+  }
+}
