@@ -6,6 +6,7 @@ import {
   isLandingDismissedInSession,
   shouldShowLanding,
 } from '../src/services/landingSession';
+import { loadLegacyWebAuthUserId } from '../src/auth/session';
 
 describe('landingSession', () => {
   it('shows landing only when auth is not loading, user is unauthenticated, and landing is not dismissed', () => {
@@ -83,5 +84,36 @@ describe('landingSession', () => {
   it('fails safely when storage is unavailable', () => {
     expect(isLandingDismissedInSession(null)).toBe(false);
     expect(() => dismissLandingForSession(null)).not.toThrow();
+  });
+
+  it('detects legacy userId-only auth session for upgrade bootstrap', () => {
+    const storage = new Map<string, string>();
+    storage.set('web-auth-session', JSON.stringify({ userId: 'legacy-user' }));
+
+    const localStorage = {
+      getItem: (key: string): string | null => storage.get(key) ?? null,
+      setItem: (key: string, value: string): void => {
+        storage.set(key, value);
+      },
+      removeItem: (key: string): void => {
+        storage.delete(key);
+      },
+      clear: (): void => {
+        storage.clear();
+      },
+      key: (_index: number): string | null => null,
+      get length(): number {
+        return storage.size;
+      },
+    };
+
+    const previousWindow = (globalThis as { window?: unknown }).window;
+    (globalThis as { window?: unknown }).window = { localStorage };
+
+    try {
+      expect(loadLegacyWebAuthUserId()).toBe('legacy-user');
+    } finally {
+      (globalThis as { window?: unknown }).window = previousWindow;
+    }
   });
 });

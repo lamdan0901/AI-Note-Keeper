@@ -11,6 +11,8 @@ const LEGACY_MIGRATION_DONE_KEY = 'LEGACY_MIGRATION_DONE';
 export type AuthSession = {
   userId: string;
   username: string;
+  accessToken?: string;
+  refreshToken?: string;
 };
 
 export const getOrCreateDeviceId = async (): Promise<string> => {
@@ -45,7 +47,31 @@ export const loadAuthSession = async (): Promise<AuthSession | null> => {
     return {
       userId: parsed.userId,
       username: parsed.username,
+      accessToken: parsed.accessToken,
+      refreshToken: parsed.refreshToken,
     };
+  } catch {
+    return null;
+  }
+};
+
+export const loadLegacySessionUserId = async (): Promise<string | null> => {
+  try {
+    const raw = await SecureStore.getItemAsync(AUTH_SESSION_KEY);
+    if (!raw) {
+      return null;
+    }
+
+    const parsed = JSON.parse(raw) as Partial<AuthSession>;
+    if (!parsed.userId || typeof parsed.userId !== 'string') {
+      return null;
+    }
+
+    if (parsed.username && parsed.username.trim().length > 0) {
+      return null;
+    }
+
+    return parsed.userId;
   } catch {
     return null;
   }

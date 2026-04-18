@@ -23,6 +23,7 @@ import {
   DEVICE_ID_KEY,
   clearAuthSession,
   getOrCreateDeviceId,
+  loadLegacySessionUserId,
   loadAuthSession,
   resolveCurrentUserId,
   saveAuthSession,
@@ -76,12 +77,29 @@ describe('auth session lifecycle', () => {
 
   it('loads valid auth session', async () => {
     (SecureStore.getItemAsync as any).mockResolvedValue(
-      JSON.stringify({ userId: 'u1', username: 'alice' }),
+      JSON.stringify({
+        userId: 'u1',
+        username: 'alice',
+        accessToken: 'access-1',
+        refreshToken: 'refresh-1',
+      }),
     );
 
     const session = await loadAuthSession();
 
-    expect(session).toEqual({ userId: 'u1', username: 'alice' });
+    expect(session).toEqual({
+      userId: 'u1',
+      username: 'alice',
+      accessToken: 'access-1',
+      refreshToken: 'refresh-1',
+    });
+  });
+
+  it('reads legacy userId-only payload for silent upgrade path', async () => {
+    (SecureStore.getItemAsync as any).mockResolvedValue(JSON.stringify({ userId: 'legacy-user' }));
+
+    await expect(loadAuthSession()).resolves.toBeNull();
+    await expect(loadLegacySessionUserId()).resolves.toBe('legacy-user');
   });
 
   it('returns null for invalid auth session payload', async () => {
