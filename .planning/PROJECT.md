@@ -51,20 +51,21 @@ Migrate backend infrastructure to Express/PostgreSQL with no user-facing regress
 
 ## Key Decisions
 
-| Decision | Rationale | Outcome |
-|----------|-----------|---------|
-| Keep behavior parity as primary migration objective | Reduces user-facing risk and supports controlled cutover | — Pending |
-| Use Express + PostgreSQL layered architecture (routes/services/repositories/jobs/db) | Improves separation of concerns and operational control | — Pending |
-| Use pg-boss for deferred jobs and dedicated worker for cron | Durable job processing replaces in-memory or implicit scheduling | — Pending |
-| Ship polling parity before web cutover | Ensures stable sync behavior before infrastructure switch | — Pending |
-| Support legacy session and password upgrade paths | Preserves continuity for existing installed clients/users | — Pending |
-| Reuse packages/shared domain logic instead of reimplementation | Maintains semantic parity and lowers regression risk | — Pending |
+| Decision                                                                             | Rationale                                                        | Outcome   |
+| ------------------------------------------------------------------------------------ | ---------------------------------------------------------------- | --------- |
+| Keep behavior parity as primary migration objective                                  | Reduces user-facing risk and supports controlled cutover         | — Pending |
+| Use Express + PostgreSQL layered architecture (routes/services/repositories/jobs/db) | Improves separation of concerns and operational control          | — Pending |
+| Use pg-boss for deferred jobs and dedicated worker for cron                          | Durable job processing replaces in-memory or implicit scheduling | — Pending |
+| Ship polling parity before web cutover                                               | Ensures stable sync behavior before infrastructure switch        | — Pending |
+| Support legacy session and password upgrade paths                                    | Preserves continuity for existing installed clients/users        | — Pending |
+| Reuse packages/shared domain logic instead of reimplementation                       | Maintains semantic parity and lowers regression risk             | — Pending |
 
 ## Evolution
 
 This document evolves at phase transitions and milestone boundaries.
 
 **After each phase transition** (via /gsd-transition):
+
 1. Requirements invalidated? -> Move to Out of Scope with reason
 2. Requirements validated? -> Move to Validated with phase reference
 3. New requirements emerged? -> Add to Active
@@ -72,10 +73,12 @@ This document evolves at phase transitions and milestone boundaries.
 5. "What This Is" still accurate? -> Update if drifted
 
 **After each milestone** (via /gsd-complete-milestone):
+
 1. Full review of all sections
 2. Core Value check - still the right priority?
 3. Audit Out of Scope - reasons still valid?
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-18 after initialization*
+
+_Last updated: 2026-04-18 after initialization_

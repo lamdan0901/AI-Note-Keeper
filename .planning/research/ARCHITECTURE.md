@@ -35,18 +35,18 @@
 
 ### Component Responsibilities
 
-| Component | Responsibility | Typical Implementation |
-|-----------|----------------|------------------------|
-| Feature Decision Router | Decide Convex vs Express per request/cohort | Edge-level toggle evaluation (env + cohort + percentage + kill switch) |
-| API Adapter Layer (web/mobile) | Keep client contract stable while backend target changes | Service-level adapter exposing existing app methods |
-| Convex Legacy Backend | Stable baseline behavior and rollback target during migration | Existing Convex functions/schedulers |
-| Express HTTP Layer | Canonical REST contract and input/auth/error boundaries | Modular routers + middleware |
-| Service Layer | Domain behavior parity, transaction orchestration, idempotency rules | Notes/Reminders/Subscriptions/Auth services |
-| Repository Layer | SQL-only persistence operations, locking and indexing usage | Parameterized queries + explicit transaction boundaries |
-| PostgreSQL | Durable source of truth after cutover | Normalized schema + migration-managed DDL |
-| pg-boss Worker | Durable asynchronous and cron workloads | Dedicated worker process, retry/backoff, dead-letter policies |
-| Parity Harness | Compare legacy and new behavior before full traffic shift | Contract tests + shadow execution + mismatch reporting |
-| Data Migration Tooling | Deterministic export/import/reconcile and checkpointed cutover | Scripted ETL with dry-run and resumable checkpoints |
+| Component                      | Responsibility                                                       | Typical Implementation                                                 |
+| ------------------------------ | -------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| Feature Decision Router        | Decide Convex vs Express per request/cohort                          | Edge-level toggle evaluation (env + cohort + percentage + kill switch) |
+| API Adapter Layer (web/mobile) | Keep client contract stable while backend target changes             | Service-level adapter exposing existing app methods                    |
+| Convex Legacy Backend          | Stable baseline behavior and rollback target during migration        | Existing Convex functions/schedulers                                   |
+| Express HTTP Layer             | Canonical REST contract and input/auth/error boundaries              | Modular routers + middleware                                           |
+| Service Layer                  | Domain behavior parity, transaction orchestration, idempotency rules | Notes/Reminders/Subscriptions/Auth services                            |
+| Repository Layer               | SQL-only persistence operations, locking and indexing usage          | Parameterized queries + explicit transaction boundaries                |
+| PostgreSQL                     | Durable source of truth after cutover                                | Normalized schema + migration-managed DDL                              |
+| pg-boss Worker                 | Durable asynchronous and cron workloads                              | Dedicated worker process, retry/backoff, dead-letter policies          |
+| Parity Harness                 | Compare legacy and new behavior before full traffic shift            | Contract tests + shadow execution + mismatch reporting                 |
+| Data Migration Tooling         | Deterministic export/import/reconcile and checkpointed cutover       | Scripted ETL with dry-run and resumable checkpoints                    |
 
 ## Recommended Project Structure
 
@@ -96,23 +96,24 @@ tests/
 **Trade-offs:** Adds temporary complexity and toggle management overhead, but gives instant rollback and safe canaries.
 
 **Example:**
+
 ```typescript
 export async function routeNotesSync(ctx: RequestContext, payload: SyncPayload) {
-  const decision = cutoverDecisions.notesSync(ctx.userId, ctx.clientVersion)
+  const decision = cutoverDecisions.notesSync(ctx.userId, ctx.clientVersion);
 
   if (decision.primary === 'express') {
-    const expressResult = await expressClient.syncNotes(payload, ctx.auth)
+    const expressResult = await expressClient.syncNotes(payload, ctx.auth);
     if (decision.shadowLegacy) {
-      void parity.compareInBackground('notes.sync', payload, expressResult)
+      void parity.compareInBackground('notes.sync', payload, expressResult);
     }
-    return expressResult
+    return expressResult;
   }
 
-  const convexResult = await convexClient.syncNotes(payload)
+  const convexResult = await convexClient.syncNotes(payload);
   if (decision.shadowNext) {
-    void parity.compareInBackground('notes.sync', payload, convexResult)
+    void parity.compareInBackground('notes.sync', payload, convexResult);
   }
-  return convexResult
+  return convexResult;
 }
 ```
 
@@ -123,22 +124,23 @@ export async function routeNotesSync(ctx: RequestContext, payload: SyncPayload) 
 **Trade-offs:** Extra test matrix and telemetry, but massively lowers behavioral regression risk.
 
 **Example:**
+
 ```typescript
-type BackendTarget = 'convex' | 'express'
+type BackendTarget = 'convex' | 'express';
 
 async function executeContract(target: BackendTarget, fixture: ScenarioFixture) {
-  const client = target === 'convex' ? convexContractClient : expressContractClient
-  return client.runScenario(fixture)
+  const client = target === 'convex' ? convexContractClient : expressContractClient;
+  return client.runScenario(fixture);
 }
 
 export async function verifyParity(fixture: ScenarioFixture) {
   const [legacy, next] = await Promise.all([
     executeContract('convex', fixture),
     executeContract('express', fixture),
-  ])
+  ]);
 
-  const diff = parityDiff(legacy, next)
-  if (!diff.isEquivalent) throw new Error(`Parity mismatch: ${diff.summary}`)
+  const diff = parityDiff(legacy, next);
+  if (!diff.isEquivalent) throw new Error(`Parity mismatch: ${diff.summary}`);
 }
 ```
 
@@ -149,19 +151,20 @@ export async function verifyParity(fixture: ScenarioFixture) {
 **Trade-offs:** Slightly heavier write path, but prevents duplicate side effects and race bugs under retries.
 
 **Example:**
+
 ```typescript
 await db.tx(async (tx) => {
-  const duplicate = await noteEventsRepo.existsByPayloadHash(tx, payload.hash)
-  if (duplicate) return
+  const duplicate = await noteEventsRepo.existsByPayloadHash(tx, payload.hash);
+  if (duplicate) return;
 
-  const existing = await notesRepo.getForUpdate(tx, payload.noteId)
-  const shouldApply = !existing || payload.updatedAt > existing.updatedAt
+  const existing = await notesRepo.getForUpdate(tx, payload.noteId);
+  const shouldApply = !existing || payload.updatedAt > existing.updatedAt;
 
   if (shouldApply) {
-    await notesRepo.upsert(tx, payload)
-    await noteEventsRepo.insert(tx, payload.hash, payload.noteId)
+    await notesRepo.upsert(tx, payload);
+    await noteEventsRepo.insert(tx, payload.hash, payload.noteId);
   }
-})
+});
 ```
 
 ### Pattern 4: Reconcile-Driven Data Migration
@@ -276,11 +279,11 @@ Seam + Toggle + Parity Harness
 
 ## Scaling Considerations
 
-| Scale | Architecture Adjustments |
-|-------|--------------------------|
-| 0-1k users | Single Express API + single worker, conservative pool size, simple feature-flag config via env/file |
-| 1k-100k users | Horizontal API replicas, separate worker autoscaling, indexed parity ledger, cohort-based rollout automation |
-| 100k+ users | Split hot domains by service boundary (jobs vs API), queue partitioning, read replicas for analytics/reconciliation, stricter SLO gates |
+| Scale         | Architecture Adjustments                                                                                                                |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| 0-1k users    | Single Express API + single worker, conservative pool size, simple feature-flag config via env/file                                     |
+| 1k-100k users | Horizontal API replicas, separate worker autoscaling, indexed parity ledger, cohort-based rollout automation                            |
+| 100k+ users   | Split hot domains by service boundary (jobs vs API), queue partitioning, read replicas for analytics/reconciliation, stricter SLO gates |
 
 ### Scaling Priorities
 
@@ -311,23 +314,23 @@ Seam + Toggle + Parity Harness
 
 ### External Services
 
-| Service | Integration Pattern | Notes |
-|---------|---------------------|-------|
-| Convex (legacy) | Transitional adapter + shadow invocation | remove after cutover stability window |
-| PostgreSQL | Connection pool + transactional repositories | use explicit locking where merge/security correctness requires |
-| pg-boss | Dedicated worker polling queues and cron schedules | supports retries/backoff/dead-letter behavior |
-| Firebase FCM | Job-driven push delivery with stale-token cleanup | keep push side effects out of request path |
-| NVIDIA/AI provider | Service wrapper with deterministic fallback path | preserve existing fallback semantics for parity |
+| Service            | Integration Pattern                                | Notes                                                          |
+| ------------------ | -------------------------------------------------- | -------------------------------------------------------------- |
+| Convex (legacy)    | Transitional adapter + shadow invocation           | remove after cutover stability window                          |
+| PostgreSQL         | Connection pool + transactional repositories       | use explicit locking where merge/security correctness requires |
+| pg-boss            | Dedicated worker polling queues and cron schedules | supports retries/backoff/dead-letter behavior                  |
+| Firebase FCM       | Job-driven push delivery with stale-token cleanup  | keep push side effects out of request path                     |
+| NVIDIA/AI provider | Service wrapper with deterministic fallback path   | preserve existing fallback semantics for parity                |
 
 ### Internal Boundaries
 
-| Boundary | Communication | Notes |
-|----------|---------------|-------|
-| routes <-> services | direct function calls + validated DTOs | routes stay thin |
-| services <-> repositories | transaction context + typed repository interfaces | repositories avoid business rules |
-| api process <-> worker process | pg-boss queue and shared DB | independent deploy/restart lifecycle |
-| parity harness <-> telemetry | append-only diff events and metrics | creates release evidence for go/no-go |
-| migration tooling <-> operational runbook | scripted checkpoints | deterministic rollback and audit trail |
+| Boundary                                  | Communication                                     | Notes                                  |
+| ----------------------------------------- | ------------------------------------------------- | -------------------------------------- |
+| routes <-> services                       | direct function calls + validated DTOs            | routes stay thin                       |
+| services <-> repositories                 | transaction context + typed repository interfaces | repositories avoid business rules      |
+| api process <-> worker process            | pg-boss queue and shared DB                       | independent deploy/restart lifecycle   |
+| parity harness <-> telemetry              | append-only diff events and metrics               | creates release evidence for go/no-go  |
+| migration tooling <-> operational runbook | scripted checkpoints                              | deterministic rollback and audit trail |
 
 ## Sources
 
@@ -341,5 +344,6 @@ Seam + Toggle + Parity Harness
 - pg-boss capabilities and requirements: https://timgit.github.io/pg-boss/ and https://github.com/timgit/pg-boss (HIGH)
 
 ---
-*Architecture research for: AI Note Keeper Convex to Express migration*
-*Researched: 2026-04-18*
+
+_Architecture research for: AI Note Keeper Convex to Express migration_
+_Researched: 2026-04-18_

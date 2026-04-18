@@ -67,7 +67,9 @@ const parseReconcileOptions = (args: ReadonlyArray<string>): ReconcileOptions =>
   };
 };
 
-export const runMigrationToolCommand = async (argv: ReadonlyArray<string>): Promise<ToolCommandResult> => {
+export const runMigrationToolCommand = async (
+  argv: ReadonlyArray<string>,
+): Promise<ToolCommandResult> => {
   const [, , command, ...args] = argv;
 
   switch (command) {

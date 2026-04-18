@@ -3,7 +3,11 @@ import test from 'node:test';
 
 import { createCheckpoint, validateCheckpoint } from '../migration-tools/checkpoints.js';
 import { runMigrationToolCommand } from '../migration-tools/index.js';
-import { createDryRunArtifact, createDryRunSummary, createReconcileReport } from '../migration-tools/reporting.js';
+import {
+  createDryRunArtifact,
+  createDryRunSummary,
+  createReconcileReport,
+} from '../migration-tools/reporting.js';
 
 test('migration-tools export/import/reconcile commands parse options and execute no-op adapters', async () => {
   const exportResult = await runMigrationToolCommand([

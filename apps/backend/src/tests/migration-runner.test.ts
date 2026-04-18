@@ -88,7 +88,10 @@ test('runMigrations applies SQL files in deterministic sorted order', async () =
     migrationsPath: '/tmp/migrations',
   });
 
-  assert.deepStrictEqual(appliedOrderFromCalls(harness.calls), ['00001_first.sql', '00002_second.sql']);
+  assert.deepStrictEqual(appliedOrderFromCalls(harness.calls), [
+    '00001_first.sql',
+    '00002_second.sql',
+  ]);
   assert.equal(result.appliedCount, 2);
   assert.deepStrictEqual(result.appliedVersions, ['00001_first.sql', '00002_second.sql']);
 });

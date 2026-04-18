@@ -1,6 +1,11 @@
 import { sha256 } from 'js-sha256';
 
-import type { DryRunArtifact, ReconcileReport, ReconcileThresholds, ToolCommand } from './contracts.js';
+import type {
+  DryRunArtifact,
+  ReconcileReport,
+  ReconcileThresholds,
+  ToolCommand,
+} from './contracts.js';
 
 type DryRunInput = Readonly<{
   command: ToolCommand;

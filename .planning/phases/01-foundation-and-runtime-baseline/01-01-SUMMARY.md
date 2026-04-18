@@ -29,11 +29,11 @@ key-files:
     - apps/backend/src/tests/error-middleware.test.ts
     - apps/backend/src/tests/health.test.ts
 key-decisions:
-  - "Enforced category-aware details sanitization so only client-correctable categories include structured details and internal categories never leak internals."
-  - "Converted readiness and startup checks into explicit evaluators so startup can fail fast while runtime degradation is handled without process exit."
+  - 'Enforced category-aware details sanitization so only client-correctable categories include structured details and internal categories never leak internals.'
+  - 'Converted readiness and startup checks into explicit evaluators so startup can fail fast while runtime degradation is handled without process exit.'
 patterns-established:
-  - "Error contract pattern: all known failures serialize to { code, message, status, details?, traceId? }."
-  - "Readiness gate pattern: startup and /health/ready both require DB reachability plus schema_migrations existence."
+  - 'Error contract pattern: all known failures serialize to { code, message, status, details?, traceId? }.'
+  - 'Readiness gate pattern: startup and /health/ready both require DB reachability plus schema_migrations existence.'
 requirements-completed:
   - BASE-01
   - BASE-03
@@ -103,5 +103,6 @@ None - no external service configuration required.
 - Plan `01-03` can proceed independently (same wave), followed by `01-02` after wave 1 completion.
 
 ---
-*Phase: 01-foundation-and-runtime-baseline*
-*Completed: 2026-04-18*
+
+_Phase: 01-foundation-and-runtime-baseline_
+_Completed: 2026-04-18_

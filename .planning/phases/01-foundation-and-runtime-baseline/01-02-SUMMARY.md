@@ -29,11 +29,11 @@ key-files:
     - apps/backend/package.json
     - package.json
 key-decisions:
-  - "Kept API and worker in a single backend package for phase 1 while enforcing explicit runtime separation at entrypoint level."
-  - "Defined worker adapter contracts now and deferred domain job handlers to later phases to avoid contract churn."
+  - 'Kept API and worker in a single backend package for phase 1 while enforcing explicit runtime separation at entrypoint level.'
+  - 'Defined worker adapter contracts now and deferred domain job handlers to later phases to avoid contract churn.'
 patterns-established:
-  - "Worker runtime scaffold pattern: adapter lifecycle + optional signal handlers + explicit shutdown contract."
-  - "API runtime module pattern: createApiServer and startApiRuntime split for testability and process isolation."
+  - 'Worker runtime scaffold pattern: adapter lifecycle + optional signal handlers + explicit shutdown contract.'
+  - 'API runtime module pattern: createApiServer and startApiRuntime split for testability and process isolation.'
 requirements-completed:
   - BASE-06
 duration: 8 min
@@ -102,5 +102,6 @@ None - no external service configuration required.
 - Phase 1 can proceed to verification/closure gates.
 
 ---
-*Phase: 01-foundation-and-runtime-baseline*
-*Completed: 2026-04-18*
+
+_Phase: 01-foundation-and-runtime-baseline_
+_Completed: 2026-04-18_

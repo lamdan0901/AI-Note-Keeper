@@ -26,7 +26,9 @@ const defaultLogger: ApiLogger = {
   },
 };
 
-const createDefaultReadinessProbe = (isDependencyDegraded: () => boolean): (() => Promise<ReadinessStatus>) => {
+const createDefaultReadinessProbe = (
+  isDependencyDegraded: () => boolean,
+): (() => Promise<ReadinessStatus>) => {
   return () =>
     evaluateReadiness({
       queryClient: pool,
@@ -44,7 +46,9 @@ export const runInitialStartupChecks = async (
   const readiness = await readinessProbe();
 
   if (!readiness.ok) {
-    throw new Error('Initial readiness check failed: database connectivity and schema_migrations are required.');
+    throw new Error(
+      'Initial readiness check failed: database connectivity and schema_migrations are required.',
+    );
   }
 };
 

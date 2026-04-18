@@ -32,11 +32,11 @@ key-files:
   modified:
     - apps/backend/src/migrate.ts
 key-decisions:
-  - "Kept migration application as an explicit command path and made module import side-effect free to prevent accidental startup migration execution."
-  - "Implemented deterministic dry-run artifacts with stable key ordering and checksum generation to support repeatable rehearsal checks."
+  - 'Kept migration application as an explicit command path and made module import side-effect free to prevent accidental startup migration execution.'
+  - 'Implemented deterministic dry-run artifacts with stable key ordering and checksum generation to support repeatable rehearsal checks.'
 patterns-established:
-  - "Migration runner pattern: sorted SQL discovery + schema_migrations guard + transactional apply per file."
-  - "Tooling scaffold pattern: typed options and no-op adapters that preserve future contract compatibility."
+  - 'Migration runner pattern: sorted SQL discovery + schema_migrations guard + transactional apply per file.'
+  - 'Tooling scaffold pattern: typed options and no-op adapters that preserve future contract compatibility.'
 requirements-completed:
   - BASE-02
   - BASE-07
@@ -108,5 +108,6 @@ None - no external service configuration required.
 - Wave 1 is now complete; phase can proceed to plan `01-02` runtime split execution.
 
 ---
-*Phase: 01-foundation-and-runtime-baseline*
-*Completed: 2026-04-18*
+
+_Phase: 01-foundation-and-runtime-baseline_
+_Completed: 2026-04-18_
