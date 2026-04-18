@@ -1,16 +1,89 @@
 import fs from 'fs/promises';
 import path from 'path';
+import { pathToFileURL } from 'node:url';
+
 import { config } from './config.js';
-import { pool } from './db/pool.js';
 import { ensureDatabaseExists } from './db/bootstrap.js';
+import { pool } from './db/pool.js';
 
-const migrationsDir = path.join(process.cwd(), 'src', 'db', 'migrations');
+export const migrationsDir = path.join(process.cwd(), 'src', 'db', 'migrations');
 
-async function runMigrations() {
-  const client = await pool.connect();
+type MigrationClient = Readonly<{
+  query: (text: string, values?: ReadonlyArray<unknown>) => Promise<{ rows: ReadonlyArray<{ version?: string }> }>;
+  release: () => void;
+}>;
+
+type MigrationPool = Readonly<{
+  connect: () => Promise<MigrationClient>;
+  end: () => Promise<void>;
+}>;
+
+type FsLike = Readonly<{
+  access: (target: string) => Promise<void>;
+  readdir: (target: string) => Promise<ReadonlyArray<string>>;
+  readFile: (target: string, encoding: BufferEncoding) => Promise<string>;
+}>;
+
+type Logger = Readonly<{
+  info: (message: string) => void;
+  error: (message: string, error?: unknown) => void;
+}>;
+
+export type RunMigrationsOptions = Readonly<{
+  migrationPool?: MigrationPool;
+  fileSystem?: FsLike;
+  logger?: Logger;
+  migrationsPath?: string;
+}>;
+
+export type MigrationRunResult = Readonly<{
+  appliedCount: number;
+  appliedVersions: ReadonlyArray<string>;
+}>;
+
+export type RunMigrationCommandOptions = Readonly<{
+  databaseUrl?: string;
+  migrationPool?: MigrationPool;
+  runMigrationsFn?: () => Promise<MigrationRunResult>;
+  ensureDatabaseExistsFn?: (databaseUrl: string) => Promise<void>;
+  logger?: Logger;
+}>;
+
+const defaultLogger: Logger = {
+  info: (message) => {
+    console.log(message);
+  },
+  error: (message, error) => {
+    console.error(message, error);
+  },
+};
+
+const isMainModule = (): boolean => {
+  const executedPath = process.argv[1];
+
+  if (!executedPath) {
+    return false;
+  }
+
+  return pathToFileURL(executedPath).href === import.meta.url;
+};
+
+const readSortedSqlFiles = async (fileSystem: FsLike, folderPath: string): Promise<ReadonlyArray<string>> => {
+  const files = await fileSystem.readdir(folderPath);
+  return files
+    .filter((fileName) => fileName.endsWith('.sql'))
+    .sort((left, right) => left.localeCompare(right));
+};
+
+export const runMigrations = async (options: RunMigrationsOptions = {}): Promise<MigrationRunResult> => {
+  const migrationPool = options.migrationPool ?? pool;
+  const fileSystem = options.fileSystem ?? fs;
+  const logger = options.logger ?? defaultLogger;
+  const folderPath = options.migrationsPath ?? migrationsDir;
+
+  const client = await migrationPool.connect();
 
   try {
-    // Create migrations tracking table if not exists
     await client.query(`
       CREATE TABLE IF NOT EXISTS schema_migrations (
         version VARCHAR(255) PRIMARY KEY,
@@ -18,76 +91,95 @@ async function runMigrations() {
       );
     `);
 
-    // Ensure migrations directory exists
     try {
-      await fs.access(migrationsDir);
+      await fileSystem.access(folderPath);
     } catch {
-      console.log(`[migrate] No migrations directory found at ${migrationsDir}`);
-      return;
+      logger.info(`[migrate] No migrations directory found at ${folderPath}`);
+      return {
+        appliedCount: 0,
+        appliedVersions: [],
+      };
     }
 
-    // Read all migration files
-    const files = await fs.readdir(migrationsDir);
-    const sqlFiles = files.filter((f) => f.endsWith('.sql')).sort((a, b) => a.localeCompare(b)); // Sort alphabetically to run in order
+    const sqlFiles = await readSortedSqlFiles(fileSystem, folderPath);
 
     if (sqlFiles.length === 0) {
-      console.log('[migrate] No migration files found.');
-      return;
+      logger.info('[migrate] No migration files found.');
+      return {
+        appliedCount: 0,
+        appliedVersions: [],
+      };
     }
 
-    // Get applied migrations
     const { rows: appliedRows } = await client.query('SELECT version FROM schema_migrations');
-    const appliedVersions = new Set(appliedRows.map((row) => row.version));
+    const appliedVersions = new Set(
+      appliedRows
+        .map((row) => row.version)
+        .filter((version): version is string => typeof version === 'string' && version.length > 0),
+    );
 
-    let appliedCount = 0;
+    const newlyAppliedVersions: Array<string> = [];
 
-    for (const file of sqlFiles) {
-      if (appliedVersions.has(file)) {
-        continue; // Already applied
+    for (const fileName of sqlFiles) {
+      if (appliedVersions.has(fileName)) {
+        continue;
       }
 
-      console.log(`[migrate] Applying migration: ${file}...`);
+      logger.info(`[migrate] Applying migration: ${fileName}...`);
 
-      const filePath = path.join(migrationsDir, file);
-      const sql = await fs.readFile(filePath, 'utf-8');
+      const filePath = path.join(folderPath, fileName);
+      const sql = await fileSystem.readFile(filePath, 'utf-8');
 
-      // Execute each migration inside a transaction
       await client.query('BEGIN');
       try {
         await client.query(sql);
-        await client.query('INSERT INTO schema_migrations (version) VALUES ($1)', [file]);
+        await client.query('INSERT INTO schema_migrations (version) VALUES ($1)', [fileName]);
         await client.query('COMMIT');
-
-        console.log(`[migrate] Successfully applied: ${file}`);
-        appliedCount++;
-      } catch (err) {
+      } catch (error) {
         await client.query('ROLLBACK');
-        console.error(`[migrate] Error applying migration ${file}: `);
-        console.error(err);
-        throw err;
+        logger.error(`[migrate] Error applying migration ${fileName}:`, error);
+        throw error;
       }
+
+      logger.info(`[migrate] Successfully applied: ${fileName}`);
+      newlyAppliedVersions.push(fileName);
     }
 
-    if (appliedCount === 0) {
-      console.log('[migrate] Database is up to date.');
+    if (newlyAppliedVersions.length === 0) {
+      logger.info('[migrate] Database is up to date.');
     } else {
-      console.log(`[migrate] Successfully applied ${appliedCount} migration(s).`);
+      logger.info(`[migrate] Successfully applied ${newlyAppliedVersions.length} migration(s).`);
     }
+
+    return {
+      appliedCount: newlyAppliedVersions.length,
+      appliedVersions: newlyAppliedVersions,
+    };
   } finally {
     client.release();
   }
-}
+};
 
-async function main() {
+export const runMigrationCommand = async (
+  options: RunMigrationCommandOptions = {},
+): Promise<MigrationRunResult> => {
+  const migrationPool = options.migrationPool ?? pool;
+  const logger = options.logger ?? defaultLogger;
+  const ensureDatabase = options.ensureDatabaseExistsFn ?? ensureDatabaseExists;
+  const runMigrationsFn = options.runMigrationsFn ?? (() => runMigrations({ migrationPool, logger }));
+  const databaseUrl = options.databaseUrl ?? config.DATABASE_URL;
+
   try {
-    await ensureDatabaseExists(config.DATABASE_URL);
-    await runMigrations();
-  } catch (err) {
-    console.error('[migrate] Migration runner failed:', err);
-    process.exit(1);
+    await ensureDatabase(databaseUrl);
+    return await runMigrationsFn();
   } finally {
-    await pool.end();
+    await migrationPool.end();
   }
-}
+};
 
-main();
+if (isMainModule()) {
+  runMigrationCommand().catch((error) => {
+    defaultLogger.error('[migrate] Migration runner failed:', error);
+    process.exit(1);
+  });
+}
