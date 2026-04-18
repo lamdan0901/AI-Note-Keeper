@@ -54,7 +54,12 @@ Plans:
 2. Existing users with legacy salt:sha256 credentials can log in successfully and are upgraded to argon2id lazily.
 3. Existing clients holding raw userId sessions can exchange to JWT sessions through the upgrade endpoint without forced re-authentication.
 4. Refreshing a session rotates the token pair and rejects reuse of the prior refresh token, and logout revokes active refresh tokens.
-   **Plans**: TBD
+   **Plans**: 3 plans
+
+Plans:
+- [ ] 02-01-PLAN.md — Build backend auth crypto and refresh persistence foundations.
+- [ ] 02-02-PLAN.md — Implement register/login/refresh/logout/upgrade-session API surface.
+- [ ] 02-03-PLAN.md — Wire web/mobile auth contexts for cookie versus secure-storage continuity.
 
 ### Phase 3: Notes and Adjacent Domain API Parity
 
@@ -150,6 +155,7 @@ Plans:
 | 6. Data Migration Execution and Reconciliation | 0/TBD          | Not started | -         |
 | 7. Web and Mobile Cutover to Express APIs      | 0/TBD          | Not started | -         |
 | 8. Convex Decommission and Cleanup             | 0/TBD          | Not started | -         |
+
 
 
 
