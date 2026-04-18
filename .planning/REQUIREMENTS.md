@@ -10,13 +10,13 @@ Requirements for initial release. Each maps to roadmap phases.
 ### Foundation and Infrastructure
 
 - [x] **BASE-01**: Backend service starts only with valid environment configuration and fails fast with explicit startup errors on invalid configuration
-- [ ] **BASE-02**: Database migrations are re-runnable and tracked with deterministic ordering and schema history
+- [x] **BASE-02**: Database migrations are re-runnable and tracked with deterministic ordering and schema history
 - [x] **BASE-03**: Health endpoints expose liveness and readiness for orchestration and CI checks
 - [x] **BASE-04**: API error responses follow one stable contract across validation, auth, conflict, rate-limit, and internal failures
 - [x] **BASE-05**: Request validation is schema-first and enforced at route boundaries
 - [ ] **BASE-06**: Worker process runs independently from HTTP server process for cron and queue execution
-- [ ] **BASE-07**: Migration tooling scaffolding (export/import/reconcile skeleton and dry-run interfaces) exists early to enable rehearsal before final cutover
-- [ ] **SHRD-01**: Backend domain logic reuses canonical packages/shared utilities where applicable and does not reimplement shared semantics
+- [x] **BASE-07**: Migration tooling scaffolding (export/import/reconcile skeleton and dry-run interfaces) exists early to enable rehearsal before final cutover
+- [x] **SHRD-01**: Backend domain logic reuses canonical packages/shared utilities where applicable and does not reimplement shared semantics
 
 ### Authentication Compatibility
 
@@ -108,13 +108,13 @@ Which phases cover which requirements. Updated during roadmap creation.
 | Requirement | Phase   | Status  |
 | ----------- | ------- | ------- |
 | BASE-01     | Phase 1 | Complete |
-| BASE-02     | Phase 1 | Pending |
+| BASE-02     | Phase 1 | Complete |
 | BASE-03     | Phase 1 | Complete |
 | BASE-04     | Phase 1 | Complete |
 | BASE-05     | Phase 1 | Complete |
 | BASE-06     | Phase 1 | Pending |
-| BASE-07     | Phase 1 | Pending |
-| SHRD-01     | Phase 1 | Pending |
+| BASE-07     | Phase 1 | Complete |
+| SHRD-01     | Phase 1 | Complete |
 | AUTH-01     | Phase 2 | Pending |
 | AUTH-02     | Phase 2 | Pending |
 | AUTH-03     | Phase 2 | Pending |
