@@ -298,6 +298,10 @@ Port adjacent domains needed before full reminder and worker parity.
 6. **P1C-06** Preserve deterministic fallback when AI provider is unavailable.
 7. **P1C-07** Add input validation + endpoint-level rate limits for AI routes.
 8. **P1C-08** Convert subscription/AI contract tests to HTTP integration tests.
+9. **P1C-09** Add explicit verification that `notification_ledger` remains mobile-local only:
+   - no PostgreSQL table
+   - no repository layer persistence
+   - no HTTP endpoint surface
 
 ### Deliverables
 
@@ -310,6 +314,7 @@ Port adjacent domains needed before full reminder and worker parity.
 - Subscription lifecycle parity confirmed
 - Device token updates are idempotent
 - AI endpoints return stable fallback output when provider is down
+- `notification_ledger` has no PostgreSQL persistence or API exposure path
 
 ---
 
@@ -499,6 +504,7 @@ Move web from Convex hooks to REST while keeping UI/service contracts stable.
 7. **P6-07** Remove Convex provider only after all service migrations are complete.
 8. **P6-08** Verify polling contract gate is met before go-live.
 9. **P6-09** Execute gradual rollout plan (dev -> staging -> percentage rollout -> full).
+10. **P6-10** Define and document measurable cutover SLO/parity gates and rollback drill checklist before percentage rollout begins.
 
 ### Deliverables
 
@@ -510,6 +516,7 @@ Move web from Convex hooks to REST while keeping UI/service contracts stable.
 - Web critical flows run without Convex dependency
 - Session and refresh behavior is stable
 - Polling contract is confirmed in production-like environment
+- Rollout gates define explicit SLO/parity thresholds and rollback drill evidence requirements
 
 ---
 
@@ -535,6 +542,7 @@ Move mobile from Convex to REST while preserving offline sync and push behavior.
 6. **P7-06** Validate FCM-driven sync behavior against new backend payloads.
 7. **P7-07** Validate real-device behavior for offline/online transitions.
 8. **P7-08** Roll out mobile migration behind feature flag with rollback path.
+9. **P7-09** Execute rollback drills during staged rollout and require gate sign-off before each traffic increase.
 
 ### Deliverables
 
@@ -546,6 +554,7 @@ Move mobile from Convex to REST while preserving offline sync and push behavior.
 - Offline-created notes sync correctly after reconnect
 - Reminder notifications and follow-up sync remain correct
 - Legacy users upgrade session without manual intervention
+- Cohort rollout advances only when parity/SLO gates pass and rollback drills are validated
 
 ---
 
