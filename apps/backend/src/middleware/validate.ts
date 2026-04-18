@@ -52,15 +52,17 @@ export const withErrorBoundary = (handler: AsyncRequestHandler): RequestHandler 
 
 export const validateRequest = (schemas: ValidationSchemas): RequestHandler => {
   return withErrorBoundary((request, _response, next) => {
-    const nextBody = schemas.body ? parseOrThrow(schemas.body, request.body) : request.body;
-    const nextParams = schemas.params
-      ? parseOrThrow(schemas.params, request.params)
-      : request.params;
-    const nextQuery = schemas.query ? parseOrThrow(schemas.query, request.query) : request.query;
+    if (schemas.body) {
+      request.body = parseOrThrow(schemas.body, request.body);
+    }
 
-    request.body = nextBody;
-    request.params = nextParams as Request['params'];
-    request.query = nextQuery as Request['query'];
+    if (schemas.params) {
+      request.params = parseOrThrow(schemas.params, request.params) as Request['params'];
+    }
+
+    if (schemas.query) {
+      request.query = parseOrThrow(schemas.query, request.query) as Request['query'];
+    }
 
     next();
   });

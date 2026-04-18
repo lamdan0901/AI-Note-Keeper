@@ -1,6 +1,8 @@
 import cors from 'cors';
 import express from 'express';
 
+import { createAuthRoutes } from '../auth/routes.js';
+import type { AuthService } from '../auth/service.js';
 import { createDependencyGate, createHealthStatus } from '../health.js';
 import { type ReadinessStatus } from '../health/readiness.js';
 import { errorMiddleware, notFoundMiddleware } from '../middleware/error-middleware.js';
@@ -9,6 +11,7 @@ import { withErrorBoundary } from '../middleware/validate.js';
 export type ApiServerFactoryOptions = Readonly<{
   readinessProbe?: () => Promise<ReadinessStatus>;
   isDependencyDegraded?: () => boolean;
+  authService?: AuthService;
 }>;
 
 export const createApiServer = (options: ApiServerFactoryOptions = {}): express.Express => {
@@ -35,6 +38,8 @@ export const createApiServer = (options: ApiServerFactoryOptions = {}): express.
   );
 
   app.use('/api', createDependencyGate(isDependencyDegraded));
+
+  app.use('/api/auth', createAuthRoutes(options.authService));
 
   app.get('/api/sample', (_request, response) => {
     response.json({ message: 'Hello from the backend API!' });
