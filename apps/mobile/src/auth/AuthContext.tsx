@@ -19,10 +19,12 @@ import {
   getOrCreateDeviceId,
   hasCompletedInstallBootstrap,
   hasStoredDeviceId,
+  loadLegacySessionUserId,
   loadAuthSession,
   markInstallBootstrapCompleted,
   saveAuthSession,
 } from './session';
+import { createMobileAuthHttpClient } from './httpClient';
 import {
   backfillMissingLocalUserId as backfillUserIdInDb,
   clearAllLocalData as clearAllLocalDataInDb,
@@ -56,6 +58,8 @@ type PendingMerge = {
   username: string;
   password: string;
   accountUsername: string;
+  accessToken?: string;
+  refreshToken?: string;
 };
 
 type AuthState = {
@@ -196,6 +200,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     pendingMerge: null,
   });
   const currentSecretRef = useRef<{ username: string; password: string } | null>(null);
+  const currentTokensRef = useRef<
+    Readonly<{ accessToken: string; refreshToken?: string }> | null
+  >(null);
+  const authHttpClient = useMemo(() => createMobileAuthHttpClient(), []);
 
   useEffect(() => {
     const init = async () => {
@@ -205,6 +213,49 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         const session = await loadAuthSession();
 
         if (session) {
+          currentTokensRef.current =
+            session.accessToken != null
+              ? {
+                  accessToken: session.accessToken,
+                  refreshToken: session.refreshToken,
+                }
+              : null;
+
+          if (authHttpClient && session.refreshToken) {
+            try {
+              const refreshed = await authHttpClient.refresh({
+                refreshToken: session.refreshToken,
+                deviceId,
+              });
+
+              const refreshedSession: AuthSession = {
+                userId: refreshed.userId,
+                username: refreshed.username,
+                accessToken: refreshed.accessToken,
+                refreshToken: refreshed.refreshToken,
+              };
+
+              await saveAuthSession(refreshedSession);
+              currentTokensRef.current = {
+                accessToken: refreshed.accessToken,
+                refreshToken: refreshed.refreshToken,
+              };
+              await backfillMissingLocalUserId(refreshed.userId);
+              setState({
+                isLoading: false,
+                isAuthenticated: true,
+                userId: refreshed.userId,
+                username: refreshed.username,
+                deviceId,
+                transitionState: 'idle',
+                pendingMerge: null,
+              });
+              return;
+            } catch {
+              // Fall through to legacy Convex-based validation behavior.
+            }
+          }
+
           const client = getConvexClient();
           if (!client || !authApi?.validateSession) {
             await backfillMissingLocalUserId(session.userId);
@@ -251,6 +302,44 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           }
         }
 
+        if (authHttpClient) {
+          const legacyUserId = await loadLegacySessionUserId();
+          if (legacyUserId) {
+            try {
+              const upgraded = await authHttpClient.upgradeSession({
+                userId: legacyUserId,
+                deviceId,
+              });
+
+              const upgradedSession: AuthSession = {
+                userId: upgraded.userId,
+                username: upgraded.username,
+                accessToken: upgraded.accessToken,
+                refreshToken: upgraded.refreshToken,
+              };
+
+              await saveAuthSession(upgradedSession);
+              currentTokensRef.current = {
+                accessToken: upgraded.accessToken,
+                refreshToken: upgraded.refreshToken,
+              };
+              await backfillMissingLocalUserId(upgraded.userId);
+              setState({
+                isLoading: false,
+                isAuthenticated: true,
+                userId: upgraded.userId,
+                username: upgraded.username,
+                deviceId,
+                transitionState: 'idle',
+                pendingMerge: null,
+              });
+              return;
+            } catch {
+              // Ignore failed legacy upgrade and continue with anonymous fallback.
+            }
+          }
+        }
+
         await backfillMissingLocalUserId(deviceId);
         setState({
           isLoading: false,
@@ -276,7 +365,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     };
 
     void init();
-  }, []);
+  }, [authHttpClient]);
 
   const finalizeAuthenticatedState = useCallback(
     async ({
@@ -289,6 +378,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       strategy: MergeStrategy | 'cloud';
     }) => {
       await saveAuthSession(session);
+      currentTokensRef.current =
+        session.accessToken != null
+          ? {
+              accessToken: session.accessToken,
+              refreshToken: session.refreshToken,
+            }
+          : null;
       if (currentSecretRef.current) {
         currentSecretRef.current = {
           username: session.username,
@@ -348,6 +444,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           session: {
             userId: pendingMerge.targetUserId,
             username: pendingMerge.accountUsername,
+            accessToken: pendingMerge.accessToken,
+            refreshToken: pendingMerge.refreshToken,
           },
           strategy,
         });
@@ -368,21 +466,37 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       accountUsername,
       username,
       password,
+      accessToken,
+      refreshToken,
     }: {
       accountUserId: string;
       accountUsername: string;
       username: string;
       password: string;
+      accessToken?: string;
+      refreshToken?: string;
     }): Promise<AuthResult> => {
       const client = getConvexClient();
       const fromUserId = state.userId;
 
       currentSecretRef.current = { username, password };
+      currentTokensRef.current =
+        accessToken != null
+          ? {
+              accessToken,
+              refreshToken,
+            }
+          : null;
 
       if (!client || !migrationApi?.preflightUserDataMerge || fromUserId === accountUserId) {
         await finalizeAuthenticatedState({
           fromUserId,
-          session: { userId: accountUserId, username: accountUsername },
+          session: {
+            userId: accountUserId,
+            username: accountUsername,
+            accessToken,
+            refreshToken,
+          },
           strategy: 'local',
         });
         return { success: true };
@@ -409,6 +523,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             username,
             password,
             accountUsername,
+            accessToken,
+            refreshToken,
           },
         }));
         return { success: false, requiresMerge: true };
@@ -422,6 +538,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           username,
           password,
           accountUsername,
+          accessToken,
+          refreshToken,
         },
         resolution,
       );
@@ -431,6 +549,25 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const login = useCallback(
     async (username: string, password: string): Promise<AuthResult> => {
+      if (authHttpClient) {
+        try {
+          const deviceId = await getOrCreateDeviceId();
+          const result = await authHttpClient.login({ username, password, deviceId });
+          return await handleAuthSuccess({
+            accountUserId: result.userId,
+            accountUsername: result.username,
+            username,
+            password,
+            accessToken: result.accessToken,
+            refreshToken: result.refreshToken,
+          });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Login failed';
+          setState((prev) => ({ ...prev, transitionState: 'idle' }));
+          return { success: false, error: message };
+        }
+      }
+
       const client = getConvexClient();
       if (!client || !authApi?.login) {
         return { success: false, error: 'No backend configured' };
@@ -454,11 +591,30 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         return { success: false, error: message };
       }
     },
-    [handleAuthSuccess],
+    [authHttpClient, handleAuthSuccess],
   );
 
   const register = useCallback(
     async (username: string, password: string): Promise<AuthResult> => {
+      if (authHttpClient) {
+        try {
+          const deviceId = await getOrCreateDeviceId();
+          const result = await authHttpClient.register({ username, password, deviceId });
+          return await handleAuthSuccess({
+            accountUserId: result.userId,
+            accountUsername: result.username,
+            username,
+            password,
+            accessToken: result.accessToken,
+            refreshToken: result.refreshToken,
+          });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Registration failed';
+          setState((prev) => ({ ...prev, transitionState: 'idle' }));
+          return { success: false, error: message };
+        }
+      }
+
       const client = getConvexClient();
       if (!client || !authApi?.register) {
         return { success: false, error: 'No backend configured' };
@@ -482,7 +638,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         return { success: false, error: message };
       }
     },
-    [handleAuthSuccess],
+    [authHttpClient, handleAuthSuccess],
   );
 
   const resolvePendingMerge = useCallback(
@@ -508,8 +664,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const previousUserId = state.userId;
     const previousUsername = state.username;
     const currentSecret = currentSecretRef.current;
+    const refreshToken = currentTokensRef.current?.refreshToken;
 
     setState((prev) => ({ ...prev, transitionState: 'logout-snapshot' }));
+
+    if (authHttpClient) {
+      try {
+        await authHttpClient.logout(refreshToken);
+      } catch {
+        // Keep local logout resilient when auth API is unavailable.
+      }
+    }
 
     if (
       state.isAuthenticated &&
@@ -536,6 +701,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     await clearAuthSession();
     currentSecretRef.current = null;
+    currentTokensRef.current = null;
     await backfillMissingLocalUserId(deviceId);
 
     setState({
@@ -547,7 +713,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       transitionState: 'idle',
       pendingMerge: null,
     });
-  }, [state.isAuthenticated, state.userId, state.username]);
+  }, [authHttpClient, state.isAuthenticated, state.userId, state.username]);
 
   const value = useMemo(
     () => ({
