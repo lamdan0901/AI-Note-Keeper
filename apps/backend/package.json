@@ -5,9 +5,14 @@
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
+    "dev": "npm run dev:api",
+    "dev:api": "tsx watch src/index.ts",
+    "dev:worker": "tsx watch src/worker/index.ts",
+    "dev:all": "concurrently -k -n api,worker -c magenta,cyan \"npm run dev:api\" \"npm run dev:worker\"",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
+    "start:api": "node dist/index.js",
+    "start:worker": "node dist/worker/index.js",
     "test": "npm run build && node --test \"dist/tests/**/*.test.js\"",
     "migrate": "npm run build && node dist/migrate.js"
   },
