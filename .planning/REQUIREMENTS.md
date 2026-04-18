@@ -103,56 +103,56 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| BASE-01 | TBD | Pending |
-| BASE-02 | TBD | Pending |
-| BASE-03 | TBD | Pending |
-| BASE-04 | TBD | Pending |
-| BASE-05 | TBD | Pending |
-| BASE-06 | TBD | Pending |
-| AUTH-01 | TBD | Pending |
-| AUTH-02 | TBD | Pending |
-| AUTH-03 | TBD | Pending |
-| AUTH-04 | TBD | Pending |
-| AUTH-05 | TBD | Pending |
-| NOTE-01 | TBD | Pending |
-| NOTE-02 | TBD | Pending |
-| NOTE-03 | TBD | Pending |
-| NOTE-04 | TBD | Pending |
-| SUBS-01 | TBD | Pending |
-| SUBS-02 | TBD | Pending |
-| DEVC-01 | TBD | Pending |
-| AICP-01 | TBD | Pending |
-| AICP-02 | TBD | Pending |
-| AICP-03 | TBD | Pending |
-| REMD-01 | TBD | Pending |
-| REMD-02 | TBD | Pending |
-| REMD-03 | TBD | Pending |
-| REMD-04 | TBD | Pending |
-| REMD-05 | TBD | Pending |
-| JOBS-01 | TBD | Pending |
-| JOBS-02 | TBD | Pending |
-| JOBS-03 | TBD | Pending |
-| PUSH-01 | TBD | Pending |
-| PUSH-02 | TBD | Pending |
-| MERG-01 | TBD | Pending |
-| MERG-02 | TBD | Pending |
-| MERG-03 | TBD | Pending |
-| THRT-01 | TBD | Pending |
-| MIGR-01 | TBD | Pending |
-| MIGR-02 | TBD | Pending |
-| MIGR-03 | TBD | Pending |
-| MIGR-04 | TBD | Pending |
-| WEB-01 | TBD | Pending |
-| WEB-02 | TBD | Pending |
-| MOBL-01 | TBD | Pending |
-| MOBL-02 | TBD | Pending |
-| DECM-01 | TBD | Pending |
+| BASE-01 | Phase 1 | Pending |
+| BASE-02 | Phase 1 | Pending |
+| BASE-03 | Phase 1 | Pending |
+| BASE-04 | Phase 1 | Pending |
+| BASE-05 | Phase 1 | Pending |
+| BASE-06 | Phase 1 | Pending |
+| AUTH-01 | Phase 2 | Pending |
+| AUTH-02 | Phase 2 | Pending |
+| AUTH-03 | Phase 2 | Pending |
+| AUTH-04 | Phase 2 | Pending |
+| AUTH-05 | Phase 2 | Pending |
+| NOTE-01 | Phase 3 | Pending |
+| NOTE-02 | Phase 3 | Pending |
+| NOTE-03 | Phase 3 | Pending |
+| NOTE-04 | Phase 3 | Pending |
+| SUBS-01 | Phase 3 | Pending |
+| SUBS-02 | Phase 3 | Pending |
+| DEVC-01 | Phase 3 | Pending |
+| AICP-01 | Phase 3 | Pending |
+| AICP-02 | Phase 3 | Pending |
+| AICP-03 | Phase 3 | Pending |
+| REMD-01 | Phase 4 | Pending |
+| REMD-02 | Phase 4 | Pending |
+| REMD-03 | Phase 4 | Pending |
+| REMD-04 | Phase 4 | Pending |
+| REMD-05 | Phase 4 | Pending |
+| JOBS-01 | Phase 5 | Pending |
+| JOBS-02 | Phase 5 | Pending |
+| JOBS-03 | Phase 5 | Pending |
+| PUSH-01 | Phase 5 | Pending |
+| PUSH-02 | Phase 5 | Pending |
+| MERG-01 | Phase 5 | Pending |
+| MERG-02 | Phase 5 | Pending |
+| MERG-03 | Phase 5 | Pending |
+| THRT-01 | Phase 5 | Pending |
+| MIGR-01 | Phase 6 | Pending |
+| MIGR-02 | Phase 6 | Pending |
+| MIGR-03 | Phase 6 | Pending |
+| MIGR-04 | Phase 6 | Pending |
+| WEB-01 | Phase 7 | Pending |
+| WEB-02 | Phase 7 | Pending |
+| MOBL-01 | Phase 7 | Pending |
+| MOBL-02 | Phase 7 | Pending |
+| DECM-01 | Phase 8 | Pending |
 
 **Coverage:**
 - v1 requirements: 44 total
-- Mapped to phases: 0
-- Unmapped: 44 ⚠
+- Mapped to phases: 44
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-04-18*
-*Last updated: 2026-04-18 after initial definition*
+*Last updated: 2026-04-18 after roadmap creation*
