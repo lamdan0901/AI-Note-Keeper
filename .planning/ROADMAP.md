@@ -24,13 +24,15 @@ This roadmap delivers a parity-first migration from Convex to Express plus Postg
 ### Phase 1: Foundation and Runtime Baseline
 **Goal**: Operators can run a production-safe backend foundation with stable contracts and independent HTTP and worker processes.
 **Depends on**: Nothing (first phase)
-**Requirements**: BASE-01, BASE-02, BASE-03, BASE-04, BASE-05, BASE-06
+**Requirements**: BASE-01, BASE-02, BASE-03, BASE-04, BASE-05, BASE-06, BASE-07, SHRD-01
 **Success Criteria** (what must be TRUE):
   1. Service startup fails fast with explicit configuration errors when required environment values are missing or invalid.
   2. Schema migrations can be re-run safely and retain deterministic ordering and history.
   3. Liveness and readiness endpoints provide accurate status for orchestration and CI checks.
   4. Invalid requests are rejected at route boundaries and all non-2xx failures use one stable error contract.
   5. HTTP server and worker process can run independently for API serving versus queue and cron execution.
+  6. Migration export/import/reconcile tooling skeleton and dry-run interfaces exist before parity implementation phases.
+  7. Shared domain semantics are consumed from packages/shared utilities rather than reimplemented in backend modules.
 **Plans**: TBD
 
 ### Phase 2: Auth Compatibility and Session Continuity
@@ -47,13 +49,14 @@ This roadmap delivers a parity-first migration from Convex to Express plus Postg
 ### Phase 3: Notes and Adjacent Domain API Parity
 **Goal**: Users can manage notes and related domain data through Express APIs with parity in sync, idempotency, and safety behavior.
 **Depends on**: Phase 2
-**Requirements**: NOTE-01, NOTE-02, NOTE-03, NOTE-04, SUBS-01, SUBS-02, DEVC-01, AICP-01, AICP-02, AICP-03
+**Requirements**: NOTE-01, NOTE-02, NOTE-03, NOTE-04, SUBS-01, SUBS-02, DEVC-01, DEVC-02, AICP-01, AICP-02, AICP-03
 **Success Criteria** (what must be TRUE):
   1. Users can list, create, update, trash, and purge notes with strict ownership enforcement.
   2. Notes sync resolves with deterministic last-write-wins behavior and remains safe under concurrent sync requests.
   3. Replayed sync payloads are idempotent and do not create duplicate change effects.
   4. Users can create, update, trash, restore, and hard-delete subscriptions while reminder scheduling fields stay consistent.
-  5. Device token upsert and delete operations are idempotent, and AI parse and clarify endpoints return parity-compatible results with validation, rate limits, and deterministic fallback when providers fail.
+  5. Device token upsert and delete operations are idempotent, and notification_ledger behavior remains mobile-local only with no PostgreSQL persistence or API exposure.
+  6. AI parse and clarify endpoints return parity-compatible results with validation, rate limits, and deterministic fallback when providers fail.
 **Plans**: TBD
 
 ### Phase 4: Reminder Domain Parity
@@ -94,12 +97,13 @@ This roadmap delivers a parity-first migration from Convex to Express plus Postg
 ### Phase 7: Web and Mobile Cutover to Express APIs
 **Goal**: Frontend web and mobile experiences run on Express APIs with parity in session handling, sync behavior, and rollout safety gates.
 **Depends on**: Phase 6
-**Requirements**: WEB-01, WEB-02, MOBL-01, MOBL-02
+**Requirements**: WEB-01, WEB-02, MOBL-01, MOBL-02, CUTV-01
 **Success Criteria** (what must be TRUE):
   1. Web experience operates entirely through Express APIs and handles 401 responses with refresh-and-retry behavior.
   2. Web cutover is gated until focus sync and 30-second notes polling behavior is verified.
   3. Mobile experience preserves offline outbox and last-write-wins sync semantics while operating through Express APIs.
   4. Mobile bootstrap upgrades legacy userId sessions to JWT seamlessly without manual user intervention.
+  5. Rollout advances by cohorts only after parity and SLO gates pass, with rehearsed rollback criteria validated before full traffic cutover.
 **Plans**: TBD
 **UI hint**: yes
 

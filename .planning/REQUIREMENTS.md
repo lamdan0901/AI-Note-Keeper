@@ -15,6 +15,8 @@ Requirements for initial release. Each maps to roadmap phases.
 - [ ] **BASE-04**: API error responses follow one stable contract across validation, auth, conflict, rate-limit, and internal failures
 - [ ] **BASE-05**: Request validation is schema-first and enforced at route boundaries
 - [ ] **BASE-06**: Worker process runs independently from HTTP server process for cron and queue execution
+- [ ] **BASE-07**: Migration tooling scaffolding (export/import/reconcile skeleton and dry-run interfaces) exists early to enable rehearsal before final cutover
+- [ ] **SHRD-01**: Backend domain logic reuses canonical packages/shared utilities where applicable and does not reimplement shared semantics
 
 ### Authentication Compatibility
 
@@ -36,6 +38,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [ ] **SUBS-01**: User can create, update, trash, restore, and hard-delete subscriptions with parity behavior
 - [ ] **SUBS-02**: Subscription reminder scheduling fields are preserved and updated consistently
 - [ ] **DEVC-01**: Device push token upsert and delete operations are idempotent with uniqueness guarantees
+- [ ] **DEVC-02**: notification_ledger remains mobile-local SQLite only and is never persisted or exposed through PostgreSQL-backed APIs
 - [ ] **AICP-01**: Voice parse API returns parity-compatible structure for known inputs
 - [ ] **AICP-02**: Clarify API returns deterministic fallback output when provider is unavailable
 - [ ] **AICP-03**: AI endpoints enforce input validation and endpoint-level rate limiting
@@ -76,6 +79,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [ ] **WEB-02**: Polling gate is enforced before web full cutover (focus sync and 30-second note polling contract)
 - [ ] **MOBL-01**: Mobile client preserves offline outbox and LWW sync behavior while using Express APIs
 - [ ] **MOBL-02**: Mobile bootstrap upgrades legacy userId sessions to JWT seamlessly
+- [ ] **CUTV-01**: Cutover rollout progresses by cohorts with explicit parity/SLO gates and validated rollback drills before full traffic migration
 - [ ] **DECM-01**: Convex runtime dependencies are removed only after web and mobile stability window sign-off
 
 ## v2 Requirements
@@ -109,6 +113,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | BASE-04 | Phase 1 | Pending |
 | BASE-05 | Phase 1 | Pending |
 | BASE-06 | Phase 1 | Pending |
+| BASE-07 | Phase 1 | Pending |
+| SHRD-01 | Phase 1 | Pending |
 | AUTH-01 | Phase 2 | Pending |
 | AUTH-02 | Phase 2 | Pending |
 | AUTH-03 | Phase 2 | Pending |
@@ -121,6 +127,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SUBS-01 | Phase 3 | Pending |
 | SUBS-02 | Phase 3 | Pending |
 | DEVC-01 | Phase 3 | Pending |
+| DEVC-02 | Phase 3 | Pending |
 | AICP-01 | Phase 3 | Pending |
 | AICP-02 | Phase 3 | Pending |
 | AICP-03 | Phase 3 | Pending |
@@ -146,11 +153,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | WEB-02 | Phase 7 | Pending |
 | MOBL-01 | Phase 7 | Pending |
 | MOBL-02 | Phase 7 | Pending |
+| CUTV-01 | Phase 7 | Pending |
 | DECM-01 | Phase 8 | Pending |
 
 **Coverage:**
-- v1 requirements: 44 total
-- Mapped to phases: 44
+- v1 requirements: 48 total
+- Mapped to phases: 48
 - Unmapped: 0
 
 ---
