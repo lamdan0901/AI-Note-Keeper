@@ -25,9 +25,11 @@
     "typescript": "^5.4.0"
   },
   "dependencies": {
+    "@node-rs/argon2": "^2.0.2",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
+    "jose": "^6.2.2",
     "pg": "^8.20.0",
     "zod": "^4.3.6"
   }
