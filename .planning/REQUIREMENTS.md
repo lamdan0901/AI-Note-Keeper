@@ -9,11 +9,11 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Foundation and Infrastructure
 
-- [ ] **BASE-01**: Backend service starts only with valid environment configuration and fails fast with explicit startup errors on invalid configuration
+- [x] **BASE-01**: Backend service starts only with valid environment configuration and fails fast with explicit startup errors on invalid configuration
 - [ ] **BASE-02**: Database migrations are re-runnable and tracked with deterministic ordering and schema history
-- [ ] **BASE-03**: Health endpoints expose liveness and readiness for orchestration and CI checks
-- [ ] **BASE-04**: API error responses follow one stable contract across validation, auth, conflict, rate-limit, and internal failures
-- [ ] **BASE-05**: Request validation is schema-first and enforced at route boundaries
+- [x] **BASE-03**: Health endpoints expose liveness and readiness for orchestration and CI checks
+- [x] **BASE-04**: API error responses follow one stable contract across validation, auth, conflict, rate-limit, and internal failures
+- [x] **BASE-05**: Request validation is schema-first and enforced at route boundaries
 - [ ] **BASE-06**: Worker process runs independently from HTTP server process for cron and queue execution
 - [ ] **BASE-07**: Migration tooling scaffolding (export/import/reconcile skeleton and dry-run interfaces) exists early to enable rehearsal before final cutover
 - [ ] **SHRD-01**: Backend domain logic reuses canonical packages/shared utilities where applicable and does not reimplement shared semantics
@@ -95,72 +95,74 @@ Deferred to future release. Tracked but not in current roadmap.
 
 Explicitly excluded. Documented to prevent scope creep.
 
-| Feature | Reason |
-|---------|--------|
+| Feature                               | Reason                                                           |
+| ------------------------------------- | ---------------------------------------------------------------- |
 | New realtime channel during migration | Polling parity is the defined migration strategy and a hard gate |
-| Non-parity product feature expansion | Migration stability and behavior parity are prioritized first |
-| appwrite-functions changes | Excluded unless requested in separate scoped work |
+| Non-parity product feature expansion  | Migration stability and behavior parity are prioritized first    |
+| appwrite-functions changes            | Excluded unless requested in separate scoped work                |
 
 ## Traceability
 
 Which phases cover which requirements. Updated during roadmap creation.
 
-| Requirement | Phase | Status |
-|-------------|-------|--------|
-| BASE-01 | Phase 1 | Pending |
-| BASE-02 | Phase 1 | Pending |
-| BASE-03 | Phase 1 | Pending |
-| BASE-04 | Phase 1 | Pending |
-| BASE-05 | Phase 1 | Pending |
-| BASE-06 | Phase 1 | Pending |
-| BASE-07 | Phase 1 | Pending |
-| SHRD-01 | Phase 1 | Pending |
-| AUTH-01 | Phase 2 | Pending |
-| AUTH-02 | Phase 2 | Pending |
-| AUTH-03 | Phase 2 | Pending |
-| AUTH-04 | Phase 2 | Pending |
-| AUTH-05 | Phase 2 | Pending |
-| NOTE-01 | Phase 3 | Pending |
-| NOTE-02 | Phase 3 | Pending |
-| NOTE-03 | Phase 3 | Pending |
-| NOTE-04 | Phase 3 | Pending |
-| SUBS-01 | Phase 3 | Pending |
-| SUBS-02 | Phase 3 | Pending |
-| DEVC-01 | Phase 3 | Pending |
-| DEVC-02 | Phase 3 | Pending |
-| AICP-01 | Phase 3 | Pending |
-| AICP-02 | Phase 3 | Pending |
-| AICP-03 | Phase 3 | Pending |
-| REMD-01 | Phase 4 | Pending |
-| REMD-02 | Phase 4 | Pending |
-| REMD-03 | Phase 4 | Pending |
-| REMD-04 | Phase 4 | Pending |
-| REMD-05 | Phase 4 | Pending |
-| JOBS-01 | Phase 5 | Pending |
-| JOBS-02 | Phase 5 | Pending |
-| JOBS-03 | Phase 5 | Pending |
-| PUSH-01 | Phase 5 | Pending |
-| PUSH-02 | Phase 5 | Pending |
-| MERG-01 | Phase 5 | Pending |
-| MERG-02 | Phase 5 | Pending |
-| MERG-03 | Phase 5 | Pending |
-| THRT-01 | Phase 5 | Pending |
-| MIGR-01 | Phase 6 | Pending |
-| MIGR-02 | Phase 6 | Pending |
-| MIGR-03 | Phase 6 | Pending |
-| MIGR-04 | Phase 6 | Pending |
-| WEB-01 | Phase 7 | Pending |
-| WEB-02 | Phase 7 | Pending |
-| MOBL-01 | Phase 7 | Pending |
-| MOBL-02 | Phase 7 | Pending |
-| CUTV-01 | Phase 7 | Pending |
-| DECM-01 | Phase 8 | Pending |
+| Requirement | Phase   | Status  |
+| ----------- | ------- | ------- |
+| BASE-01     | Phase 1 | Complete |
+| BASE-02     | Phase 1 | Pending |
+| BASE-03     | Phase 1 | Complete |
+| BASE-04     | Phase 1 | Complete |
+| BASE-05     | Phase 1 | Complete |
+| BASE-06     | Phase 1 | Pending |
+| BASE-07     | Phase 1 | Pending |
+| SHRD-01     | Phase 1 | Pending |
+| AUTH-01     | Phase 2 | Pending |
+| AUTH-02     | Phase 2 | Pending |
+| AUTH-03     | Phase 2 | Pending |
+| AUTH-04     | Phase 2 | Pending |
+| AUTH-05     | Phase 2 | Pending |
+| NOTE-01     | Phase 3 | Pending |
+| NOTE-02     | Phase 3 | Pending |
+| NOTE-03     | Phase 3 | Pending |
+| NOTE-04     | Phase 3 | Pending |
+| SUBS-01     | Phase 3 | Pending |
+| SUBS-02     | Phase 3 | Pending |
+| DEVC-01     | Phase 3 | Pending |
+| DEVC-02     | Phase 3 | Pending |
+| AICP-01     | Phase 3 | Pending |
+| AICP-02     | Phase 3 | Pending |
+| AICP-03     | Phase 3 | Pending |
+| REMD-01     | Phase 4 | Pending |
+| REMD-02     | Phase 4 | Pending |
+| REMD-03     | Phase 4 | Pending |
+| REMD-04     | Phase 4 | Pending |
+| REMD-05     | Phase 4 | Pending |
+| JOBS-01     | Phase 5 | Pending |
+| JOBS-02     | Phase 5 | Pending |
+| JOBS-03     | Phase 5 | Pending |
+| PUSH-01     | Phase 5 | Pending |
+| PUSH-02     | Phase 5 | Pending |
+| MERG-01     | Phase 5 | Pending |
+| MERG-02     | Phase 5 | Pending |
+| MERG-03     | Phase 5 | Pending |
+| THRT-01     | Phase 5 | Pending |
+| MIGR-01     | Phase 6 | Pending |
+| MIGR-02     | Phase 6 | Pending |
+| MIGR-03     | Phase 6 | Pending |
+| MIGR-04     | Phase 6 | Pending |
+| WEB-01      | Phase 7 | Pending |
+| WEB-02      | Phase 7 | Pending |
+| MOBL-01     | Phase 7 | Pending |
+| MOBL-02     | Phase 7 | Pending |
+| CUTV-01     | Phase 7 | Pending |
+| DECM-01     | Phase 8 | Pending |
 
 **Coverage:**
+
 - v1 requirements: 48 total
 - Mapped to phases: 48
 - Unmapped: 0
 
 ---
-*Requirements defined: 2026-04-18*
-*Last updated: 2026-04-18 after roadmap creation*
+
+_Requirements defined: 2026-04-18_
+_Last updated: 2026-04-18 after roadmap creation_

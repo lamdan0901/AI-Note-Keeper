@@ -39,7 +39,7 @@ This roadmap delivers a parity-first migration from Convex to Express plus Postg
    **Plans**: 3 plans
 
 Plans:
-- [ ] 01-01-PLAN.md — Lock startup/readiness/error/validation runtime contracts.
+- [x] 01-01-PLAN.md — Lock startup/readiness/error/validation runtime contracts.
 - [ ] 01-02-PLAN.md — Split API and worker entrypoints with shared infra scaffolding.
 - [ ] 01-03-PLAN.md — Harden migration runner and add export/import/reconcile tooling skeleton.
 
