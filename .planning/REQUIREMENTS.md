@@ -39,9 +39,9 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **SUBS-02**: Subscription reminder scheduling fields are preserved and updated consistently
 - [x] **DEVC-01**: Device push token upsert and delete operations are idempotent with uniqueness guarantees
 - [x] **DEVC-02**: notification_ledger remains mobile-local SQLite only and is never persisted or exposed through PostgreSQL-backed APIs
-- [ ] **AICP-01**: Voice parse API returns parity-compatible structure for known inputs
-- [ ] **AICP-02**: Clarify API returns deterministic fallback output when provider is unavailable
-- [ ] **AICP-03**: AI endpoints enforce input validation and endpoint-level rate limiting
+- [x] **AICP-01**: Voice parse API returns parity-compatible structure for known inputs
+- [x] **AICP-02**: Clarify API returns deterministic fallback output when provider is unavailable
+- [x] **AICP-03**: AI endpoints enforce input validation and endpoint-level rate limiting
 
 ### Reminders Parity
 
@@ -128,9 +128,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SUBS-02     | Phase 3 | Complete |
 | DEVC-01     | Phase 3 | Complete |
 | DEVC-02     | Phase 3 | Complete |
-| AICP-01     | Phase 3 | Pending |
-| AICP-02     | Phase 3 | Pending |
-| AICP-03     | Phase 3 | Pending |
+| AICP-01     | Phase 3 | Complete |
+| AICP-02     | Phase 3 | Complete |
+| AICP-03     | Phase 3 | Complete |
 | REMD-01     | Phase 4 | Pending |
 | REMD-02     | Phase 4 | Pending |
 | REMD-03     | Phase 4 | Pending |
@@ -166,4 +166,5 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 _Requirements defined: 2026-04-18_
 _Last updated: 2026-04-18 after roadmap creation_
+
 
