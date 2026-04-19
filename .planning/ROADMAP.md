@@ -173,7 +173,7 @@ Plans:
 | 2. Auth Compatibility and Session Continuity   | 3/3            | Complete    | 2026-04-18 |
 | 3. Notes and Adjacent Domain API Parity        | 4/4            | Complete    | 2026-04-19 |
 | 4. Reminder Domain Parity                      | 3/3            | Complete    | 2026-04-19 |
-| 5. Worker, Push, Merge, and Throttle Hardening | 0/4            | Not started | -          |
+| 5. Worker, Push, Merge, and Throttle Hardening | 1/4            | In Progress | -          |
 | 6. Data Migration Execution and Reconciliation | 0/TBD          | Not started | -          |
 | 7. Web and Mobile Cutover to Express APIs      | 0/TBD          | Not started | -          |
 | 8. Convex Decommission and Cleanup             | 0/TBD          | Not started | -          |
