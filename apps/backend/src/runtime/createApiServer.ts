@@ -3,15 +3,29 @@ import express from 'express';
 
 import { createAuthRoutes } from '../auth/routes.js';
 import type { AuthService } from '../auth/service.js';
+import { createAiRoutes } from '../ai/routes.js';
+import type { AiRateLimiter } from '../ai/rate-limit.js';
+import type { AiService } from '../ai/service.js';
+import { createDeviceTokensRoutes } from '../device-tokens/routes.js';
+import type { DeviceTokensService } from '../device-tokens/service.js';
 import { createDependencyGate, createHealthStatus } from '../health.js';
 import { type ReadinessStatus } from '../health/readiness.js';
 import { errorMiddleware, notFoundMiddleware } from '../middleware/error-middleware.js';
 import { withErrorBoundary } from '../middleware/validate.js';
+import { createNotesRoutes } from '../notes/routes.js';
+import type { NotesService } from '../notes/service.js';
+import { createSubscriptionsRoutes } from '../subscriptions/routes.js';
+import type { SubscriptionsService } from '../subscriptions/service.js';
 
 export type ApiServerFactoryOptions = Readonly<{
   readinessProbe?: () => Promise<ReadinessStatus>;
   isDependencyDegraded?: () => boolean;
   authService?: AuthService;
+  notesService?: NotesService;
+  subscriptionsService?: SubscriptionsService;
+  deviceTokensService?: DeviceTokensService;
+  aiService?: AiService;
+  aiRateLimiter?: AiRateLimiter;
 }>;
 
 const parseTrustProxySetting = (): boolean | number | string => {
@@ -98,6 +112,10 @@ export const createApiServer = (options: ApiServerFactoryOptions = {}): express.
   app.use('/api', createDependencyGate(isDependencyDegraded));
 
   app.use('/api/auth', createAuthRoutes(options.authService));
+  app.use('/api/notes', createNotesRoutes(options.notesService));
+  app.use('/api/subscriptions', createSubscriptionsRoutes(options.subscriptionsService));
+  app.use('/api/device-tokens', createDeviceTokensRoutes(options.deviceTokensService));
+  app.use('/api/ai', createAiRoutes(options.aiService, options.aiRateLimiter));
 
   app.get('/api/sample', (_request, response) => {
     response.json({ message: 'Hello from the backend API!' });
