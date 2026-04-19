@@ -159,7 +159,8 @@ const makePatchInput = (change: NoteSyncChange, currentVersion: number): NotePat
 
 export const createNotesService = (deps: NotesServiceDeps = {}): NotesService => {
   const notesRepository = deps.notesRepository ?? createNotesRepository();
-  const noteChangeEventsRepository = deps.noteChangeEventsRepository ?? createNoteChangeEventsRepository();
+  const noteChangeEventsRepository =
+    deps.noteChangeEventsRepository ?? createNoteChangeEventsRepository();
   const now = deps.now ?? (() => new Date());
 
   // Serialize mutations for deterministic behavior across concurrent sync calls.

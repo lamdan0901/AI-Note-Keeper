@@ -2,7 +2,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { createAiService } from '../../ai/service.js';
-import type { ContinueVoiceClarificationRequest, ParseVoiceNoteIntentRequest } from '../../ai/contracts.js';
+import type {
+  ContinueVoiceClarificationRequest,
+  ParseVoiceNoteIntentRequest,
+} from '../../ai/contracts.js';
 
 const baseParseRequest: ParseVoiceNoteIntentRequest = {
   transcript: 'remind me to call mom tomorrow at 7 pm every day',

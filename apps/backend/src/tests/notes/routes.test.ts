@@ -9,9 +9,16 @@ import { createTokenFactory } from '../../auth/tokens.js';
 import { errorMiddleware, notFoundMiddleware } from '../../middleware/error-middleware.js';
 import { createNotesRoutes } from '../../notes/routes.js';
 import type { NotesService } from '../../notes/service.js';
-import type { NoteRecord, NoteSyncChange, NoteSyncRequest, NoteSyncResponse } from '../../notes/contracts.js';
+import type {
+  NoteRecord,
+  NoteSyncChange,
+  NoteSyncRequest,
+  NoteSyncResponse,
+} from '../../notes/contracts.js';
 
-const createNote = (input: Readonly<{ id: string; userId: string; title: string | null; updatedAt: number }>): NoteRecord => {
+const createNote = (
+  input: Readonly<{ id: string; userId: string; title: string | null; updatedAt: number }>,
+): NoteRecord => {
   const timestamp = new Date(input.updatedAt);
 
   return {
@@ -170,7 +177,9 @@ const createServiceDouble = (): NotesService => {
 
     emptyTrash: async ({ userId }) => {
       const userNotes = getUserMap(userId);
-      const toDelete = [...userNotes.values()].filter((note) => !note.active).map((note) => note.id);
+      const toDelete = [...userNotes.values()]
+        .filter((note) => !note.active)
+        .map((note) => note.id);
       toDelete.forEach((noteId) => {
         userNotes.delete(noteId);
       });
@@ -184,7 +193,9 @@ const createServiceDouble = (): NotesService => {
   };
 };
 
-const startServer = async (service: NotesService): Promise<Readonly<{ baseUrl: string; close: () => Promise<void> }>> => {
+const startServer = async (
+  service: NotesService,
+): Promise<Readonly<{ baseUrl: string; close: () => Promise<void> }>> => {
   const app = express();
   app.use(express.json());
   app.use('/api/notes', createNotesRoutes(service));
@@ -228,7 +239,9 @@ const createAccessToken = async (): Promise<string> => {
   return pair.accessToken;
 };
 
-const syncRequest = (change: NoteSyncChange): Readonly<{ lastSyncAt: number; changes: NoteSyncChange[] }> => {
+const syncRequest = (
+  change: NoteSyncChange,
+): Readonly<{ lastSyncAt: number; changes: NoteSyncChange[] }> => {
   return {
     lastSyncAt: 0,
     changes: [change],
@@ -271,7 +284,9 @@ test('notes sync route is idempotent on replay and ignores stale updates', async
       },
       body: JSON.stringify(syncRequest(baseChange)),
     });
-    const replayPayload = (await replay.json()) as { notes: Array<{ title: string | null; version: number }> };
+    const replayPayload = (await replay.json()) as {
+      notes: Array<{ title: string | null; version: number }>;
+    };
     assert.equal(replay.status, 200);
     assert.equal(replayPayload.notes.length, 1);
     assert.equal(replayPayload.notes[0].version, 1);

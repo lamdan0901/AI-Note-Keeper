@@ -54,7 +54,9 @@ export const createSubscriptionsRoutes = (
     '/',
     requireAccessUser(),
     withErrorBoundary(async (request, response) => {
-      const subscriptions = await service.list({ userId: getUserId(request as AuthenticatedRequest) });
+      const subscriptions = await service.list({
+        userId: getUserId(request as AuthenticatedRequest),
+      });
       response.status(200).json({ subscriptions });
     }),
   );
@@ -125,12 +127,11 @@ export const createSubscriptionsRoutes = (
         patch: {
           ...body,
           nextBillingDate: body.nextBillingDate ? new Date(body.nextBillingDate) : undefined,
-          trialEndDate:
-            Object.hasOwn(body, 'trialEndDate')
-              ? body.trialEndDate
-                ? new Date(body.trialEndDate)
-                : null
-              : undefined,
+          trialEndDate: Object.hasOwn(body, 'trialEndDate')
+            ? body.trialEndDate
+              ? new Date(body.trialEndDate)
+              : null
+            : undefined,
         },
       });
 

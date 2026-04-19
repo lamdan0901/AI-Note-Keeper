@@ -7,7 +7,11 @@ import { requireAccessUser, type AuthenticatedRequest } from '../../auth/access-
 import type { NoteRecord, NoteSyncChange } from '../../notes/contracts.js';
 import { createNoteChangeEventsRepository } from '../../notes/repositories/note-change-events-repository.js';
 import type { NoteChangeEventsRepository } from '../../notes/repositories/note-change-events-repository.js';
-import { createNotesRepository, type NotePatchInput, type NotesRepository } from '../../notes/repositories/notes-repository.js';
+import {
+  createNotesRepository,
+  type NotePatchInput,
+  type NotesRepository,
+} from '../../notes/repositories/notes-repository.js';
 import { createNotesService } from '../../notes/service.js';
 
 const createNote = (
@@ -104,7 +108,9 @@ const createInMemoryNotesRepository = (
         ...(Object.hasOwn(patch, 'repeat') ? { repeat: patch.repeat ?? null } : {}),
         ...(Object.hasOwn(patch, 'startAt') ? { startAt: patch.startAt ?? null } : {}),
         ...(Object.hasOwn(patch, 'baseAtLocal') ? { baseAtLocal: patch.baseAtLocal ?? null } : {}),
-        ...(Object.hasOwn(patch, 'updatedAt') ? { updatedAt: patch.updatedAt ?? existing.updatedAt } : {}),
+        ...(Object.hasOwn(patch, 'updatedAt')
+          ? { updatedAt: patch.updatedAt ?? existing.updatedAt }
+          : {}),
         ...(Object.hasOwn(patch, 'version') ? { version: patch.version ?? existing.version } : {}),
       };
 
@@ -420,7 +426,10 @@ test('concurrent timestamp winner uses deterministic latest updatedAt result', a
     }),
   ]);
 
-  assert.equal(notesRepository.byKey.get('user-1:note-concurrent')?.title, 'Newer concurrent write');
+  assert.equal(
+    notesRepository.byKey.get('user-1:note-concurrent')?.title,
+    'Newer concurrent write',
+  );
 });
 
 test('concurrent duplicate payloadHash replay applies one effective mutation', async () => {
@@ -485,5 +494,8 @@ test('same note id across users cannot mutate another user record', async () => 
   });
 
   assert.equal(notesRepository.byKey.get('user-a:shared-note-id')?.title, 'Owner value');
-  assert.equal(notesRepository.byKey.get('user-b:shared-note-id')?.title, 'Attacker overwrite attempt');
+  assert.equal(
+    notesRepository.byKey.get('user-b:shared-note-id')?.title,
+    'Attacker overwrite attempt',
+  );
 });

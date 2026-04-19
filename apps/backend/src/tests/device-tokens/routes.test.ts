@@ -11,7 +11,8 @@ import { createDeviceTokensRoutes } from '../../device-tokens/routes.js';
 import type { DeviceTokensService } from '../../device-tokens/service.js';
 import { errorMiddleware, notFoundMiddleware } from '../../middleware/error-middleware.js';
 
-const createServiceDouble = (): DeviceTokensService & Readonly<{ tokens: Map<string, DeviceTokenRecord> }> => {
+const createServiceDouble = (): DeviceTokensService &
+  Readonly<{ tokens: Map<string, DeviceTokenRecord> }> => {
   const tokens = new Map<string, DeviceTokenRecord>();
 
   return {
@@ -62,7 +63,9 @@ const createServiceDouble = (): DeviceTokensService & Readonly<{ tokens: Map<str
   };
 };
 
-const startServer = async (service: DeviceTokensService): Promise<Readonly<{ baseUrl: string; close: () => Promise<void> }>> => {
+const startServer = async (
+  service: DeviceTokensService,
+): Promise<Readonly<{ baseUrl: string; close: () => Promise<void> }>> => {
   const app = express();
   app.use(express.json());
   app.use('/api/device-tokens', createDeviceTokensRoutes(service));
@@ -188,8 +191,14 @@ test('device token route rejects invalid platform payloads', async () => {
 });
 
 test('notification_ledger remains excluded from backend routes and repositories', async () => {
-  const routesSource = await readFile(new URL('../../device-tokens/routes.js', import.meta.url), 'utf8');
-  const repoSource = await readFile(new URL('../../device-tokens/repositories/device-tokens-repository.js', import.meta.url), 'utf8');
+  const routesSource = await readFile(
+    new URL('../../device-tokens/routes.js', import.meta.url),
+    'utf8',
+  );
+  const repoSource = await readFile(
+    new URL('../../device-tokens/repositories/device-tokens-repository.js', import.meta.url),
+    'utf8',
+  );
 
   assert.equal(routesSource.includes('notification-ledger'), false);
   assert.equal(routesSource.includes('notification_ledger'), false);

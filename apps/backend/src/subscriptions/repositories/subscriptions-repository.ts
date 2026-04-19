@@ -33,9 +33,13 @@ type SubscriptionRow = Readonly<{
 export type SubscriptionsRepository = Readonly<{
   listByUser: (userId: string) => Promise<ReadonlyArray<SubscriptionRecord>>;
   listTrashedByUser: (userId: string) => Promise<ReadonlyArray<SubscriptionRecord>>;
-  findByIdForUser: (input: Readonly<{ subscriptionId: string; userId: string }>) => Promise<SubscriptionRecord | null>;
+  findByIdForUser: (
+    input: Readonly<{ subscriptionId: string; userId: string }>,
+  ) => Promise<SubscriptionRecord | null>;
   create: (input: SubscriptionCreateInput) => Promise<SubscriptionRecord>;
-  patch: (input: Readonly<{ subscriptionId: string; userId: string; patch: SubscriptionUpdatePatch }>) => Promise<SubscriptionRecord | null>;
+  patch: (
+    input: Readonly<{ subscriptionId: string; userId: string; patch: SubscriptionUpdatePatch }>,
+  ) => Promise<SubscriptionRecord | null>;
   hardDelete: (input: Readonly<{ subscriptionId: string; userId: string }>) => Promise<boolean>;
 }>;
 
@@ -76,7 +80,9 @@ const toDomain = (row: SubscriptionRow): SubscriptionRecord => {
   };
 };
 
-const toPatchColumns = (patch: SubscriptionUpdatePatch): Array<Readonly<{ column: string; value: unknown }>> => {
+const toPatchColumns = (
+  patch: SubscriptionUpdatePatch,
+): Array<Readonly<{ column: string; value: unknown }>> => {
   const columns: Array<Readonly<{ column: string; value: unknown }>> = [];
   const add = (column: string, value: unknown): void => {
     columns.push({ column, value });
@@ -87,14 +93,18 @@ const toPatchColumns = (patch: SubscriptionUpdatePatch): Array<Readonly<{ column
   if (Object.hasOwn(patch, 'price')) add('price', patch.price ?? 0);
   if (Object.hasOwn(patch, 'currency')) add('currency', patch.currency ?? null);
   if (Object.hasOwn(patch, 'billingCycle')) add('billing_cycle', patch.billingCycle ?? null);
-  if (Object.hasOwn(patch, 'billingCycleCustomDays')) add('billing_cycle_custom_days', patch.billingCycleCustomDays ?? null);
-  if (Object.hasOwn(patch, 'nextBillingDate')) add('next_billing_date', patch.nextBillingDate ?? null);
+  if (Object.hasOwn(patch, 'billingCycleCustomDays'))
+    add('billing_cycle_custom_days', patch.billingCycleCustomDays ?? null);
+  if (Object.hasOwn(patch, 'nextBillingDate'))
+    add('next_billing_date', patch.nextBillingDate ?? null);
   if (Object.hasOwn(patch, 'notes')) add('notes', patch.notes ?? null);
   if (Object.hasOwn(patch, 'trialEndDate')) add('trial_end_date', patch.trialEndDate ?? null);
   if (Object.hasOwn(patch, 'status')) add('status', patch.status ?? null);
-  if (Object.hasOwn(patch, 'reminderDaysBefore')) add('reminder_days_before', patch.reminderDaysBefore ?? []);
+  if (Object.hasOwn(patch, 'reminderDaysBefore'))
+    add('reminder_days_before', patch.reminderDaysBefore ?? []);
   if (Object.hasOwn(patch, 'nextReminderAt')) add('next_reminder_at', patch.nextReminderAt ?? null);
-  if (Object.hasOwn(patch, 'nextTrialReminderAt')) add('next_trial_reminder_at', patch.nextTrialReminderAt ?? null);
+  if (Object.hasOwn(patch, 'nextTrialReminderAt'))
+    add('next_trial_reminder_at', patch.nextTrialReminderAt ?? null);
   if (Object.hasOwn(patch, 'deletedAt')) add('deleted_at', patch.deletedAt ?? null);
   if (Object.hasOwn(patch, 'active')) add('active', patch.active ?? true);
   if (Object.hasOwn(patch, 'updatedAt')) add('updated_at', patch.updatedAt ?? new Date());

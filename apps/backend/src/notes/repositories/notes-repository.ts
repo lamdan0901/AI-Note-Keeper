@@ -85,9 +85,13 @@ export type NotePatchInput = {
 
 export type NotesRepository = Readonly<{
   listByUser: (userId: string) => Promise<ReadonlyArray<NoteRecord>>;
-  findByIdForUser: (input: Readonly<{ noteId: string; userId: string }>) => Promise<NoteRecord | null>;
+  findByIdForUser: (
+    input: Readonly<{ noteId: string; userId: string }>,
+  ) => Promise<NoteRecord | null>;
   create: (input: NoteCreateInput) => Promise<NoteRecord>;
-  patch: (input: Readonly<{ noteId: string; userId: string; patch: NotePatchInput }>) => Promise<NoteRecord | null>;
+  patch: (
+    input: Readonly<{ noteId: string; userId: string; patch: NotePatchInput }>,
+  ) => Promise<NoteRecord | null>;
   hardDelete: (input: Readonly<{ noteId: string; userId: string }>) => Promise<boolean>;
   emptyTrash: (input: Readonly<{ userId: string }>) => Promise<number>;
 }>;
@@ -150,7 +154,9 @@ const INSERT_COLUMNS = [
   'updated_at',
 ] as const;
 
-const patchToColumnValue = (patch: NotePatchInput): Array<Readonly<{ column: string; value: unknown }>> => {
+const patchToColumnValue = (
+  patch: NotePatchInput,
+): Array<Readonly<{ column: string; value: unknown }>> => {
   const pairs: Array<Readonly<{ column: string; value: unknown }>> = [];
 
   const add = (column: string, value: unknown): void => {
@@ -175,7 +181,8 @@ const patchToColumnValue = (patch: NotePatchInput): Array<Readonly<{ column: str
   if (Object.hasOwn(patch, 'startAt')) add('start_at', patch.startAt ?? null);
   if (Object.hasOwn(patch, 'nextTriggerAt')) add('next_trigger_at', patch.nextTriggerAt ?? null);
   if (Object.hasOwn(patch, 'lastFiredAt')) add('last_fired_at', patch.lastFiredAt ?? null);
-  if (Object.hasOwn(patch, 'lastAcknowledgedAt')) add('last_acknowledged_at', patch.lastAcknowledgedAt ?? null);
+  if (Object.hasOwn(patch, 'lastAcknowledgedAt'))
+    add('last_acknowledged_at', patch.lastAcknowledgedAt ?? null);
   if (Object.hasOwn(patch, 'deletedAt')) add('deleted_at', patch.deletedAt ?? null);
   if (Object.hasOwn(patch, 'updatedAt')) add('updated_at', patch.updatedAt ?? new Date());
   if (Object.hasOwn(patch, 'version')) add('version', patch.version ?? 1);
@@ -204,7 +211,9 @@ const findByIdAndUser = async (
   return toDomain(result.rows[0]);
 };
 
-export const createNotesRepository = (deps: Readonly<{ db?: DbQueryClient }> = {}): NotesRepository => {
+export const createNotesRepository = (
+  deps: Readonly<{ db?: DbQueryClient }> = {},
+): NotesRepository => {
   const db = deps.db ?? pool;
 
   return {
@@ -322,5 +331,3 @@ export const createNotesRepository = (deps: Readonly<{ db?: DbQueryClient }> = {
     },
   };
 };
-
-

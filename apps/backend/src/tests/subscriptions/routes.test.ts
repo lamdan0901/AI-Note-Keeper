@@ -12,9 +12,7 @@ import type { SubscriptionsService } from '../../subscriptions/service.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-const createServiceDouble = (
-  nowRef: Readonly<{ nowMs: () => number }>,
-): SubscriptionsService => {
+const createServiceDouble = (nowRef: Readonly<{ nowMs: () => number }>): SubscriptionsService => {
   const byUser = new Map<string, Map<string, SubscriptionRecord>>();
 
   const getUserMap = (userId: string): Map<string, SubscriptionRecord> => {
@@ -73,7 +71,10 @@ const createServiceDouble = (
         reminderDaysBefore: [...input.reminderDaysBefore],
         nextReminderAt: computeNextReminderAt(input.nextBillingDate, input.reminderDaysBefore),
         lastNotifiedBillingDate: null,
-        nextTrialReminderAt: computeNextTrialReminderAt(input.trialEndDate, input.reminderDaysBefore),
+        nextTrialReminderAt: computeNextTrialReminderAt(
+          input.trialEndDate,
+          input.reminderDaysBefore,
+        ),
         lastNotifiedTrialEndDate: null,
         active: true,
         deletedAt: null,
@@ -92,7 +93,8 @@ const createServiceDouble = (
         const error = new Error('not_found');
         (error as unknown as { code: string; status: number; message: string }).code = 'not_found';
         (error as unknown as { code: string; status: number; message: string }).status = 404;
-        (error as unknown as { code: string; status: number; message: string }).message = 'Subscription not found';
+        (error as unknown as { code: string; status: number; message: string }).message =
+          'Subscription not found';
         throw error;
       }
 
@@ -181,7 +183,9 @@ const createServiceDouble = (
   };
 };
 
-const startServer = async (service: SubscriptionsService): Promise<Readonly<{ baseUrl: string; close: () => Promise<void> }>> => {
+const startServer = async (
+  service: SubscriptionsService,
+): Promise<Readonly<{ baseUrl: string; close: () => Promise<void> }>> => {
   const app = express();
   app.use(express.json());
   app.use('/api/subscriptions', createSubscriptionsRoutes(service));
@@ -255,7 +259,11 @@ test('subscriptions routes derive reminder fields on create and update', async (
 
     assert.equal(createResponse.status, 201);
     const createdPayload = (await createResponse.json()) as {
-      subscription: { id: string; nextReminderAt: string | null; nextTrialReminderAt: string | null };
+      subscription: {
+        id: string;
+        nextReminderAt: string | null;
+        nextTrialReminderAt: string | null;
+      };
     };
     assert.ok(createdPayload.subscription.nextReminderAt);
     assert.ok(createdPayload.subscription.nextTrialReminderAt);

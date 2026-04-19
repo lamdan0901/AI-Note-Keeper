@@ -16,9 +16,15 @@ type DeviceTokenRow = Readonly<{
 
 export type DeviceTokensRepository = Readonly<{
   findByDeviceId: (deviceId: string) => Promise<DeviceTokenRecord | null>;
-  insert: (input: Readonly<{ userId: string; deviceId: string; fcmToken: string; platform: 'android' }>) => Promise<DeviceTokenRecord>;
-  updateByDeviceId: (input: Readonly<{ userId: string; deviceId: string; fcmToken: string; platform: 'android' }>) => Promise<DeviceTokenRecord | null>;
-  deleteByDeviceIdForUser: (input: Readonly<{ userId: string; deviceId: string }>) => Promise<boolean>;
+  insert: (
+    input: Readonly<{ userId: string; deviceId: string; fcmToken: string; platform: 'android' }>,
+  ) => Promise<DeviceTokenRecord>;
+  updateByDeviceId: (
+    input: Readonly<{ userId: string; deviceId: string; fcmToken: string; platform: 'android' }>,
+  ) => Promise<DeviceTokenRecord | null>;
+  deleteByDeviceIdForUser: (
+    input: Readonly<{ userId: string; deviceId: string }>,
+  ) => Promise<boolean>;
 }>;
 
 const toDomain = (row: DeviceTokenRow): DeviceTokenRecord => {

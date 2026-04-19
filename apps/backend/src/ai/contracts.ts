@@ -4,7 +4,11 @@ export type RepeatRule =
   | Readonly<{ kind: 'daily'; interval: number }>
   | Readonly<{ kind: 'weekly'; interval: number; weekdays: number[] }>
   | Readonly<{ kind: 'monthly'; interval: number; mode: 'day_of_month' }>
-  | Readonly<{ kind: 'custom'; interval: number; frequency: 'minutes' | 'days' | 'weeks' | 'months' }>;
+  | Readonly<{
+      kind: 'custom';
+      interval: number;
+      frequency: 'minutes' | 'days' | 'weeks' | 'months';
+    }>;
 
 export type VoiceIntentDraftDto = Readonly<{
   title: string | null;

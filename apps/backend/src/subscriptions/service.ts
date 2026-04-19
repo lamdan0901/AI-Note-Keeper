@@ -20,10 +20,14 @@ type SubscriptionsServiceDeps = Readonly<{
 export type SubscriptionsService = Readonly<{
   list: (input: Readonly<{ userId: string }>) => Promise<ReadonlyArray<SubscriptionRecord>>;
   create: (input: SubscriptionCreateInput) => Promise<SubscriptionRecord>;
-  update: (input: Readonly<{ subscriptionId: string; userId: string; patch: SubscriptionUpdatePatch }>) => Promise<SubscriptionRecord>;
+  update: (
+    input: Readonly<{ subscriptionId: string; userId: string; patch: SubscriptionUpdatePatch }>,
+  ) => Promise<SubscriptionRecord>;
   trash: (input: Readonly<{ subscriptionId: string; userId: string }>) => Promise<boolean>;
   restore: (input: Readonly<{ subscriptionId: string; userId: string }>) => Promise<boolean>;
-  permanentlyDelete: (input: Readonly<{ subscriptionId: string; userId: string }>) => Promise<boolean>;
+  permanentlyDelete: (
+    input: Readonly<{ subscriptionId: string; userId: string }>,
+  ) => Promise<boolean>;
   purgeExpiredTrash: (input: Readonly<{ userId: string }>) => Promise<number>;
 }>;
 
@@ -57,13 +61,21 @@ export const createSubscriptionsService = (
   const subscriptionsRepository = deps.subscriptionsRepository ?? createSubscriptionsRepository();
   const now = deps.now ?? (() => new Date());
 
-  const attachDerivedFields = <T extends Readonly<{
-    nextBillingDate: Date;
-    trialEndDate: Date | null;
-    reminderDaysBefore: ReadonlyArray<number>;
-  }>>(input: T): T & Readonly<{ nextReminderAt: Date | null; nextTrialReminderAt: Date | null }> => {
+  const attachDerivedFields = <
+    T extends Readonly<{
+      nextBillingDate: Date;
+      trialEndDate: Date | null;
+      reminderDaysBefore: ReadonlyArray<number>;
+    }>,
+  >(
+    input: T,
+  ): T & Readonly<{ nextReminderAt: Date | null; nextTrialReminderAt: Date | null }> => {
     const nowMs = now().getTime();
-    const nextReminderAt = computeNextReminderAt(input.nextBillingDate, input.reminderDaysBefore, nowMs);
+    const nextReminderAt = computeNextReminderAt(
+      input.nextBillingDate,
+      input.reminderDaysBefore,
+      nowMs,
+    );
     const nextTrialReminderAt = input.trialEndDate
       ? computeNextReminderAt(input.trialEndDate, input.reminderDaysBefore, nowMs)
       : null;
@@ -109,8 +121,9 @@ export const createSubscriptionsService = (
 
       const merged = {
         nextBillingDate: patch.nextBillingDate ?? existing.nextBillingDate,
-        trialEndDate:
-          Object.hasOwn(patch, 'trialEndDate') ? patch.trialEndDate ?? null : existing.trialEndDate,
+        trialEndDate: Object.hasOwn(patch, 'trialEndDate')
+          ? (patch.trialEndDate ?? null)
+          : existing.trialEndDate,
         reminderDaysBefore: patch.reminderDaysBefore ?? existing.reminderDaysBefore,
       };
 

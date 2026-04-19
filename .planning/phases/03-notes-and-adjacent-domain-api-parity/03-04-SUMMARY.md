@@ -24,12 +24,12 @@ key-files:
   modified:
     - apps/backend/src/runtime/createApiServer.ts
 key-decisions:
-  - "Mounted phase-3 routes inside createApiServer without bypassing dependency gate or terminal error middleware ordering."
-  - "Kept parity verification at HTTP boundary using real route handlers and injected domain doubles."
-  - "Added explicit regression checks preventing notification_ledger backend route exposure."
+  - 'Mounted phase-3 routes inside createApiServer without bypassing dependency gate or terminal error middleware ordering.'
+  - 'Kept parity verification at HTTP boundary using real route handlers and injected domain doubles.'
+  - 'Added explicit regression checks preventing notification_ledger backend route exposure.'
 patterns-established:
-  - "Phase-level parity tests should validate both success behavior and standardized error envelopes (`code`, `message`, `status`)."
-  - "Security boundary suite enforces auth-first and validation-contract protections across all mounted domain routers."
+  - 'Phase-level parity tests should validate both success behavior and standardized error envelopes (`code`, `message`, `status`).'
+  - 'Security boundary suite enforces auth-first and validation-contract protections across all mounted domain routers.'
 requirements-completed: [NOTE-01, SUBS-01, DEVC-01, AICP-03]
 duration: 4 min
 completed: 2026-04-19
@@ -48,6 +48,7 @@ completed: 2026-04-19
 - **Files modified:** 3
 
 ## Accomplishments
+
 - Mounted `/api/notes`, `/api/subscriptions`, `/api/device-tokens`, and `/api/ai` in runtime while preserving `/api/auth` behavior and middleware order.
 - Added HTTP parity contract suite covering notes replay idempotency, cross-user ownership boundaries, and AI fallback + rate-limit behavior.
 - Added security-boundary suite covering unauthorized access contracts, validation contracts, and notification_ledger non-exposure.
@@ -59,28 +60,35 @@ completed: 2026-04-19
 3. **Task 3: Add phase-3 security-boundary regression suite** - `264e539` (test)
 
 ## Files Created/Modified
+
 - `apps/backend/src/runtime/createApiServer.ts` - Runtime route mounts for notes/subscriptions/device-tokens/ai.
 - `apps/backend/src/tests/parity/phase3.http.contract.test.ts` - End-to-end parity tests through mounted routes.
 - `apps/backend/src/tests/parity/phase3.security-boundary.test.ts` - Auth/validation/forbidden-surface boundary regression tests.
 
 ## Decisions Made
+
 - Preserved middleware order: dependency gate before route groups, then notFound and error middleware terminally.
 - Validated phase-3 contracts through HTTP handlers rather than direct service invocation to catch wiring regressions.
 - Enforced route-surface policy by asserting absence of notification_ledger strings and endpoints.
 
 ## Deviations from Plan
+
 None.
 
 ## Issues Encountered
+
 None.
 
 ## User Setup Required
+
 None.
 
 ## Next Phase Readiness
+
 - Phase 03 is execution-complete and regression-protected.
 - Ready to proceed to Phase 4 reminder domain parity planning and execution.
 
 ---
-*Phase: 03-notes-and-adjacent-domain-api-parity*
-*Completed: 2026-04-19*
+
+_Phase: 03-notes-and-adjacent-domain-api-parity_
+_Completed: 2026-04-19_

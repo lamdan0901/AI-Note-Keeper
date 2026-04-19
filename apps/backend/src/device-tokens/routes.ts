@@ -30,7 +30,11 @@ export const createDeviceTokensRoutes = (
     validateRequest({ body: upsertBodySchema }),
     withErrorBoundary(async (request, response) => {
       const userId = getUserId(request as AuthenticatedRequest);
-      const body = request.body as Readonly<{ deviceId: string; fcmToken: string; platform: 'android' }>;
+      const body = request.body as Readonly<{
+        deviceId: string;
+        fcmToken: string;
+        platform: 'android';
+      }>;
 
       const token = await service.upsert({
         userId,

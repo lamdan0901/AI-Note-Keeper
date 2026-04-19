@@ -32,12 +32,12 @@ key-files:
     - apps/backend/src/notes/repositories/notes-repository.ts
     - apps/backend/src/tests/notes/service.sync.test.ts
 key-decisions:
-  - "Implemented strict `incoming.updatedAt > existing.updatedAt` in notes service and codified with stale-write tests."
-  - "Enforced replay idempotency via `note_change_events` dedupe lookup before mutation application."
-  - "Used authenticated route middleware to inject `authUser` and scope all notes operations by user."
+  - 'Implemented strict `incoming.updatedAt > existing.updatedAt` in notes service and codified with stale-write tests.'
+  - 'Enforced replay idempotency via `note_change_events` dedupe lookup before mutation application.'
+  - 'Used authenticated route middleware to inject `authUser` and scope all notes operations by user.'
 patterns-established:
-  - "Notes parity modules follow contracts -> repositories -> service -> routes layering with tests at service and route boundaries."
-  - "Concurrent sync requests are serialized in-service to keep deterministic outcomes under replay and timestamp races."
+  - 'Notes parity modules follow contracts -> repositories -> service -> routes layering with tests at service and route boundaries.'
+  - 'Concurrent sync requests are serialized in-service to keep deterministic outcomes under replay and timestamp races.'
 requirements-completed: [NOTE-01, NOTE-02, NOTE-03, NOTE-04]
 duration: 3 min
 completed: 2026-04-19
@@ -56,6 +56,7 @@ completed: 2026-04-19
 - **Files modified:** 8
 
 ## Accomplishments
+
 - Added reusable `requireAccessUser` middleware and typed authenticated request context.
 - Implemented notes contracts, repositories, sync service, and notes route handlers for parity endpoints.
 - Added route and service tests for replay dedupe, stale-write no-op, canonical null-vs-omitted semantics, and concurrent sync determinism.
@@ -67,6 +68,7 @@ completed: 2026-04-19
 3. **Task 3: Add deterministic concurrency tests for sync conflict safety** - `ac1cb83` (test)
 
 ## Files Created/Modified
+
 - `apps/backend/src/auth/access-middleware.ts` - Bearer token middleware that injects authenticated user context.
 - `apps/backend/src/notes/contracts.ts` - Notes sync DTOs and canonical recurrence patch helpers.
 - `apps/backend/src/notes/repositories/notes-repository.ts` - Ownership-scoped notes data access and trash operations.
@@ -77,6 +79,7 @@ completed: 2026-04-19
 - `apps/backend/src/tests/notes/routes.test.ts` - Route-level replay/stale/lifecycle parity tests.
 
 ## Decisions Made
+
 - Enforced strict greater-than timestamp precedence for LWW writes to match parity contract.
 - Treated duplicate payload hashes as idempotent no-op at service entry before mutation logic.
 - Preserved canonical recurrence semantics: omitted fields preserve existing values; explicit null clears.
@@ -86,6 +89,7 @@ completed: 2026-04-19
 ### Auto-fixed Issues
 
 **1. [Rule 1 - Bug] Readonly patch typing blocked service patch construction**
+
 - **Found during:** Task 2 (notes service implementation)
 - **Issue:** `NotePatchInput` was readonly, causing TypeScript compile failures when building patch payloads incrementally.
 - **Fix:** Changed `NotePatchInput` to mutable while preserving immutable repository return types.
@@ -99,15 +103,19 @@ completed: 2026-04-19
 **Impact on plan:** Fix was local and required for compilation; no scope expansion.
 
 ## Issues Encountered
+
 None.
 
 ## User Setup Required
+
 None - no external service configuration required.
 
 ## Next Phase Readiness
+
 - Shared authenticated notes middleware and route patterns are ready for subscriptions/device-token/AI modules.
 - Plan 03-04 can mount `/api/notes` immediately in runtime integration.
 
 ---
-*Phase: 03-notes-and-adjacent-domain-api-parity*
-*Completed: 2026-04-19*
+
+_Phase: 03-notes-and-adjacent-domain-api-parity_
+_Completed: 2026-04-19_

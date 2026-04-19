@@ -144,8 +144,14 @@ test('malformed phase-3 payloads return validation contract with issue details',
 });
 
 test('notification_ledger remains absent from mounted backend route surfaces', async () => {
-  const runtimeSource = await readFile(new URL('../../runtime/createApiServer.js', import.meta.url), 'utf8');
-  const deviceRoutesSource = await readFile(new URL('../../device-tokens/routes.js', import.meta.url), 'utf8');
+  const runtimeSource = await readFile(
+    new URL('../../runtime/createApiServer.js', import.meta.url),
+    'utf8',
+  );
+  const deviceRoutesSource = await readFile(
+    new URL('../../device-tokens/routes.js', import.meta.url),
+    'utf8',
+  );
 
   assert.equal(runtimeSource.includes('notification_ledger'), false);
   assert.equal(runtimeSource.includes('notification-ledger'), false);

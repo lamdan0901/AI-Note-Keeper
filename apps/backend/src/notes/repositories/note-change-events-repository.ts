@@ -12,7 +12,9 @@ export type NoteChangeEventLookupInput = Readonly<{
 
 export type NoteChangeEventsRepository = Readonly<{
   isDuplicate: (input: NoteChangeEventLookupInput) => Promise<boolean>;
-  appendEvent: (input: NoteChangeEventLookupInput & Readonly<{ deviceId: string; changedAt?: Date }>) => Promise<void>;
+  appendEvent: (
+    input: NoteChangeEventLookupInput & Readonly<{ deviceId: string; changedAt?: Date }>,
+  ) => Promise<void>;
 }>;
 
 export const createNoteChangeEventsRepository = (

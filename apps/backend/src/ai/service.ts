@@ -15,12 +15,16 @@ type ProviderConfig = Readonly<{
 
 type AiServiceDeps = Readonly<{
   readProviderConfig?: () => ProviderConfig | null;
-  callProviderJson?: (input: Readonly<{ model: string; apiKey: string; systemPrompt: string; userPrompt: string }>) => Promise<unknown | null>;
+  callProviderJson?: (
+    input: Readonly<{ model: string; apiKey: string; systemPrompt: string; userPrompt: string }>,
+  ) => Promise<unknown | null>;
 }>;
 
 export type AiService = Readonly<{
   parseVoiceNoteIntent: (request: ParseVoiceNoteIntentRequest) => Promise<VoiceIntentResponseDto>;
-  continueVoiceClarification: (request: ContinueVoiceClarificationRequest) => Promise<VoiceIntentResponseDto>;
+  continueVoiceClarification: (
+    request: ContinueVoiceClarificationRequest,
+  ) => Promise<VoiceIntentResponseDto>;
 }>;
 
 const EMPTY_CONFIDENCE = {
@@ -71,7 +75,9 @@ const parseRepeatRule = (value: unknown): RepeatRule | null => {
     return {
       kind: 'weekly',
       interval: Number(value.interval),
-      weekdays: value.weekdays.map((entry) => Number(entry)).filter((entry) => Number.isInteger(entry)),
+      weekdays: value.weekdays
+        .map((entry) => Number(entry))
+        .filter((entry) => Number.isInteger(entry)),
     };
   }
 
@@ -96,13 +102,18 @@ const parseRepeatRule = (value: unknown): RepeatRule | null => {
   return null;
 };
 
-const parseDeterministicTime = (transcript: string): Readonly<{ dayOffset: number; hour: number; minute: number }> | null => {
+const parseDeterministicTime = (
+  transcript: string,
+): Readonly<{ dayOffset: number; hour: number; minute: number }> | null => {
   const normalized = normalizeTranscript(transcript).toLowerCase();
 
-  const amPmPattern = /\b(today|tomorrow|tommorow)\b(?:\s+at)?\s+(\d{1,2})(?::([0-5]\d))?\s*(a\.?m\.?|p\.?m\.?|am|pm)\b/i;
-  const dayAfterTimePattern = /\b(\d{1,2})(?::([0-5]\d))?\s*(a\.?m\.?|p\.?m\.?|am|pm)\b(?:\s+on)?\s+\b(today|tomorrow|tommorow)\b/i;
+  const amPmPattern =
+    /\b(today|tomorrow|tommorow)\b(?:\s+at)?\s+(\d{1,2})(?::([0-5]\d))?\s*(a\.?m\.?|p\.?m\.?|am|pm)\b/i;
+  const dayAfterTimePattern =
+    /\b(\d{1,2})(?::([0-5]\d))?\s*(a\.?m\.?|p\.?m\.?|am|pm)\b(?:\s+on)?\s+\b(today|tomorrow|tommorow)\b/i;
   const h24Pattern = /\b(today|tomorrow|tommorow)\b(?:\s+at)?\s+([01]?\d|2[0-3]):([0-5]\d)\b/i;
-  const h24DayAfterPattern = /\b([01]?\d|2[0-3]):([0-5]\d)\b(?:\s+on)?\s+\b(today|tomorrow|tommorow)\b/i;
+  const h24DayAfterPattern =
+    /\b([01]?\d|2[0-3]):([0-5]\d)\b(?:\s+on)?\s+\b(today|tomorrow|tommorow)\b/i;
 
   const toDayOffset = (raw: string): number => (raw.toLowerCase() === 'today' ? 0 : 1);
   const to24Hour = (hour12: number, meridiemRaw: string): number => {
@@ -149,7 +160,9 @@ const parseDeterministicTime = (transcript: string): Readonly<{ dayOffset: numbe
   return null;
 };
 
-const parseDeterministicReminderAt = (input: Readonly<{ transcript: string; nowEpochMs: number }>): number | null => {
+const parseDeterministicReminderAt = (
+  input: Readonly<{ transcript: string; nowEpochMs: number }>,
+): number | null => {
   const parsedTime = parseDeterministicTime(input.transcript);
   if (!parsedTime) {
     return null;
@@ -197,7 +210,10 @@ const extractAction = (transcript: string): string | null => {
     ? withoutPrefix.slice(0, firstMarkerIndex)
     : withoutPrefix;
 
-  const cleaned = action.replace(/[,:;.!?\-\s]+$/g, '').replace(/\b(?:at|on|for)\s*$/i, '').trim();
+  const cleaned = action
+    .replace(/[,:;.!?\-\s]+$/g, '')
+    .replace(/\b(?:at|on|for)\s*$/i, '')
+    .trim();
   if (!cleaned) {
     return null;
   }
@@ -205,7 +221,9 @@ const extractAction = (transcript: string): string | null => {
   return `${cleaned[0].toUpperCase()}${cleaned.slice(1)}`;
 };
 
-const parseDeterministicRepeat = (input: Readonly<{ transcript: string; reminderAtEpochMs: number }>): RepeatRule | null => {
+const parseDeterministicRepeat = (
+  input: Readonly<{ transcript: string; reminderAtEpochMs: number }>,
+): RepeatRule | null => {
   const normalized = normalizeTranscript(input.transcript).toLowerCase();
 
   const everyCountMatch = normalized.match(/\bevery\s+(\d+)\s+(minutes?|days?|weeks?|months?)\b/i);
@@ -220,7 +238,11 @@ const parseDeterministicRepeat = (input: Readonly<{ transcript: string; reminder
       return { kind: 'daily', interval };
     }
     if (unit.startsWith('week')) {
-      return { kind: 'weekly', interval, weekdays: [new Date(input.reminderAtEpochMs).getUTCDay()] };
+      return {
+        kind: 'weekly',
+        interval,
+        weekdays: [new Date(input.reminderAtEpochMs).getUTCDay()],
+      };
     }
     if (unit.startsWith('month')) {
       return { kind: 'monthly', interval, mode: 'day_of_month' };
@@ -235,7 +257,11 @@ const parseDeterministicRepeat = (input: Readonly<{ transcript: string; reminder
   }
 
   if (/\bevery\s+week\b|\brepeat\s+weekly\b/i.test(normalized)) {
-    return { kind: 'weekly', interval: 1, weekdays: [new Date(input.reminderAtEpochMs).getUTCDay()] };
+    return {
+      kind: 'weekly',
+      interval: 1,
+      weekdays: [new Date(input.reminderAtEpochMs).getUTCDay()],
+    };
   }
 
   if (/\bevery\s+month\b|\brepeat\s+monthly\b/i.test(normalized)) {
@@ -247,7 +273,10 @@ const parseDeterministicRepeat = (input: Readonly<{ transcript: string; reminder
 
 const parseDeterministicDraft = (input: Readonly<{ transcript: string; nowEpochMs: number }>) => {
   const normalized = normalizeTranscript(input.transcript);
-  const reminderAtEpochMs = parseDeterministicReminderAt({ transcript: normalized, nowEpochMs: input.nowEpochMs });
+  const reminderAtEpochMs = parseDeterministicReminderAt({
+    transcript: normalized,
+    nowEpochMs: input.nowEpochMs,
+  });
   const title = extractAction(normalized);
 
   return {
@@ -271,7 +300,8 @@ const parseClarificationFields = (value: unknown): ClarificationField[] => {
   return Array.from(
     new Set(
       value.filter(
-        (entry): entry is ClarificationField => typeof entry === 'string' && allowed.has(entry as ClarificationField),
+        (entry): entry is ClarificationField =>
+          typeof entry === 'string' && allowed.has(entry as ClarificationField),
       ),
     ),
   );
@@ -288,7 +318,9 @@ const defaultClarificationQuestion = (fields: ClarificationField[]): string => {
   return 'Could you clarify the missing detail?';
 };
 
-const buildFallbackResponse = (input: Readonly<{ transcript: string; nowEpochMs: number }>): VoiceIntentResponseDto => {
+const buildFallbackResponse = (
+  input: Readonly<{ transcript: string; nowEpochMs: number }>,
+): VoiceIntentResponseDto => {
   const deterministic = parseDeterministicDraft(input);
 
   return {
@@ -348,12 +380,14 @@ const normalizeProviderResponse = (
       : Number(rawDraft.reminderAtEpochMs);
 
   const reminderAtEpochMs =
-    providerReminderEpoch && Number.isFinite(providerReminderEpoch) && providerReminderEpoch > input.nowEpochMs
+    providerReminderEpoch &&
+    Number.isFinite(providerReminderEpoch) &&
+    providerReminderEpoch > input.nowEpochMs
       ? providerReminderEpoch
       : deterministic.reminderAtEpochMs;
 
   const providerRepeat = reminderAtEpochMs !== null ? parseRepeatRule(rawDraft.repeat) : null;
-  const repeat = reminderAtEpochMs !== null ? providerRepeat ?? deterministic.repeat : null;
+  const repeat = reminderAtEpochMs !== null ? (providerRepeat ?? deterministic.repeat) : null;
 
   const modelKeepTranscript = rawDraft.keepTranscriptInContent === true;
   const isLowConfidence =
@@ -385,7 +419,7 @@ const normalizeProviderResponse = (
     clarification: {
       required: clarificationRequired,
       question: clarificationRequired
-        ? providerQuestion ?? defaultClarificationQuestion(filteredMissing)
+        ? (providerQuestion ?? defaultClarificationQuestion(filteredMissing))
         : null,
       missingFields: clarificationRequired ? filteredMissing : [],
     },
@@ -505,4 +539,3 @@ export const createAiService = (deps: AiServiceDeps = {}): AiService => {
     },
   };
 };
-

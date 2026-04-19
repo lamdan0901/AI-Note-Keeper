@@ -31,12 +31,12 @@ key-files:
     - apps/backend/src/tests/device-tokens/routes.test.ts
   modified: []
 key-decisions:
-  - "Derived `nextReminderAt` and `nextTrialReminderAt` server-side from billing/trial anchors and reminderDaysBefore."
-  - "Enforced ownership by `user_id` lookup before subscription and device-token mutations."
-  - "Limited device token APIs to android payloads and kept notification_ledger excluded from backend persistence/exposure."
+  - 'Derived `nextReminderAt` and `nextTrialReminderAt` server-side from billing/trial anchors and reminderDaysBefore.'
+  - 'Enforced ownership by `user_id` lookup before subscription and device-token mutations.'
+  - 'Limited device token APIs to android payloads and kept notification_ledger excluded from backend persistence/exposure.'
 patterns-established:
-  - "Subscription and device-token route modules follow the same auth-first validation/error middleware shape as notes parity APIs."
-  - "Parity tests use route-level assertions with deterministic doubles for lifecycle and idempotency coverage."
+  - 'Subscription and device-token route modules follow the same auth-first validation/error middleware shape as notes parity APIs.'
+  - 'Parity tests use route-level assertions with deterministic doubles for lifecycle and idempotency coverage.'
 requirements-completed: [SUBS-01, SUBS-02, DEVC-01, DEVC-02]
 duration: 4 min
 completed: 2026-04-19
@@ -55,6 +55,7 @@ completed: 2026-04-19
 - **Files modified:** 10
 
 ## Accomplishments
+
 - Implemented subscriptions contracts/repository/service/routes with ownership checks and server-derived reminder fields.
 - Implemented Android-only device-token contracts/repository/service/routes with idempotent upsert and safe delete semantics.
 - Added route-level parity tests for subscription derivation/retention and device-token idempotency/platform validation plus notification_ledger exclusion assertions.
@@ -66,6 +67,7 @@ completed: 2026-04-19
 3. **Task 3: Add ownership/idempotency/retention parity assertions** - `b97ac6f` (feat)
 
 ## Files Created/Modified
+
 - `apps/backend/src/subscriptions/contracts.ts` - Subscription DTOs and patch contracts.
 - `apps/backend/src/subscriptions/repositories/subscriptions-repository.ts` - Ownership-scoped SQL repository for subscription CRUD and trash operations.
 - `apps/backend/src/subscriptions/service.ts` - Lifecycle orchestration and reminder/trial reminder derivation with 14-day purge cutoff.
@@ -78,6 +80,7 @@ completed: 2026-04-19
 - `apps/backend/src/tests/device-tokens/routes.test.ts` - Upsert idempotency, missing-delete no-op, platform validation, and notification_ledger exclusion tests.
 
 ## Decisions Made
+
 - Kept reminder field derivation in the service layer so client payloads cannot drift server behavior.
 - Preserved strict user scoping in repository mutation predicates to block cross-account changes.
 - Used route schema validation to hard-reject non-android platform payloads before service execution.
@@ -87,6 +90,7 @@ completed: 2026-04-19
 ### Auto-fixed Issues
 
 **1. [Rule 1 - Bug] Static exclusion test read source path from workspace instead of runtime dist path**
+
 - **Found during:** Task 3 tests
 - **Issue:** Node test runner executes compiled files under `dist`, causing ENOENT for source-relative filesystem checks.
 - **Fix:** Switched test assertions to `import.meta.url` relative dist JS paths for route and repository module scans.
@@ -100,15 +104,19 @@ completed: 2026-04-19
 **Impact on plan:** Localized test-path fix only; no behavior change.
 
 ## Issues Encountered
+
 None.
 
 ## User Setup Required
+
 None.
 
 ## Next Phase Readiness
+
 - Plan 03-03 can reuse auth-first route pattern and parity-style tests for AI endpoints.
 - Plan 03-04 can mount `/api/subscriptions` and `/api/device-tokens` directly into runtime wiring.
 
 ---
-*Phase: 03-notes-and-adjacent-domain-api-parity*
-*Completed: 2026-04-19*
+
+_Phase: 03-notes-and-adjacent-domain-api-parity_
+_Completed: 2026-04-19_

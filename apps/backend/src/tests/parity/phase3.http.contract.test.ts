@@ -62,7 +62,11 @@ const createPhase3Doubles = () => {
 
   const notesService = {
     listNotes: async () => [],
-    sync: async (input: { userId: string; lastSyncAt: number; changes: ReadonlyArray<{ id: string; operation: string; payloadHash: string }> }) => {
+    sync: async (input: {
+      userId: string;
+      lastSyncAt: number;
+      changes: ReadonlyArray<{ id: string; operation: string; payloadHash: string }>;
+    }) => {
       for (const change of input.changes) {
         const key = `${input.userId}:${change.id}:${change.operation}:${change.payloadHash}`;
         if (noteReplayKeys.has(key)) {
@@ -137,7 +141,15 @@ const createPhase3Doubles = () => {
       getSubscriptionMap(input.userId).set(id, created);
       return created;
     },
-    update: async ({ subscriptionId, userId, patch }: { subscriptionId: string; userId: string; patch: Record<string, unknown> }) => {
+    update: async ({
+      subscriptionId,
+      userId,
+      patch,
+    }: {
+      subscriptionId: string;
+      userId: string;
+      patch: Record<string, unknown>;
+    }) => {
       const current = getSubscriptionMap(userId).get(subscriptionId);
       if (!current) {
         throw new AppError({ code: 'not_found', message: 'Subscription not found' });
@@ -156,7 +168,12 @@ const createPhase3Doubles = () => {
   const deviceTokens = new Map<string, { userId: string; token: Record<string, unknown> }>();
 
   const deviceTokensService = {
-    upsert: async (input: { userId: string; deviceId: string; fcmToken: string; platform: 'android' }) => {
+    upsert: async (input: {
+      userId: string;
+      deviceId: string;
+      fcmToken: string;
+      platform: 'android';
+    }) => {
       const existing = deviceTokens.get(input.deviceId);
       if (existing && existing.userId !== input.userId) {
         throw new AppError({
@@ -250,7 +267,10 @@ const startServer = async () => {
     subscriptionsService: doubles.subscriptionsService as unknown as SubscriptionsService,
     deviceTokensService: doubles.deviceTokensService as unknown as DeviceTokensService,
     aiService: doubles.aiService as unknown as AiService,
-    aiRateLimiter: createAiRateLimiter({ parseLimit: 1, clarifyLimit: 10, windowMs: 60_000 }, () => 1_700_000_000_000),
+    aiRateLimiter: createAiRateLimiter(
+      { parseLimit: 1, clarifyLimit: 10, windowMs: 60_000 },
+      () => 1_700_000_000_000,
+    ),
     isDependencyDegraded: () => false,
     readinessProbe: async () => ({
       ok: true,
@@ -447,7 +467,11 @@ test('subscriptions and device-token mutations reject cross-user ownership viola
     );
 
     assert.equal(crossUserPatch.status, 404);
-    const patchPayload = (await crossUserPatch.json()) as { code: string; message: string; status: number };
+    const patchPayload = (await crossUserPatch.json()) as {
+      code: string;
+      message: string;
+      status: number;
+    };
     assert.deepEqual(Object.keys(patchPayload).sort(), ['code', 'message', 'status']);
     assert.equal(patchPayload.code, 'not_found');
     assert.equal(patchPayload.status, 404);
@@ -475,7 +499,11 @@ test('subscriptions and device-token mutations reject cross-user ownership viola
     });
 
     assert.equal(crossUserDelete.status, 403);
-    const devicePayload = (await crossUserDelete.json()) as { code: string; message: string; status: number };
+    const devicePayload = (await crossUserDelete.json()) as {
+      code: string;
+      message: string;
+      status: number;
+    };
     assert.deepEqual(Object.keys(devicePayload).sort(), ['code', 'message', 'status']);
     assert.equal(devicePayload.code, 'forbidden');
     assert.equal(devicePayload.status, 403);
