@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { runExportCommand } from '../migration-tools/commands/export.js';
+import { runMigrationToolCommand } from '../migration-tools/index.js';
 
 const canonicalOrder = [
   'users',
@@ -80,4 +81,23 @@ test('records inside each entity are sorted deterministically by stable keys', a
   const userIds = users.map((record) => String(record.id ?? ''));
 
   assert.deepEqual(userIds, [...userIds].sort());
+});
+
+test('migration-tools command parser forwards output path and batch size for export', async () => {
+  const commandResult = await runMigrationToolCommand([
+    'node',
+    'migration-tools',
+    'export',
+    '--dry-run',
+    '--output',
+    'tmp/export.json',
+    '--batch-size',
+    '50',
+  ]);
+
+  assert.equal(commandResult.command, 'export');
+
+  const data = commandResult.dryRun.data as Record<string, unknown>;
+  assert.equal(data.outputPath, 'tmp/export.json');
+  assert.equal(data.batchSize, 50);
 });

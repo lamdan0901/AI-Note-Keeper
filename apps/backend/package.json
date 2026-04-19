@@ -14,7 +14,8 @@
     "start:api": "node dist/index.js",
     "start:worker": "node dist/worker/index.js",
     "test": "npm run build && node --test \"dist/tests/**/*.test.js\"",
-    "migrate": "npm run build && node dist/migrate.js"
+    "migrate": "npm run build && node dist/migrate.js",
+    "migration-tools": "npm run build && node dist/migration-tools/index.js"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",

@@ -1,3 +1,5 @@
+import { pathToFileURL } from 'node:url';
+
 import type {
   ExportOptions,
   ImportOptions,
@@ -9,13 +11,17 @@ import { runExportCommand } from './commands/export.js';
 import { runImportCommand } from './commands/import.js';
 import { runReconcileCommand } from './commands/reconcile.js';
 
-const toNumber = (value: string | undefined, fallback: number): number => {
+const toPositiveInt = (value: string | undefined, fallback: number): number => {
   if (!value) {
     return fallback;
   }
 
   const parsed = Number.parseInt(value, 10);
-  return Number.isFinite(parsed) ? parsed : fallback;
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return fallback;
+  }
+
+  return parsed;
 };
 
 const readValue = (args: ReadonlyArray<string>, flag: string): string | undefined => {
@@ -34,9 +40,9 @@ const hasFlag = (args: ReadonlyArray<string>, flag: string): boolean => {
 
 const parseThresholds = (args: ReadonlyArray<string>): ReconcileThresholds => {
   return {
-    maxCountDrift: toNumber(readValue(args, '--max-count-drift'), 0),
-    maxChecksumMismatch: toNumber(readValue(args, '--max-checksum-mismatch'), 0),
-    maxSampleDrift: toNumber(readValue(args, '--max-sample-drift'), 0),
+    maxCountDrift: toPositiveInt(readValue(args, '--max-count-drift'), 0),
+    maxChecksumMismatch: toPositiveInt(readValue(args, '--max-checksum-mismatch'), 0),
+    maxSampleDrift: toPositiveInt(readValue(args, '--max-sample-drift'), 0),
   };
 };
 
@@ -45,7 +51,7 @@ const parseExportOptions = (args: ReadonlyArray<string>): ExportOptions => {
     dryRun: hasFlag(args, '--dry-run'),
     outputPath: readValue(args, '--output') ?? 'migration-export.json',
     checkpointPath: readValue(args, '--checkpoint'),
-    batchSize: toNumber(readValue(args, '--batch-size'), 1000),
+    batchSize: toPositiveInt(readValue(args, '--batch-size'), 1000),
   };
 };
 
@@ -54,7 +60,7 @@ const parseImportOptions = (args: ReadonlyArray<string>): ImportOptions => {
     dryRun: hasFlag(args, '--dry-run'),
     inputPath: readValue(args, '--input') ?? 'migration-export.json',
     checkpointPath: readValue(args, '--checkpoint'),
-    batchSize: toNumber(readValue(args, '--batch-size'), 1000),
+    batchSize: toPositiveInt(readValue(args, '--batch-size'), 1000),
   };
 };
 
@@ -83,3 +89,24 @@ export const runMigrationToolCommand = async (
       throw new Error(`Unsupported migration-tools command: ${command ?? 'undefined'}`);
   }
 };
+
+const isMainModule = (): boolean => {
+  const argvPath = process.argv[1];
+  if (!argvPath) {
+    return false;
+  }
+
+  return import.meta.url === pathToFileURL(argvPath).href;
+};
+
+if (isMainModule()) {
+  runMigrationToolCommand(process.argv)
+    .then((result) => {
+      console.log(`${result.dryRun.summary} :: checksum=${result.dryRun.checksum}`);
+    })
+    .catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`migration-tools failed: ${message}`);
+      process.exitCode = 1;
+    });
+}
