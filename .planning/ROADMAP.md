@@ -177,8 +177,14 @@ Plans:
 
 1. Convex runtime dependencies are removed only after both web and mobile complete the required stability window sign-off.
 2. Core user flows (auth, notes, reminders, subscriptions, and AI capture) remain stable after Convex runtime retirement.
-   **Plans**: TBD
+   **Plans**: 4 plans
 
+Plans:
+
+- [ ] 08-01-PLAN.md - Codify stability-window and sign-off governance contracts before cleanup.
+- [ ] 08-02-PLAN.md - Execute Stage A web Convex runtime cleanup and guard tests.
+- [ ] 08-03-PLAN.md - Execute Stage A mobile Convex runtime cleanup and guard tests.
+- [ ] 08-04-PLAN.md - Enforce Stage B finalization gate and controlled Convex disable flow.
 ## Progress
 
 | Phase                                          | Plans Complete | Status      | Completed  |
@@ -190,4 +196,6 @@ Plans:
 | 5. Worker, Push, Merge, and Throttle Hardening | 4/4            | Complete    | 2026-04-19 |
 | 6. Data Migration Execution and Reconciliation | 3/3            | Complete    | 2026-04-19 |
 | 7. Web and Mobile Cutover to Express APIs      | 5/5            | Complete    | 2026-04-19 |
-| 8. Convex Decommission and Cleanup             | 0/TBD          | Not started | -          |
+| 8. Convex Decommission and Cleanup             | 0/4            | Not started | -          |
+
+
