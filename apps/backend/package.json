@@ -15,7 +15,8 @@
     "start:worker": "node dist/worker/index.js",
     "test": "npm run build && node --test \"dist/tests/**/*.test.js\"",
     "migrate": "npm run build && node dist/migrate.js",
-    "migration-tools": "npm run build && node dist/migration-tools/index.js"
+    "migration-tools": "npm run build && node dist/migration-tools/index.js",
+    "decommission:finalize-guard": "tsx src/decommission/finalizeGuard.ts"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",
