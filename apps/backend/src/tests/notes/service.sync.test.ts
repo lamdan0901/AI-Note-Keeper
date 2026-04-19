@@ -372,3 +372,118 @@ test('sync preserves omitted canonical fields and clears explicit null canonical
   assert.equal(cleared.startAt, null);
   assert.equal(cleared.baseAtLocal, null);
 });
+
+test('concurrent timestamp winner uses deterministic latest updatedAt result', async () => {
+  const notesRepository = createInMemoryNotesRepository([
+    createNote({
+      id: 'note-concurrent',
+      userId: 'user-1',
+      title: 'Base',
+      updatedAt: 1_700_000_100_000,
+    }),
+  ]);
+  const service = createNotesService({
+    notesRepository,
+    noteChangeEventsRepository: createInMemoryChangeEventsRepository(),
+  });
+
+  await Promise.all([
+    service.sync({
+      userId: 'user-1',
+      lastSyncAt: 0,
+      changes: [
+        {
+          id: 'note-concurrent',
+          userId: 'user-1',
+          operation: 'update',
+          payloadHash: 'concurrent-a',
+          deviceId: 'device-1',
+          title: 'Older concurrent write',
+          updatedAt: 1_700_000_200_000,
+        },
+      ],
+    }),
+    service.sync({
+      userId: 'user-1',
+      lastSyncAt: 0,
+      changes: [
+        {
+          id: 'note-concurrent',
+          userId: 'user-1',
+          operation: 'update',
+          payloadHash: 'concurrent-b',
+          deviceId: 'device-2',
+          title: 'Newer concurrent write',
+          updatedAt: 1_700_000_300_000,
+        },
+      ],
+    }),
+  ]);
+
+  assert.equal(notesRepository.byKey.get('user-1:note-concurrent')?.title, 'Newer concurrent write');
+});
+
+test('concurrent duplicate payloadHash replay applies one effective mutation', async () => {
+  const notesRepository = createInMemoryNotesRepository([]);
+  const service = createNotesService({
+    notesRepository,
+    noteChangeEventsRepository: createInMemoryChangeEventsRepository(),
+  });
+
+  const duplicateChange: NoteSyncChange = {
+    id: 'note-dedupe',
+    userId: 'user-1',
+    operation: 'create',
+    payloadHash: 'same-hash',
+    deviceId: 'device-1',
+    title: 'Created once',
+    active: true,
+    updatedAt: 1_700_000_400_000,
+    createdAt: 1_700_000_400_000,
+  };
+
+  await Promise.all([
+    service.sync({ userId: 'user-1', lastSyncAt: 0, changes: [duplicateChange] }),
+    service.sync({ userId: 'user-1', lastSyncAt: 0, changes: [duplicateChange] }),
+  ]);
+
+  const created = notesRepository.byKey.get('user-1:note-dedupe');
+  assert.ok(created);
+  assert.equal(created.title, 'Created once');
+  assert.equal(created.version, 1);
+  assert.equal(notesRepository.byKey.size, 1);
+});
+
+test('same note id across users cannot mutate another user record', async () => {
+  const notesRepository = createInMemoryNotesRepository([
+    createNote({
+      id: 'shared-note-id',
+      userId: 'user-a',
+      title: 'Owner value',
+      updatedAt: 1_700_000_500_000,
+    }),
+  ]);
+  const service = createNotesService({
+    notesRepository,
+    noteChangeEventsRepository: createInMemoryChangeEventsRepository(),
+  });
+
+  await service.sync({
+    userId: 'user-b',
+    lastSyncAt: 0,
+    changes: [
+      {
+        id: 'shared-note-id',
+        userId: 'user-b',
+        operation: 'update',
+        payloadHash: 'cross-user',
+        deviceId: 'device-9',
+        title: 'Attacker overwrite attempt',
+        updatedAt: 1_700_000_600_000,
+      },
+    ],
+  });
+
+  assert.equal(notesRepository.byKey.get('user-a:shared-note-id')?.title, 'Owner value');
+  assert.equal(notesRepository.byKey.get('user-b:shared-note-id')?.title, 'Attacker overwrite attempt');
+});
