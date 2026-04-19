@@ -21,7 +21,6 @@
     "dev:clients": "concurrently -k -n web,mobile -c green,cyan \"npm run dev:web\" \"npm run dev:mobile\""
   },
   "dependencies": {
-    "convex": "^1.33.1",
     "expo": "~50.0.0",
     "js-sha256": "^0.10.1",
     "openai": "^6.33.0",

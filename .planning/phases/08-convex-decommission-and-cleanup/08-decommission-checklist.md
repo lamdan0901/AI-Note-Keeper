@@ -27,7 +27,9 @@ Updated: [YYYY-MM-DD]
 
 ## Final Disable Metadata
 
+- Stage-A verification marker attached: `[08-02-SUMMARY and 08-03-SUMMARY]`
 - finalize guard command output attached: `[path]`
+- finalize guard pass timestamp: `[ISO-8601]`
 - final-disable-complete: `[true|false]`
 - disable executed by: `[operator identity]`
 - disable executed at: `[ISO-8601]`

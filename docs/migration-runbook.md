@@ -102,3 +102,23 @@ Required evidence bundle:
 2. Restore PostgreSQL to the latest approved rollback checkpoint snapshot.
 3. Re-run reconcile in dry-run mode to confirm drift returns to expected baseline.
 4. Document incident root cause and corrected procedure in the rehearsal checklist before retry.
+
+## Stage B Controlled Shutdown (Convex Disable)
+
+Run Stage B only after Stage-A cleanup summaries are complete for web and mobile.
+
+Required prechecks:
+
+- finalize guard passes (`npm --workspace apps/backend run decommission:finalize-guard`)
+- release owner sign-off is recorded
+- final reconcile report is attached and newer than Stage-A verification checkpoint
+- pre-decommission git tag and rollback archive checklist are attached
+
+Controlled shutdown sequence:
+
+1. Verify Stage-A completion evidence and final reconcile artifact timestamps.
+2. Execute finalize guard with checklist and reconcile inputs.
+3. Follow `.planning/phases/08-convex-decommission-and-cleanup/08-final-disable-runbook.md` steps exactly.
+4. Record final disable timestamp, operator identity, rollback reference, and release owner sign-off.
+
+If any precheck fails, Stage B is blocked and Convex disable must not proceed.

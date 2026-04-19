@@ -90,3 +90,15 @@ Before disablement, attach these required archive artifacts:
 - release owner final sign-off timestamp
 
 Release owner is the only final authority to approve the final disable action.
+
+## Stage B Controlled Shutdown
+
+Disable Convex only after these mandatory controls pass:
+
+- Stage-A web and mobile cleanup summaries are complete.
+- finalize guard command reports pass.
+- rollback archive evidence includes pre-decommission tag, reconcile artifact, checklist artifact, and sign-off records.
+
+Use the operator sequence in `.planning/phases/08-convex-decommission-and-cleanup/08-final-disable-runbook.md`.
+
+If controlled shutdown prechecks fail, do not disable Convex and trigger rollback checkpoint review.

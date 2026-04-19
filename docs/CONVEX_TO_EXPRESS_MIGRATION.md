@@ -18,6 +18,18 @@ No coding is done in this document. This is the source of truth for implementati
 3. Keep parity with existing Convex behavior unless explicitly changed here.
 4. If a new decision conflicts with this plan, update this file first, then implement.
 
+## Stage-B Final Disable Controls
+
+Phase 8 final disable is now guarded by executable checks and operator workflow artifacts:
+
+- Backend guard module: `apps/backend/src/decommission/finalizeGuard.ts`
+- Guard test suite: `apps/backend/src/tests/decommission.finalizeGuard.test.ts`
+- Guard CLI entry: `npm --workspace apps/backend run decommission:finalize-guard`
+- Operator checklist: `.planning/phases/08-convex-decommission-and-cleanup/08-decommission-checklist.md`
+- Final disable runbook: `.planning/phases/08-convex-decommission-and-cleanup/08-final-disable-runbook.md`
+
+Do not execute Convex disable until Stage-A summaries and finalize guard checks are complete.
+
 ---
 
 ## Non-negotiable migration constraints (from draft)
