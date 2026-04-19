@@ -26,6 +26,13 @@ export type OrderedExportDataset = Readonly<{
   entityCounts: Readonly<Record<ExportEntityName, number>>;
 }>;
 
+export type ExportArtifactFile = Readonly<{
+  command: 'export';
+  generatedAt: string;
+  checksum: string;
+  data: Readonly<Record<string, unknown>>;
+}>;
+
 export type DryRunArtifact = Readonly<{
   command: ToolCommand;
   generatedAt: string;
@@ -50,6 +57,21 @@ export type ImportOptions = Readonly<{
   inputPath: string;
   checkpointPath?: string;
   batchSize: number;
+}>;
+
+export type ImportBatchInput = Readonly<{
+  entity: ExportEntityName;
+  records: ReadonlyArray<ExportRecord>;
+  dryRun: boolean;
+}>;
+
+export type ImportBatchResult = Readonly<{
+  processedRecords: number;
+  lastProcessedId?: string;
+}>;
+
+export type ImportTargetAdapter = Readonly<{
+  applyBatch: (input: ImportBatchInput) => Promise<ImportBatchResult>;
 }>;
 
 export type ReconcileThresholds = Readonly<{
