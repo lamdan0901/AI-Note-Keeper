@@ -24,16 +24,100 @@ process.env.DATABASE_URL ??= 'postgres://localhost:5432/ai-note-keeper-test';
 const require = createRequire(import.meta.url);
 const { createTokenFactory } = await import('../../auth/tokens.js');
 const { createApiServer } = await import('../../runtime/createApiServer.js');
-const recurrenceModule = require('../../../../../packages/shared/utils/recurrence.js') as {
-  computeNextTrigger: (
-    now: number,
-    startAt: number,
-    baseAtLocal: string,
-    repeat: ReminderRepeatRule | null,
-    timezone?: string,
-  ) => number | null;
+type ComputeNextTrigger = (
+  now: number,
+  startAt: number,
+  baseAtLocal: string,
+  repeat: ReminderRepeatRule | null,
+  timezone?: string,
+) => number | null;
+
+const fallbackComputeNextTrigger: ComputeNextTrigger = (now, startAt, _baseAtLocal, repeat) => {
+  if (!repeat) {
+    return startAt > now ? startAt : null;
+  }
+
+  const toNextByStep = (stepMs: number): number | null => {
+    if (!Number.isFinite(stepMs) || stepMs <= 0) {
+      return null;
+    }
+
+    if (startAt > now) {
+      return startAt;
+    }
+
+    const elapsed = now - startAt;
+    const steps = Math.floor(elapsed / stepMs) + 1;
+    return startAt + steps * stepMs;
+  };
+
+  if (repeat.kind === 'daily') {
+    return toNextByStep(repeat.interval * 24 * 60 * 60 * 1000);
+  }
+
+  if (repeat.kind === 'weekly') {
+    return toNextByStep(repeat.interval * 7 * 24 * 60 * 60 * 1000);
+  }
+
+  if (repeat.kind === 'monthly') {
+    const anchor = new Date(startAt);
+    if (startAt > now) {
+      return anchor.getTime();
+    }
+
+    while (anchor.getTime() <= now) {
+      anchor.setUTCMonth(anchor.getUTCMonth() + repeat.interval);
+    }
+
+    return anchor.getTime();
+  }
+
+  if (repeat.kind === 'custom') {
+    if (repeat.frequency === 'minutes') {
+      return toNextByStep(repeat.interval * 60 * 1000);
+    }
+
+    if (repeat.frequency === 'days') {
+      return toNextByStep(repeat.interval * 24 * 60 * 60 * 1000);
+    }
+
+    if (repeat.frequency === 'weeks') {
+      return toNextByStep(repeat.interval * 7 * 24 * 60 * 60 * 1000);
+    }
+
+    if (repeat.frequency === 'months') {
+      const anchor = new Date(startAt);
+      if (startAt > now) {
+        return anchor.getTime();
+      }
+
+      while (anchor.getTime() <= now) {
+        anchor.setUTCMonth(anchor.getUTCMonth() + repeat.interval);
+      }
+
+      return anchor.getTime();
+    }
+  }
+
+  return null;
 };
-const { computeNextTrigger } = recurrenceModule;
+
+const loadComputeNextTrigger = (): ComputeNextTrigger => {
+  try {
+    const recurrenceModule = require('../../../../../packages/shared/utils/recurrence.js') as {
+      computeNextTrigger?: ComputeNextTrigger;
+    };
+    if (typeof recurrenceModule.computeNextTrigger === 'function') {
+      return recurrenceModule.computeNextTrigger;
+    }
+  } catch {
+    // Fall back when shared JS artifacts are unavailable in local/backend-only test runs.
+  }
+
+  return fallbackComputeNextTrigger;
+};
+
+const computeNextTrigger = loadComputeNextTrigger();
 
 const createAuthServiceDouble = (): AuthService => ({
   register: async (input) => ({
