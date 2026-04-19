@@ -137,7 +137,13 @@ Plans:
 2. Import tooling supports dry-run and checkpoint resume and remains idempotent on re-execution.
 3. Reconciliation output includes counts, checksums, and sampling drift with explicit pass or fail against sign-off thresholds.
 4. Migration runbooks include rollback checkpoints and staging rehearsal evidence before production cutover.
-   **Plans**: TBD
+   **Plans**: 3 plans
+
+Plans:
+
+- [ ] 06-01-PLAN.md - Implement deterministic Convex export execution with canonical ordering and stable checksums.
+- [ ] 06-02-PLAN.md - Implement idempotent Postgres import with dry-run and checkpoint resume semantics.
+- [ ] 06-03-PLAN.md - Implement thresholded reconciliation outputs and rollback-ready migration runbook evidence.
 
 ### Phase 7: Web and Mobile Cutover to Express APIs
 
@@ -174,6 +180,6 @@ Plans:
 | 3. Notes and Adjacent Domain API Parity        | 4/4            | Complete    | 2026-04-19 |
 | 4. Reminder Domain Parity                      | 3/3            | Complete    | 2026-04-19 |
 | 5. Worker, Push, Merge, and Throttle Hardening | 1/4            | In Progress | -          |
-| 6. Data Migration Execution and Reconciliation | 0/TBD          | Not started | -          |
+| 6. Data Migration Execution and Reconciliation | 0/3            | Not started | -          |
 | 7. Web and Mobile Cutover to Express APIs      | 0/TBD          | Not started | -          |
 | 8. Convex Decommission and Cleanup             | 0/TBD          | Not started | -          |
