@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { access, mkdir, rm, writeFile } from 'node:fs/promises';
 import test from 'node:test';
 
 import { createCheckpoint } from '../migration-tools/checkpoints.js';
@@ -92,6 +92,7 @@ test('dry-run does not write', async () => {
   assert.equal(writeCalls, 0);
   assert.equal(result.command, 'import');
   assert.equal((result.dryRun.data as Record<string, unknown>).processedRecords, 3);
+  await assert.rejects(async () => access(CHECKPOINT_PATH));
 });
 
 test('import is idempotent on re-run', async () => {
@@ -226,3 +227,4 @@ test('import command parser forwards checkpoint and batch size for dry-run', asy
   assert.equal(data.checkpointPath, CHECKPOINT_PATH);
   assert.equal(data.batchSize, 100);
 });
+

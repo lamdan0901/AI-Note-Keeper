@@ -138,7 +138,7 @@ export const runImportCommand = async (
     lastProcessedId = batchLastId ?? lastProcessedId;
     cursor += batch.length;
 
-    if (options.checkpointPath) {
+    if (options.checkpointPath && !options.dryRun) {
       await writeCheckpointToFile(
         options.checkpointPath,
         createCheckpoint('import', `offset:${processedRecords}`, processedRecords, nowIso(), lastProcessedId),
@@ -166,3 +166,4 @@ export const runImportCommand = async (
     dryRun: artifact,
   };
 };
+
