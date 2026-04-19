@@ -300,6 +300,43 @@ test('dispatcher enqueues one job per occurrence with stable event identity and 
   assert.equal(harness.upsertCalls[0].getTime(), now.getTime());
 });
 
+test('first dispatch run without persisted watermark is bounded by MAX_LOOKBACK_MS', async () => {
+  const now = new Date('2026-04-19T10:00:00.000Z');
+  let observedLastCheckedAt: Date | null = new Date('2020-01-01T00:00:00.000Z');
+
+  const scanner: DueReminderScanner = {
+    scanDueReminders: async ({ lastCheckedAt, now: scanNow }) => {
+      observedLastCheckedAt = lastCheckedAt;
+      return {
+        since: new Date(scanNow.getTime() - MAX_LOOKBACK_MS),
+        now: scanNow,
+        reminders: [],
+      };
+    },
+  };
+
+  const cronStateRepository: CronStateRepository = {
+    getLastCheckedAt: async () => null,
+    upsertLastCheckedAt: async () => undefined,
+  };
+
+  const queue: ReminderDispatchQueue = {
+    enqueue: async () => ({ status: 'enqueued' }),
+  };
+
+  const dispatchJob = createReminderDispatchJob({
+    scanner,
+    cronStateRepository,
+    queue,
+    now: () => now,
+  });
+
+  const result = await dispatchJob.run();
+
+  assert.equal(observedLastCheckedAt, null);
+  assert.equal(result.since.getTime(), now.getTime() - MAX_LOOKBACK_MS);
+});
+
 test('enqueue failure keeps watermark unchanged for retry-safe at-least-once delivery', async () => {
   const now = new Date('2026-04-19T10:00:00.000Z');
   const initialWatermark = new Date('2026-04-19T09:58:00.000Z');
@@ -338,9 +375,16 @@ test('enqueue failure keeps watermark unchanged for retry-safe at-least-once del
     now: () => now,
   });
 
-  await assert.rejects(async () => {
-    await dispatchJob.run();
-  });
+  await assert.rejects(
+    async () => {
+      await dispatchJob.run();
+    },
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /queue failed for note-2/);
+      return true;
+    },
+  );
 
   assert.equal(harness.upsertCalls.length, 0);
   assert.deepEqual(harness.events, [
