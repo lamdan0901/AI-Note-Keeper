@@ -67,3 +67,26 @@ Each cohort requires explicit sign-off before progression:
 - quality reviewer sign-off
 
 Record sign-off timestamps and evidence links in the checklist artifact.
+
+## Phase 8 Decommission Stability Hold
+
+Convex retirement is blocked until a 7 calendar day full-cohort hold window is complete.
+
+Daily evidence must be captured for every day in the window:
+
+- automated regression outcome (pass/fail)
+- web and mobile critical-flow smoke outcome (pass/fail)
+- SLO threshold evaluation outcome (pass/fail)
+
+If any day is missing evidence or fails pass criteria, decommission does not proceed.
+
+## Final Decommission Archive Requirements
+
+Before disablement, attach these required archive artifacts:
+
+- pre-decommission git tag reference
+- final reconcile report link
+- completed decommission checklist artifact
+- release owner final sign-off timestamp
+
+Release owner is the only final authority to approve the final disable action.
