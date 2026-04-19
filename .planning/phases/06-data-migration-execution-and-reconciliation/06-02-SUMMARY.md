@@ -43,6 +43,7 @@ Import tooling now supports deterministic dry-run execution, checkpoint resume, 
 1. Task 1 (RED tests): a30c68a
 2. Task 2 (import implementation): 9bc0235
 3. Task 3 (checkpoint/parser tests): 9a9cb23
+4. Post-task fix (dry-run checkpoint side-effect): 1c963cd
 
 ## Verification
 
@@ -53,6 +54,7 @@ Import tooling now supports deterministic dry-run execution, checkpoint resume, 
 
 ## Deviations from Plan
 
-None - plan executed as written.
+- [Rule 2 - Missing Critical] Dry-run import initially persisted checkpoint files; fixed to keep dry-run side-effect free and added regression coverage in commit 1c963cd.
 
 ## Self-Check: PASSED
+
