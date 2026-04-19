@@ -35,10 +35,10 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Subscriptions, AI, and Device Tokens
 
-- [ ] **SUBS-01**: User can create, update, trash, restore, and hard-delete subscriptions with parity behavior
-- [ ] **SUBS-02**: Subscription reminder scheduling fields are preserved and updated consistently
-- [ ] **DEVC-01**: Device push token upsert and delete operations are idempotent with uniqueness guarantees
-- [ ] **DEVC-02**: notification_ledger remains mobile-local SQLite only and is never persisted or exposed through PostgreSQL-backed APIs
+- [x] **SUBS-01**: User can create, update, trash, restore, and hard-delete subscriptions with parity behavior
+- [x] **SUBS-02**: Subscription reminder scheduling fields are preserved and updated consistently
+- [x] **DEVC-01**: Device push token upsert and delete operations are idempotent with uniqueness guarantees
+- [x] **DEVC-02**: notification_ledger remains mobile-local SQLite only and is never persisted or exposed through PostgreSQL-backed APIs
 - [ ] **AICP-01**: Voice parse API returns parity-compatible structure for known inputs
 - [ ] **AICP-02**: Clarify API returns deterministic fallback output when provider is unavailable
 - [ ] **AICP-03**: AI endpoints enforce input validation and endpoint-level rate limiting
@@ -124,10 +124,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | NOTE-02     | Phase 3 | Complete |
 | NOTE-03     | Phase 3 | Complete |
 | NOTE-04     | Phase 3 | Complete |
-| SUBS-01     | Phase 3 | Pending |
-| SUBS-02     | Phase 3 | Pending |
-| DEVC-01     | Phase 3 | Pending |
-| DEVC-02     | Phase 3 | Pending |
+| SUBS-01     | Phase 3 | Complete |
+| SUBS-02     | Phase 3 | Complete |
+| DEVC-01     | Phase 3 | Complete |
+| DEVC-02     | Phase 3 | Complete |
 | AICP-01     | Phase 3 | Pending |
 | AICP-02     | Phase 3 | Pending |
 | AICP-03     | Phase 3 | Pending |
@@ -166,3 +166,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 _Requirements defined: 2026-04-18_
 _Last updated: 2026-04-18 after roadmap creation_
+

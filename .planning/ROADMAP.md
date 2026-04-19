@@ -81,7 +81,7 @@ Plans:
 Plans:
 
 - [x] 03-01-PLAN.md - Build authenticated notes sync parity with LWW, idempotency, and trash lifecycle behaviors.
-- [ ] 03-02-PLAN.md - Implement subscription lifecycle and Android-only device-token idempotency APIs with ownership guards.
+- [x] 03-02-PLAN.md - Implement subscription lifecycle and Android-only device-token idempotency APIs with ownership guards.
 - [ ] 03-03-PLAN.md - Implement AI parse/clarify parity endpoints with deterministic fallback, normalization, and rate limits.
 - [ ] 03-04-PLAN.md - Mount phase-3 domains in API runtime and add HTTP parity/security regression suites.
 
@@ -158,10 +158,11 @@ Plans:
 | ---------------------------------------------- | -------------- | ----------- | ---------- |
 | 1. Foundation and Runtime Baseline             | 3/3            | Complete    | 2026-04-18 |
 | 2. Auth Compatibility and Session Continuity   | 3/3            | Complete    | 2026-04-18 |
-| 3. Notes and Adjacent Domain API Parity        | 0/TBD          | Not started | -          |
+| 3. Notes and Adjacent Domain API Parity        | 2/4            | In progress | -          |
 | 4. Reminder Domain Parity                      | 0/TBD          | Not started | -          |
 | 5. Worker, Push, Merge, and Throttle Hardening | 0/TBD          | Not started | -          |
 | 6. Data Migration Execution and Reconciliation | 0/TBD          | Not started | -          |
 | 7. Web and Mobile Cutover to Express APIs      | 0/TBD          | Not started | -          |
 | 8. Convex Decommission and Cleanup             | 0/TBD          | Not started | -          |
+
 
