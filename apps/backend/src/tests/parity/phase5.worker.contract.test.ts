@@ -14,52 +14,51 @@ process.env.DATABASE_URL ??= 'postgres://localhost:5432/ai-note-keeper-test';
 
 const { createApiServer } = await import('../../runtime/createApiServer.js');
 const { startWorker } = await import('../../worker/index.js');
+const { createPgBossAdapter } = await import('../../worker/boss-adapter.js');
 
-const createAuthServiceDouble = (): AuthService => {
-  return {
-    register: async (input) => ({
-      userId: 'stub-user',
-      username: input.username,
-      tokens: {
-        accessToken: 'stub-access',
-        refreshToken: 'stub-refresh',
-        accessExpiresAt: Date.now() + 60_000,
-        refreshExpiresAt: Date.now() + 120_000,
-      },
-    }),
-    login: async (input) => ({
-      userId: 'stub-user',
-      username: input.username,
-      tokens: {
-        accessToken: 'stub-access',
-        refreshToken: 'stub-refresh',
-        accessExpiresAt: Date.now() + 60_000,
-        refreshExpiresAt: Date.now() + 120_000,
-      },
-    }),
-    refresh: async () => ({
-      userId: 'stub-user',
-      username: 'stub-user',
-      tokens: {
-        accessToken: 'stub-access',
-        refreshToken: 'stub-refresh',
-        accessExpiresAt: Date.now() + 60_000,
-        refreshExpiresAt: Date.now() + 120_000,
-      },
-    }),
-    logout: async () => undefined,
-    upgradeSession: async (input) => ({
-      userId: input.userId,
-      username: 'stub-user',
-      tokens: {
-        accessToken: 'stub-access',
-        refreshToken: 'stub-refresh',
-        accessExpiresAt: Date.now() + 60_000,
-        refreshExpiresAt: Date.now() + 120_000,
-      },
-    }),
-  };
-};
+const createAuthServiceDouble = (): AuthService => ({
+  register: async (input) => ({
+    userId: 'stub-user',
+    username: input.username,
+    tokens: {
+      accessToken: 'stub-access',
+      refreshToken: 'stub-refresh',
+      accessExpiresAt: Date.now() + 60_000,
+      refreshExpiresAt: Date.now() + 120_000,
+    },
+  }),
+  login: async (input) => ({
+    userId: 'stub-user',
+    username: input.username,
+    tokens: {
+      accessToken: 'stub-access',
+      refreshToken: 'stub-refresh',
+      accessExpiresAt: Date.now() + 60_000,
+      refreshExpiresAt: Date.now() + 120_000,
+    },
+  }),
+  refresh: async () => ({
+    userId: 'stub-user',
+    username: 'stub-user',
+    tokens: {
+      accessToken: 'stub-access',
+      refreshToken: 'stub-refresh',
+      accessExpiresAt: Date.now() + 60_000,
+      refreshExpiresAt: Date.now() + 120_000,
+    },
+  }),
+  logout: async () => undefined,
+  upgradeSession: async (input) => ({
+    userId: input.userId,
+    username: 'stub-user',
+    tokens: {
+      accessToken: 'stub-access',
+      refreshToken: 'stub-refresh',
+      accessExpiresAt: Date.now() + 60_000,
+      refreshExpiresAt: Date.now() + 120_000,
+    },
+  }),
+});
 
 const createNoopNotesService = (): NotesService => ({
   listNotes: async () => [],
@@ -72,21 +71,18 @@ const createNoopNotesService = (): NotesService => ({
 } as unknown as NotesService);
 
 const createNoopRemindersService = (): RemindersService => ({
-  listByUser: async () => [],
-  create: async () => {
+  listReminders: async () => [],
+  getReminder: async () => null,
+  createReminder: async () => {
     throw new Error('not implemented in parity test');
   },
-  patch: async () => {
+  updateReminder: async () => {
     throw new Error('not implemented in parity test');
   },
-  remove: async () => false,
-  ack: async () => {
-    throw new Error('not implemented in parity test');
-  },
-  snooze: async () => {
-    throw new Error('not implemented in parity test');
-  },
-} as unknown as RemindersService);
+  deleteReminder: async () => false,
+  ackReminder: async () => null,
+  snoozeReminder: async () => null,
+} satisfies RemindersService);
 
 const createNoopSubscriptionsService = (): SubscriptionsService => ({
   list: async () => [],
@@ -316,4 +312,91 @@ test('phase-5 worker contract: API and worker runtimes remain independently star
   } finally {
     await api.close();
   }
+});
+
+test('phase-5 worker contract: restart and retry simulation preserves idempotent dispatch side effects', async () => {
+  const seenJobKeys = new Set<string>();
+  let enqueued = 0;
+  let duplicates = 0;
+  const now = new Date('2026-04-19T00:00:00.000Z');
+
+  const adapter = createPgBossAdapter({
+    dispatchIntervalMs: 10,
+    scanner: {
+      scanDueReminders: async () => ({
+        since: now,
+        now,
+        reminders: [
+          {
+            noteId: 'note-1',
+            userId: 'user-1',
+            triggerTime: now,
+          },
+        ],
+      }),
+    },
+    cronStateRepository: {
+      getLastCheckedAt: async () => null,
+      upsertLastCheckedAt: async () => undefined,
+    },
+    queue: {
+      enqueue: async (job) => {
+        if (seenJobKeys.has(job.jobKey)) {
+          duplicates += 1;
+          return { status: 'duplicate' } as const;
+        }
+
+        seenJobKeys.add(job.jobKey);
+        enqueued += 1;
+        return { status: 'enqueued' } as const;
+      },
+    },
+    logger: {
+      info: (_message: string) => {
+        // no-op
+      },
+      error: (_message: string) => {
+        // no-op
+      },
+    },
+  });
+
+  const first = await startWorker({
+    adapter,
+    installSignalHandlers: false,
+    logger: {
+      info: (_message: string) => {
+        // no-op
+      },
+      error: (_message: string) => {
+        // no-op
+      },
+    },
+  });
+
+  await new Promise<void>((resolve) => {
+    setTimeout(resolve, 30);
+  });
+  await first.shutdown();
+
+  const second = await startWorker({
+    adapter,
+    installSignalHandlers: false,
+    logger: {
+      info: (_message: string) => {
+        // no-op
+      },
+      error: (_message: string) => {
+        // no-op
+      },
+    },
+  });
+
+  await new Promise<void>((resolve) => {
+    setTimeout(resolve, 30);
+  });
+  await second.shutdown();
+
+  assert.equal(enqueued, 1);
+  assert.ok(duplicates >= 1);
 });
