@@ -7,13 +7,9 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { ConvexHttpClient } from 'convex/browser';
-
-import { api } from '../../../../convex/_generated/api';
 import {
   MergeStrategy,
   MergeSummary,
-  resolveMergeResolution,
 } from '../../../../packages/shared/auth/userDataMerge';
 import {
   clearWebAuthSession,
@@ -24,11 +20,6 @@ import {
   WebAuthSession,
 } from './session';
 import { createWebAuthHttpClient } from './httpClient';
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const authApi = (api.functions as any).auth;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const migrationApi = (api.functions as any).userDataMigration;
 
 type TransitionState = 'idle' | 'preflight' | 'awaiting-strategy' | 'applying' | 'logout-snapshot';
 
@@ -66,21 +57,12 @@ type WebAuthContextValue = {
 
 const WebAuthContext = createContext<WebAuthContextValue | undefined>(undefined);
 
-const getClient = (): ConvexHttpClient => {
-  const url = import.meta.env.VITE_CONVEX_URL as string | undefined;
-  if (!url) {
-    throw new Error('VITE_CONVEX_URL is required');
-  }
-  return new ConvexHttpClient(url);
-};
-
 export const WebAuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [localUserId] = useState(() => getOrCreateWebLocalUserId());
   const [session, setSession] = useState<WebAuthSession | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [transitionState, setTransitionState] = useState<TransitionState>('idle');
   const [pendingMerge, setPendingMerge] = useState<PendingMerge | null>(null);
-  const currentSecretRef = useRef<{ username: string; password: string } | null>(null);
   const currentAccessTokenRef = useRef<string | null>(null);
   const webAuthClient = useMemo(() => createWebAuthHttpClient(), []);
 
@@ -149,23 +131,9 @@ export const WebAuthProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, []);
 
   const applyResolvedMerge = useCallback(
-    async (merge: PendingMerge, strategy: MergeStrategy): Promise<AuthResult> => {
+    async (merge: PendingMerge, _strategy: MergeStrategy): Promise<AuthResult> => {
       try {
         setTransitionState('applying');
-        currentSecretRef.current = {
-          username: merge.username,
-          password: merge.password,
-        };
-
-        if (strategy !== 'cloud') {
-          await getClient().mutation(migrationApi.applyUserDataMerge, {
-            fromUserId: merge.fromUserId,
-            toUserId: merge.targetUserId,
-            username: merge.username,
-            password: merge.password,
-            strategy,
-          });
-        }
 
         finalizeSession({
           userId: merge.targetUserId,
@@ -188,17 +156,12 @@ export const WebAuthProvider: React.FC<{ children: React.ReactNode }> = ({ child
     async ({
       accountUserId,
       accountUsername,
-      username,
-      password,
       accessToken,
     }: {
       accountUserId: string;
       accountUsername: string;
-      username: string;
-      password: string;
       accessToken?: string;
     }): Promise<AuthResult> => {
-      currentSecretRef.current = { username, password };
       currentAccessTokenRef.current = accessToken ?? null;
 
       if (localUserId === accountUserId) {
@@ -210,73 +173,33 @@ export const WebAuthProvider: React.FC<{ children: React.ReactNode }> = ({ child
         return { success: true };
       }
 
-      setTransitionState('preflight');
-      const summary = (await getClient().mutation(migrationApi.preflightUserDataMerge, {
-        fromUserId: localUserId,
-        toUserId: accountUserId,
-        username,
-        password,
-      })) as MergeSummary;
-
-      const resolution = resolveMergeResolution(summary);
-      if (resolution === 'prompt') {
-        setTransitionState('awaiting-strategy');
-        setPendingMerge({
-          summary,
-          fromUserId: localUserId,
-          targetUserId: accountUserId,
-          username,
-          password,
-          accountUsername,
-          accessToken,
-        });
-        return { success: false, requiresMerge: true };
-      }
-
-      return applyResolvedMerge(
-        {
-          summary,
-          fromUserId: localUserId,
-          targetUserId: accountUserId,
-          username,
-          password,
-          accountUsername,
-          accessToken,
-        },
-        resolution,
-      );
+      // Stage-A decommission: web auth now finalizes directly on Express-backed session.
+      finalizeSession({
+        userId: accountUserId,
+        username: accountUsername,
+        accessToken: accessToken ?? undefined,
+      });
+      return { success: true };
     },
-    [applyResolvedMerge, finalizeSession, localUserId],
+    [finalizeSession, localUserId],
   );
 
   const login = useCallback(
     async (username: string, password: string): Promise<AuthResult> => {
-      if (webAuthClient) {
-        try {
-          const result = await webAuthClient.login({ username, password });
-          return await handleAuthSuccess({
-            accountUserId: result.userId,
-            accountUsername: result.username,
-            username,
-            password,
-            accessToken: result.accessToken,
-          });
-        } catch (error) {
-          setTransitionState('idle');
-          return {
-            success: false,
-            error: error instanceof Error ? error.message : 'Login failed',
-          };
-        }
+      if (!webAuthClient) {
+        setTransitionState('idle');
+        return {
+          success: false,
+          error: 'VITE_AUTH_API_BASE_URL is required for web auth API client',
+        };
       }
 
       try {
-        const result = await getClient().mutation(authApi.login, { username, password });
+        const result = await webAuthClient.login({ username, password });
         return await handleAuthSuccess({
           accountUserId: result.userId,
           accountUsername: result.username,
-          username,
-          password,
+          accessToken: result.accessToken,
         });
       } catch (error) {
         setTransitionState('idle');
@@ -331,32 +254,20 @@ export const WebAuthProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const register = useCallback(
     async (username: string, password: string): Promise<AuthResult> => {
-      if (webAuthClient) {
-        try {
-          const result = await webAuthClient.register({ username, password });
-          return await handleAuthSuccess({
-            accountUserId: result.userId,
-            accountUsername: result.username,
-            username,
-            password,
-            accessToken: result.accessToken,
-          });
-        } catch (error) {
-          setTransitionState('idle');
-          return {
-            success: false,
-            error: error instanceof Error ? error.message : 'Registration failed',
-          };
-        }
+      if (!webAuthClient) {
+        setTransitionState('idle');
+        return {
+          success: false,
+          error: 'VITE_AUTH_API_BASE_URL is required for web auth API client',
+        };
       }
 
       try {
-        const result = await getClient().mutation(authApi.register, { username, password });
+        const result = await webAuthClient.register({ username, password });
         return await handleAuthSuccess({
           accountUserId: result.userId,
           accountUsername: result.username,
-          username,
-          password,
+          accessToken: result.accessToken,
         });
       } catch (error) {
         setTransitionState('idle');
@@ -386,8 +297,6 @@ export const WebAuthProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const logout = useCallback(async () => {
     setTransitionState('logout-snapshot');
-    const currentSession = session;
-    const currentSecret = currentSecretRef.current;
 
     if (webAuthClient) {
       try {
@@ -397,22 +306,12 @@ export const WebAuthProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
     }
 
-    if (currentSession && currentSecret?.password) {
-      await getClient().mutation(migrationApi.applyUserDataMerge, {
-        fromUserId: currentSession.userId,
-        toUserId: localUserId,
-        username: currentSecret.username,
-        password: currentSecret.password,
-        strategy: 'local',
-      });
-    }
-
     clearWebAuthSession();
     currentAccessTokenRef.current = null;
     setSession(null);
     setPendingMerge(null);
     setTransitionState('idle');
-  }, [localUserId, session, webAuthClient]);
+  }, [webAuthClient]);
 
   const value = useMemo<WebAuthContextValue>(
     () => ({
