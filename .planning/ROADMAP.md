@@ -14,9 +14,9 @@ This roadmap delivers a parity-first migration from Convex to Express plus Postg
 - [x] **Phase 1: Foundation and Runtime Baseline** - Stand up fail-fast backend foundation, migration system, health probes, validation, error contracts, and worker split.
 - [x] **Phase 2: Auth Compatibility and Session Continuity** - Deliver secure JWT auth while preserving legacy password and session upgrade paths.
 - [x] **Phase 3: Notes and Adjacent Domain API Parity** - Reach parity for notes sync, subscriptions, device tokens, and AI endpoints.
-- [ ] **Phase 4: Reminder Domain Parity** - Port reminder lifecycle semantics with recurrence and dedupe parity.
-- [ ] **Phase 5: Worker, Push, Merge, and Throttle Hardening** - Replace scheduler behavior with durable workers and preserve merge and anti-abuse correctness.
-- [ ] **Phase 6: Data Migration Execution and Reconciliation** - Execute deterministic export/import/reconcile tooling with rollback-ready runbook gates.
+- [x] **Phase 4: Reminder Domain Parity** - Port reminder lifecycle semantics with recurrence and dedupe parity.
+- [x] **Phase 5: Worker, Push, Merge, and Throttle Hardening** - Replace scheduler behavior with durable workers and preserve merge and anti-abuse correctness.
+- [x] **Phase 6: Data Migration Execution and Reconciliation** - Execute deterministic export/import/reconcile tooling with rollback-ready runbook gates.
 - [ ] **Phase 7: Web and Mobile Cutover to Express APIs** - Move both clients to Express with polling and offline/session compatibility gates.
 - [ ] **Phase 8: Convex Decommission and Cleanup** - Remove Convex runtime dependencies only after sustained stability sign-off.
 
@@ -179,7 +179,8 @@ Plans:
 | 2. Auth Compatibility and Session Continuity   | 3/3            | Complete    | 2026-04-18 |
 | 3. Notes and Adjacent Domain API Parity        | 4/4            | Complete    | 2026-04-19 |
 | 4. Reminder Domain Parity                      | 3/3            | Complete    | 2026-04-19 |
-| 5. Worker, Push, Merge, and Throttle Hardening | 1/4            | In Progress | -          |
-| 6. Data Migration Execution and Reconciliation | 0/3            | Not started | -          |
+| 5. Worker, Push, Merge, and Throttle Hardening | 4/4            | Complete    | 2026-04-19 |
+| 6. Data Migration Execution and Reconciliation | 3/3            | Complete    | 2026-04-19 |
 | 7. Web and Mobile Cutover to Express APIs      | 0/TBD          | Not started | -          |
 | 8. Convex Decommission and Cleanup             | 0/TBD          | Not started | -          |
+

@@ -68,10 +68,10 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Data Migration Execution
 
-- [ ] **MIGR-01**: Export tooling produces deterministic Convex dataset ordering for repeatable imports
-- [ ] **MIGR-02**: Import tooling is idempotent and supports dry-run and checkpoint resume
-- [ ] **MIGR-03**: Reconciliation reports counts, checksums, and sampling drift with explicit sign-off thresholds
-- [ ] **MIGR-04**: Migration runbook includes rollback checkpoints and staging rehearsal evidence
+- [x] **MIGR-01**: Export tooling produces deterministic Convex dataset ordering for repeatable imports
+- [x] **MIGR-02**: Import tooling is idempotent and supports dry-run and checkpoint resume
+- [x] **MIGR-03**: Reconciliation reports counts, checksums, and sampling drift with explicit sign-off thresholds
+- [x] **MIGR-04**: Migration runbook includes rollback checkpoints and staging rehearsal evidence
 
 ### Client Cutover and Decommission
 
@@ -145,10 +145,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | MERG-02     | Phase 5 | Complete |
 | MERG-03     | Phase 5 | Complete |
 | THRT-01     | Phase 5 | Complete |
-| MIGR-01     | Phase 6 | Pending |
-| MIGR-02     | Phase 6 | Pending |
-| MIGR-03     | Phase 6 | Pending |
-| MIGR-04     | Phase 6 | Pending |
+| MIGR-01     | Phase 6 | Complete |
+| MIGR-02     | Phase 6 | Complete |
+| MIGR-03     | Phase 6 | Complete |
+| MIGR-04     | Phase 6 | Complete |
 | WEB-01      | Phase 7 | Pending |
 | WEB-02      | Phase 7 | Pending |
 | MOBL-01     | Phase 7 | Pending |
@@ -166,5 +166,6 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 _Requirements defined: 2026-04-18_
 _Last updated: 2026-04-18 after roadmap creation_
+
 
 
