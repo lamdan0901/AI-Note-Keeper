@@ -10,6 +10,8 @@ import { createDeviceTokensRoutes } from '../device-tokens/routes.js';
 import type { DeviceTokensService } from '../device-tokens/service.js';
 import { createDependencyGate, createHealthStatus } from '../health.js';
 import { type ReadinessStatus } from '../health/readiness.js';
+import { createMergeRoutes } from '../merge/routes.js';
+import type { MergeService } from '../merge/service.js';
 import { errorMiddleware, notFoundMiddleware } from '../middleware/error-middleware.js';
 import { withErrorBoundary } from '../middleware/validate.js';
 import { createNotesRoutes } from '../notes/routes.js';
@@ -27,6 +29,7 @@ export type ApiServerFactoryOptions = Readonly<{
   remindersService?: RemindersService;
   subscriptionsService?: SubscriptionsService;
   deviceTokensService?: DeviceTokensService;
+  mergeService?: MergeService;
   aiService?: AiService;
   aiRateLimiter?: AiRateLimiter;
 }>;
@@ -119,6 +122,7 @@ export const createApiServer = (options: ApiServerFactoryOptions = {}): express.
   app.use('/api/reminders', createRemindersRoutes(options.remindersService));
   app.use('/api/subscriptions', createSubscriptionsRoutes(options.subscriptionsService));
   app.use('/api/device-tokens', createDeviceTokensRoutes(options.deviceTokensService));
+  app.use('/api/merge', createMergeRoutes(options.mergeService));
   app.use('/api/ai', createAiRoutes(options.aiService, options.aiRateLimiter));
 
   app.get('/api/sample', (_request, response) => {

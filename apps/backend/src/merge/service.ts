@@ -20,14 +20,64 @@ import {
 } from './repositories/merge-repository.js';
 
 const require = createRequire(import.meta.url);
-const { resolveMergeResolution } = require('../../../../packages/shared/auth/userDataMerge.js') as {
-  resolveMergeResolution: (summary: MergeSummary) => MergeResolution;
+
+const loadSharedResolveMergeResolution = (): ((summary: MergeSummary) => MergeResolution) | null => {
+  try {
+    const shared = require('../../../../packages/shared/auth/userDataMerge.js') as {
+      resolveMergeResolution?: (summary: MergeSummary) => MergeResolution;
+    };
+
+    return shared.resolveMergeResolution ?? null;
+  } catch {
+    return null;
+  }
 };
-const { WELCOME_NOTE_CONTENT, WELCOME_NOTE_TITLE } = require(
-  '../../../../packages/shared/constants/welcomeNote.js',
-) as {
-  WELCOME_NOTE_CONTENT: string;
+
+const loadSharedWelcomeConstants = (): Readonly<{
   WELCOME_NOTE_TITLE: string;
+  WELCOME_NOTE_CONTENT: string;
+}> | null => {
+  try {
+    const shared = require('../../../../packages/shared/constants/welcomeNote.js') as {
+      WELCOME_NOTE_TITLE?: string;
+      WELCOME_NOTE_CONTENT?: string;
+    };
+
+    if (!shared.WELCOME_NOTE_TITLE || !shared.WELCOME_NOTE_CONTENT) {
+      return null;
+    }
+
+    return {
+      WELCOME_NOTE_TITLE: shared.WELCOME_NOTE_TITLE,
+      WELCOME_NOTE_CONTENT: shared.WELCOME_NOTE_CONTENT,
+    };
+  } catch {
+    return null;
+  }
+};
+
+const sharedResolveMergeResolution = loadSharedResolveMergeResolution();
+const sharedWelcomeConstants = loadSharedWelcomeConstants();
+
+const WELCOME_NOTE_TITLE = sharedWelcomeConstants?.WELCOME_NOTE_TITLE ?? 'Welcome to AI Note Keeper';
+const WELCOME_NOTE_CONTENT =
+  sharedWelcomeConstants?.WELCOME_NOTE_CONTENT ??
+  'This is your first note. Edit or delete it anytime.';
+
+const resolveMergeResolution = (summary: MergeSummary): MergeResolution => {
+  if (sharedResolveMergeResolution) {
+    return sharedResolveMergeResolution(summary);
+  }
+
+  if (summary.sourceEmpty || summary.sourceSampleOnly) {
+    return 'cloud';
+  }
+
+  if (summary.targetEmpty) {
+    return 'local';
+  }
+
+  return 'prompt';
 };
 
 const THROTTLE_THRESHOLD = 3;
