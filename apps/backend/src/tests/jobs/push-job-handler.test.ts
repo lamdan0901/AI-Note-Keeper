@@ -105,6 +105,13 @@ test('429 and 5xx transient push failures schedule per-token retries at 30s then
       };
     }
 
+    if (request.token.deviceId === 'device-429' && request.attempt === 2) {
+      return {
+        classification: 'transient_failure',
+        statusCode: 503,
+      };
+    }
+
     return {
       classification: 'delivered',
     };
@@ -139,6 +146,19 @@ test('429 and 5xx transient push failures schedule per-token retries at 30s then
   assert.equal(harness.scheduledRetries.length, 3);
   assert.equal(harness.scheduledRetries[2].delayMs, 60_000);
   assert.equal(harness.scheduledRetries[2].job.attempt, 2);
+
+  const exhaustedResult = await harness.handler.handle({
+    userId: harness.scheduledRetries[2].job.userId,
+    reminderId: harness.scheduledRetries[2].job.reminderId,
+    changeEventId: harness.scheduledRetries[2].job.changeEventId,
+    isTrigger: harness.scheduledRetries[2].job.isTrigger,
+    attempt: harness.scheduledRetries[2].job.attempt,
+    tokens: [harness.scheduledRetries[2].job.token],
+  });
+
+  assert.equal(exhaustedResult.retriesScheduled, 0);
+  assert.equal(exhaustedResult.terminalFailures, 1);
+  assert.equal(harness.scheduledRetries.length, 3);
 });
 
 test('UNREGISTERED responses delete token immediately and do not schedule retries', async () => {
