@@ -21,7 +21,9 @@ import {
 
 const require = createRequire(import.meta.url);
 
-const loadSharedResolveMergeResolution = (): ((summary: MergeSummary) => MergeResolution) | null => {
+const loadSharedResolveMergeResolution = ():
+  | ((summary: MergeSummary) => MergeResolution)
+  | null => {
   try {
     const shared = require('../../../../packages/shared/auth/userDataMerge.js') as {
       resolveMergeResolution?: (summary: MergeSummary) => MergeResolution;
@@ -59,7 +61,8 @@ const loadSharedWelcomeConstants = (): Readonly<{
 const sharedResolveMergeResolution = loadSharedResolveMergeResolution();
 const sharedWelcomeConstants = loadSharedWelcomeConstants();
 
-const WELCOME_NOTE_TITLE = sharedWelcomeConstants?.WELCOME_NOTE_TITLE ?? 'Welcome to AI Note Keeper';
+const WELCOME_NOTE_TITLE =
+  sharedWelcomeConstants?.WELCOME_NOTE_TITLE ?? 'Welcome to AI Note Keeper';
 const WELCOME_NOTE_CONTENT =
   sharedWelcomeConstants?.WELCOME_NOTE_CONTENT ??
   'This is your first note. Edit or delete it anytime.';
@@ -172,7 +175,11 @@ const isSnapshotEmpty = (snapshot: MergeSnapshot): boolean => {
 };
 
 const isSampleOnlySnapshot = (snapshot: MergeSnapshot): boolean => {
-  if (snapshot.subscriptions.length > 0 || snapshot.tokens.length > 0 || snapshot.events.length > 0) {
+  if (
+    snapshot.subscriptions.length > 0 ||
+    snapshot.tokens.length > 0 ||
+    snapshot.events.length > 0
+  ) {
     return false;
   }
 
@@ -184,7 +191,10 @@ const isSampleOnlySnapshot = (snapshot: MergeSnapshot): boolean => {
   return isSampleWelcomeNote(activeNotes[0]);
 };
 
-const getConflictingNoteIds = (source: MergeSnapshot, target: MergeSnapshot): ReadonlySet<string> => {
+const getConflictingNoteIds = (
+  source: MergeSnapshot,
+  target: MergeSnapshot,
+): ReadonlySet<string> => {
   const targetById = new Map(target.notes.map((note) => [note.id, note]));
   const conflicts = new Set<string>();
 
@@ -246,6 +256,15 @@ const throwAuthError = (): never => {
     code: 'auth',
     message: 'Invalid merge credentials',
   });
+};
+
+const assertDistinctMergeUsers = (fromUserId: string, toUserId: string): void => {
+  if (fromUserId === toUserId) {
+    throw new AppError({
+      code: 'validation',
+      message: 'Source and target users must be different for merge.',
+    });
+  }
 };
 
 const authorizeTargetAccount = async (
@@ -335,6 +354,8 @@ export const createMergeService = (deps: MergeServiceDeps = {}): MergeService =>
 
   return {
     preflight: async (input) => {
+      assertDistinctMergeUsers(input.fromUserId, input.toUserId);
+
       return await repository.withTransaction(async (transaction) => {
         await authorizeTargetAccount(transaction, input, now(), verifyPasswordFn);
 
@@ -348,6 +369,8 @@ export const createMergeService = (deps: MergeServiceDeps = {}): MergeService =>
     },
 
     apply: async (input) => {
+      assertDistinctMergeUsers(input.fromUserId, input.toUserId);
+
       return await repository.withTransaction(async (transaction) => {
         await authorizeTargetAccount(transaction, input, now(), verifyPasswordFn);
 

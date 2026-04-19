@@ -103,7 +103,9 @@ const createSubscription = (
   };
 };
 
-const createToken = (input: Readonly<{ id: string; userId: string; deviceId: string }>): MergeTokenRecord => {
+const createToken = (
+  input: Readonly<{ id: string; userId: string; deviceId: string }>,
+): MergeTokenRecord => {
   const now = new Date(1_700_000_000_000);
   return {
     id: input.id,
@@ -116,7 +118,9 @@ const createToken = (input: Readonly<{ id: string; userId: string; deviceId: str
   };
 };
 
-const createEvent = (input: Readonly<{ id: string; noteId: string; userId: string }>): MergeEventRecord => {
+const createEvent = (
+  input: Readonly<{ id: string; noteId: string; userId: string }>,
+): MergeEventRecord => {
   return {
     id: input.id,
     noteId: input.noteId,
@@ -153,7 +157,10 @@ const createRepositoryDouble = (
   const users = new Map(input.users.map((user) => [user.id, user]));
   const attempts = new Map<string, AttemptState>();
   const snapshots = new Map<string, MergeSnapshot>(
-    Object.entries(input.snapshots ?? {}).map(([userId, snapshot]) => [userId, cloneSnapshot(snapshot)]),
+    Object.entries(input.snapshots ?? {}).map(([userId, snapshot]) => [
+      userId,
+      cloneSnapshot(snapshot),
+    ]),
   );
 
   const stats: RepoStats = {
@@ -274,9 +281,18 @@ const createRepositoryDouble = (
 
         snapshots.set(targetUserId, {
           notes: mergedNotes,
-          subscriptions: [...target.subscriptions, ...source.subscriptions.map((item) => ({ ...item, userId: targetUserId }))],
-          tokens: [...target.tokens, ...source.tokens.map((item) => ({ ...item, userId: targetUserId }))],
-          events: [...target.events, ...source.events.map((item) => ({ ...item, userId: targetUserId }))],
+          subscriptions: [
+            ...target.subscriptions,
+            ...source.subscriptions.map((item) => ({ ...item, userId: targetUserId })),
+          ],
+          tokens: [
+            ...target.tokens,
+            ...source.tokens.map((item) => ({ ...item, userId: targetUserId })),
+          ],
+          events: [
+            ...target.events,
+            ...source.events.map((item) => ({ ...item, userId: targetUserId })),
+          ],
         });
       },
     };
@@ -371,6 +387,38 @@ test('preflight returns parity summary fields and count metadata', async () => {
   });
 });
 
+test('preflight rejects same-account merge before transaction state changes', async () => {
+  const { repository, stats } = createRepositoryDouble({
+    users: [validUser],
+    snapshots: {
+      'target-user': emptySnapshot(),
+    },
+  });
+
+  const service = createMergeService({
+    repository,
+    verifyPasswordFn: validPasswordCheck,
+  });
+
+  await assert.rejects(
+    service.preflight({
+      fromUserId: 'target-user',
+      toUserId: 'target-user',
+      username: 'alice',
+      password: 'correct-password',
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'validation');
+      return true;
+    },
+  );
+
+  assert.equal(stats.beginCount, 0);
+  assert.equal(stats.commitCount, 0);
+  assert.equal(stats.rollbackCount, 0);
+});
+
 test('apply executes inside one explicit transaction and commits atomically per request', async () => {
   const { repository, stats } = createRepositoryDouble({
     users: [validUser],
@@ -410,18 +458,72 @@ test('apply executes inside one explicit transaction and commits atomically per 
   assert.equal(stats.replaceCalls, 1);
 });
 
+test('apply rejects same-account merge before mutation and transaction start', async () => {
+  const { repository, stats } = createRepositoryDouble({
+    users: [validUser],
+    snapshots: {
+      'target-user': {
+        notes: [createNote({ id: 'n-1', userId: 'target-user', title: 'existing' })],
+        subscriptions: [createSubscription({ id: 's-1', userId: 'target-user' })],
+        tokens: [createToken({ id: 't-1', userId: 'target-user', deviceId: 'device-1' })],
+        events: [createEvent({ id: 'e-1', noteId: 'n-1', userId: 'target-user' })],
+      },
+    },
+  });
+
+  const service = createMergeService({
+    repository,
+    verifyPasswordFn: validPasswordCheck,
+  });
+
+  await assert.rejects(
+    service.apply({
+      fromUserId: 'target-user',
+      toUserId: 'target-user',
+      username: 'alice',
+      password: 'correct-password',
+      strategy: 'local',
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'validation');
+      return true;
+    },
+  );
+
+  assert.equal(stats.beginCount, 0);
+  assert.equal(stats.commitCount, 0);
+  assert.equal(stats.rollbackCount, 0);
+  assert.equal(stats.replaceCalls, 0);
+  assert.equal(stats.mergeCalls, 0);
+});
+
 test('strategy both uses canonical shared resolution semantics', async () => {
   const conflictRepo = createRepositoryDouble({
     users: [validUser],
     snapshots: {
       'source-user': {
-        notes: [createNote({ id: 'same-note', userId: 'source-user', title: 'Local draft', content: 'local' })],
+        notes: [
+          createNote({
+            id: 'same-note',
+            userId: 'source-user',
+            title: 'Local draft',
+            content: 'local',
+          }),
+        ],
         subscriptions: [],
         tokens: [],
         events: [],
       },
       'target-user': {
-        notes: [createNote({ id: 'same-note', userId: 'target-user', title: 'Cloud draft', content: 'cloud' })],
+        notes: [
+          createNote({
+            id: 'same-note',
+            userId: 'target-user',
+            title: 'Cloud draft',
+            content: 'cloud',
+          }),
+        ],
         subscriptions: [],
         tokens: [],
         events: [],
