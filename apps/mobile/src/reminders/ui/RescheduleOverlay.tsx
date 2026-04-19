@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, BackHandler, Text, StyleSheet } from 'react-native';
-import { ConvexProvider, ConvexReactClient } from 'convex/react';
 import { RescheduleModal } from './SnoozeModal';
 import { getDb, runMigrations } from '../../db/bootstrap';
 import { type Theme, useTheme } from '../../theme';
@@ -8,9 +7,6 @@ import { saveNoteOffline } from '../../notes/editor';
 import { getNoteById, Note } from '../../db/notesRepo';
 import { syncNotes } from '../../sync/noteSync';
 import { resolveCurrentUserId } from '../../auth/session';
-
-const convexUrl = process.env.EXPO_PUBLIC_CONVEX_URL;
-const convexClient = convexUrl ? new ConvexReactClient(convexUrl) : undefined;
 
 export const RescheduleOverlay = (props: { noteId?: string }) => {
   const { theme } = useTheme();
@@ -121,40 +117,30 @@ export const RescheduleOverlay = (props: { noteId?: string }) => {
     return null;
   }
 
-  if (!convexClient) {
-    return (
-      <View style={styles.centered}>
-        <Text style={styles.messageText}>Missing Configuration</Text>
-      </View>
-    );
-  }
-
   if (!ready) {
     return <View style={styles.transparentFill} />;
   }
 
   return (
-    <ConvexProvider client={convexClient}>
-      <View style={styles.transparentFill}>
-        <RescheduleModal
-          visible={modalVisible}
-          noteId={props.noteId}
-          onClose={handleClose}
-          transparentOverlay
-          onSaveStart={handleSaveStart}
-          onRescheduled={handleSuccess}
-          onError={handleError}
-        />
+    <View style={styles.transparentFill}>
+      <RescheduleModal
+        visible={modalVisible}
+        noteId={props.noteId}
+        onClose={handleClose}
+        transparentOverlay
+        onSaveStart={handleSaveStart}
+        onRescheduled={handleSuccess}
+        onError={handleError}
+      />
 
-        {toast.show && (
-          <View style={styles.toastContainer} pointerEvents="none">
-            <View style={[styles.toast, toast.isError && styles.toastError]}>
-              <Text style={styles.toastText}>{toast.message}</Text>
-            </View>
+      {toast.show && (
+        <View style={styles.toastContainer} pointerEvents="none">
+          <View style={[styles.toast, toast.isError && styles.toastError]}>
+            <Text style={styles.toastText}>{toast.message}</Text>
           </View>
-        )}
-      </View>
-    </ConvexProvider>
+        </View>
+      )}
+    </View>
   );
 };
 

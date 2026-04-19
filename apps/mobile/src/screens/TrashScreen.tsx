@@ -12,7 +12,6 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { ConvexHttpClient } from 'convex/browser';
 import { getDb } from '../db/bootstrap';
 import {
   listDeletedNotes,
@@ -24,7 +23,6 @@ import { restoreNoteOffline } from '../notes/editor';
 import { syncNotes } from '../sync/noteSync';
 import { type Theme, useTheme } from '../theme';
 import { SyncProvider } from '../sync/syncManager';
-import { api } from '../../../../convex/_generated/api';
 import { NoteCard } from '../components/NoteCard';
 import { useDebouncedValue } from '../../../../packages/shared/hooks/useDebouncedValue';
 import type { Subscription } from '../../../../packages/shared/types/subscription';
@@ -46,12 +44,6 @@ function getDaysRemaining(deletedAt: number | undefined): number {
   if (!deletedAt) return 14;
   const elapsed = Date.now() - deletedAt;
   return Math.max(0, Math.ceil((FOURTEEN_DAYS_MS - elapsed) / (24 * 60 * 60 * 1000)));
-}
-
-function getConvexClient(): ConvexHttpClient | null {
-  const url = process.env.EXPO_PUBLIC_CONVEX_URL;
-  if (!url) return null;
-  return new ConvexHttpClient(url);
 }
 
 type TrashScreenProps = {
@@ -385,13 +377,6 @@ const TrashScreenContent: React.FC<TrashScreenProps> = ({
 
       void (async () => {
         try {
-          const client = getConvexClient();
-          if (client) {
-            await client.mutation(api.functions.notes.permanentlyDeleteNote, {
-              userId: userId ?? '',
-              noteId: note.id,
-            });
-          }
           const db = await getDb();
           await hardDeleteNote(db, note.id);
         } catch (e) {
@@ -419,10 +404,6 @@ const TrashScreenContent: React.FC<TrashScreenProps> = ({
 
             void (async () => {
               try {
-                const client = getConvexClient();
-                if (client) {
-                  await client.mutation(api.functions.notes.emptyTrash, { userId: userId ?? '' });
-                }
                 const db = await getDb();
                 await hardDeleteAllInactive(db, userId);
               } catch (e) {

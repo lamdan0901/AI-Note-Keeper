@@ -65,18 +65,6 @@ export const syncNotes = async (
   const preStats = await getQueueStats(db);
   log('debug', 'Pre-sync queue stats', preStats);
 
-  const hasConvexUrl = Boolean(process.env.EXPO_PUBLIC_CONVEX_URL);
-  if (!hasConvexUrl) {
-    log('warn', 'Convex URL missing, skipping remote pull/push and running local-only sync');
-    return {
-      success: true,
-      pullCount: 0,
-      pushResult: { total: 0, succeeded: 0, failed: 0 },
-      conflictCount: 0,
-      mergeCount: 0,
-    };
-  }
-
   // -------------------------------------------------------------------------
   // 1. PULL: Fetch latest state from server
   // -------------------------------------------------------------------------

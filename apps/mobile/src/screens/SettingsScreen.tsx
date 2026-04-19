@@ -13,7 +13,6 @@ const themeOptions = [
 type SettingsScreenProps = {
   isAuthenticated: boolean;
   username: string | null;
-  hasConvexClient: boolean;
   onOpenLogin: () => void;
   onOpenRegister: () => void;
   onSignOut: () => Promise<void>;
@@ -22,7 +21,6 @@ type SettingsScreenProps = {
 export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   isAuthenticated,
   username,
-  hasConvexClient,
   onOpenLogin,
   onOpenRegister,
   onSignOut,
@@ -51,37 +49,28 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
       <View style={styles.content}>
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Account</Text>
-          {hasConvexClient ? (
-            <View style={styles.accountCard}>
-              {isAuthenticated ? (
-                <>
-                  <Text style={styles.accountPrimary}>Signed in as {username}</Text>
-                  <Pressable style={styles.signOutButton} onPress={handleSignOut}>
-                    <Text style={styles.signOutButtonText}>Sign Out</Text>
+          <View style={styles.accountCard}>
+            {isAuthenticated ? (
+              <>
+                <Text style={styles.accountPrimary}>Signed in as {username}</Text>
+                <Pressable style={styles.signOutButton} onPress={handleSignOut}>
+                  <Text style={styles.signOutButtonText}>Sign Out</Text>
+                </Pressable>
+              </>
+            ) : (
+              <>
+                <Text style={styles.accountPrimary}>Local account</Text>
+                <View style={styles.accountActions}>
+                  <Pressable style={styles.accountActionButton} onPress={onOpenLogin}>
+                    <Text style={styles.accountActionText}>Sign In</Text>
                   </Pressable>
-                </>
-              ) : (
-                <>
-                  <Text style={styles.accountPrimary}>Local account</Text>
-                  <View style={styles.accountActions}>
-                    <Pressable style={styles.accountActionButton} onPress={onOpenLogin}>
-                      <Text style={styles.accountActionText}>Sign In</Text>
-                    </Pressable>
-                    <Pressable style={styles.accountActionButton} onPress={onOpenRegister}>
-                      <Text style={styles.accountActionText}>Create Account</Text>
-                    </Pressable>
-                  </View>
-                </>
-              )}
-            </View>
-          ) : (
-            <View style={styles.accountCard}>
-              <Text style={styles.accountPrimary}>Local account</Text>
-              <Text style={styles.accountSecondary}>
-                Connect a Convex backend to enable sign in.
-              </Text>
-            </View>
-          )}
+                  <Pressable style={styles.accountActionButton} onPress={onOpenRegister}>
+                    <Text style={styles.accountActionText}>Create Account</Text>
+                  </Pressable>
+                </View>
+              </>
+            )}
+          </View>
         </View>
 
         <View style={styles.section}>

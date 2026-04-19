@@ -1,6 +1,4 @@
 import { AppRegistry } from 'react-native';
-import { ConvexHttpClient } from 'convex/browser';
-import { api } from '../../../../convex/_generated/api';
 import { computeNextTrigger } from '../../../../packages/shared/utils/recurrence';
 import { getDb } from '../db/bootstrap';
 import { getNoteById, upsertNote } from '../db/notesRepo';
@@ -59,12 +57,6 @@ const getRepeatRule = (note: Note): RepeatRule | null => {
   return null;
 };
 
-const getConvexClient = () => {
-  const url = process.env.EXPO_PUBLIC_CONVEX_URL;
-  if (!url) return null;
-  return new ConvexHttpClient(url);
-};
-
 interface DoneTaskData {
   noteId?: string;
   reminderId?: string; // Legacy/Fallback
@@ -115,29 +107,10 @@ const reminderDoneTask = async (data: DoneTaskData) => {
     // Even if nextTrigger is null, this will cancel existing alarms via Ledger
     await rescheduleNoteWithLedger(db, mapNoteToReminder(updatedNote));
 
-    // 4. Sync to Convex
-    const client = getConvexClient();
-    if (client) {
-      try {
-        await client.mutation(api.functions.reminders.ackReminder, {
-          id: noteId, // Cast ID
-          ackType: 'done',
-          optimisticNextTrigger: nextTrigger ?? undefined,
-        });
-        logSyncEvent('info', 'headless_done_sync_success', { noteId });
-      } catch (syncError) {
-        logSyncEvent('warn', 'headless_done_sync_failed', {
-          noteId,
-          error: String(syncError),
-        });
-        // We failed to sync, but local state is updated.
-        // The 'note_outbox' or 'syncNotes' mechanism ideally handles this later.
-        // Since we modified the note locally, we should probably mark it for sync?
-        // Current syncNotes implementation relies on 'note_outbox'.
-        // TODO: We should push to outbox here for reliability if we want robust offline sync.
-        // For now, we rely on 'ackReminder' call. Use 'syncNotes' on next app open to reconcile.
-      }
-    }
+    // 4. Best-effort sync through existing outbox-backed Express transport.
+    const currentUserId = note.userId ?? (await resolveCurrentUserId());
+    await syncNotes(db, currentUserId);
+    logSyncEvent('info', 'headless_done_sync_success', { noteId });
   } catch (e) {
     logSyncEvent('error', 'headless_done_fatal', { error: String(e) });
   }

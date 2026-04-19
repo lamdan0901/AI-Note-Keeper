@@ -22,21 +22,19 @@ const ALL_TABS: Tab[] = [
 type BottomTabBarProps = {
   activeTab: TabKey;
   onTabPress: (tab: TabKey) => void;
-  hasConvexClient: boolean;
   showDueSubscriptionsIndicator?: boolean;
 };
 
 export const BottomTabBar: React.FC<BottomTabBarProps> = ({
   activeTab,
   onTabPress,
-  hasConvexClient,
   showDueSubscriptionsIndicator = false,
 }) => {
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const bumpAnim = useRef(new Animated.Value(0)).current;
 
-  const tabs = hasConvexClient ? ALL_TABS : ALL_TABS.filter((t) => t.key !== 'subscriptions');
+  const tabs = ALL_TABS;
 
   useEffect(() => {
     if (!showDueSubscriptionsIndicator) {

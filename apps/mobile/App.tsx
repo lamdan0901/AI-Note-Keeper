@@ -33,10 +33,6 @@ import { Linking } from 'react-native';
 import { rescheduleAllActiveReminders } from './src/reminders/scheduler';
 import { getDb } from './src/db/bootstrap';
 
-const hasApiBackend = Boolean(
-  process.env.EXPO_PUBLIC_API_BASE_URL || process.env.EXPO_PUBLIC_AUTH_API_URL,
-);
-
 export default function App(): JSX.Element | null {
   const [isReady, setIsReady] = useState(false);
   const [rescheduleNoteId, setRescheduleNoteId] = useState<string | null>(null);
@@ -49,9 +45,7 @@ export default function App(): JSX.Element | null {
         if (!permissions.granted) {
           await Notifications.requestPermissionsAsync();
         }
-        if (hasApiBackend) {
-          await registerDevicePushToken();
-        }
+        await registerDevicePushToken();
 
         const db = await getDb();
         await rescheduleAllActiveReminders(db);
@@ -126,15 +120,13 @@ export default function App(): JSX.Element | null {
     });
 
     // Re-register device token whenever FCM rotates it
-    const unsubscribeTokenRefresh = hasApiBackend
-      ? onTokenRefresh(messaging, async () => {
-          try {
-            await registerDevicePushToken();
-          } catch (e) {
-            console.error('[TokenRefresh] Failed to re-register token:', e);
-          }
-        })
-      : () => {};
+    const unsubscribeTokenRefresh = onTokenRefresh(messaging, async () => {
+      try {
+        await registerDevicePushToken();
+      } catch (e) {
+        console.error('[TokenRefresh] Failed to re-register token:', e);
+      }
+    });
 
     // Handle notification tap/interaction
     const notificationSubscription = Notifications.addNotificationResponseReceivedListener(
@@ -161,7 +153,6 @@ export default function App(): JSX.Element | null {
       onRescheduleHandled={() => setRescheduleNoteId(null)}
       editNoteId={effectiveEditNoteId ?? undefined}
       onEditHandled={() => setEditNoteId(null)}
-      hasConvexClient={hasApiBackend}
     />
   );
 
@@ -177,13 +168,11 @@ const AppContent = ({
   onRescheduleHandled,
   editNoteId,
   onEditHandled,
-  hasConvexClient,
 }: {
   rescheduleNoteId?: string;
   onRescheduleHandled: () => void;
   editNoteId?: string;
   onEditHandled: () => void;
-  hasConvexClient: boolean;
 }) => {
   const {
     userId,
@@ -207,10 +196,10 @@ const AppContent = ({
   const [isSelectionMode, setIsSelectionMode] = useState(false);
 
   useEffect(() => {
-    if (!hasConvexClient || !userId) return;
+    if (!userId) return;
 
     void registerDevicePushToken({ userId });
-  }, [hasConvexClient, userId]);
+  }, [userId]);
 
   useEffect(() => {
     if (Platform.OS === 'android') {
@@ -329,13 +318,11 @@ const AppContent = ({
             editNoteId={editNoteId}
             onEditHandled={onEditHandled}
             onNavigateToTrash={() => setCurrentScreen('trash')}
-            onNavigateToSubscriptions={
-              hasConvexClient ? () => setCurrentScreen('subscriptions') : undefined
-            }
-            subscriptionsEnabled={hasConvexClient}
+            onNavigateToSubscriptions={() => setCurrentScreen('subscriptions')}
+            subscriptionsEnabled
             viewMode={viewMode}
             onViewModeChange={setViewMode}
-            onDueSubscriptionsChange={hasConvexClient ? setHasDueSubscriptions : undefined}
+            onDueSubscriptionsChange={setHasDueSubscriptions}
             onSelectionModeChange={setIsSelectionMode}
           />
         </View>
@@ -349,21 +336,17 @@ const AppContent = ({
             viewMode={viewMode}
             onViewModeChange={setViewMode}
             onNavigateToNotes={() => setCurrentScreen('notes')}
-            onNavigateToSubscriptions={
-              hasConvexClient ? () => setCurrentScreen('subscriptions') : undefined
-            }
-            subscriptionsEnabled={hasConvexClient}
+            onNavigateToSubscriptions={() => setCurrentScreen('subscriptions')}
+            subscriptionsEnabled
           />
         </View>
 
-        {hasConvexClient && (
-          <View
-            style={currentScreen === 'subscriptions' ? styles.screenVisible : styles.screenHidden}
-            pointerEvents={currentScreen === 'subscriptions' ? 'auto' : 'none'}
-          >
-            <SubscriptionsScreen onSelectionModeChange={setIsSelectionMode} />
-          </View>
-        )}
+        <View
+          style={currentScreen === 'subscriptions' ? styles.screenVisible : styles.screenHidden}
+          pointerEvents={currentScreen === 'subscriptions' ? 'auto' : 'none'}
+        >
+          <SubscriptionsScreen onSelectionModeChange={setIsSelectionMode} />
+        </View>
 
         <View
           style={currentScreen === 'settings' ? styles.screenVisible : styles.screenHidden}
@@ -372,7 +355,6 @@ const AppContent = ({
           <SettingsScreen
             isAuthenticated={isAuthenticated}
             username={username}
-            hasConvexClient={hasConvexClient}
             onOpenLogin={() => setAuthScreen('login')}
             onOpenRegister={() => setAuthScreen('register')}
             onSignOut={logout}
@@ -418,7 +400,6 @@ const AppContent = ({
         <BottomTabBar
           activeTab={currentScreen}
           onTabPress={setCurrentScreen}
-          hasConvexClient={hasConvexClient}
           showDueSubscriptionsIndicator={hasDueSubscriptions}
         />
       )}
