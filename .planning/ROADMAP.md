@@ -122,7 +122,7 @@ Plans:
 Plans:
 
 - [x] 05-01-PLAN.md - Implement durable reminder dispatch in dedicated worker with bounded lookback, commit-ordered watermark, and idempotent enqueue identity.
-- [ ] 05-02-PLAN.md - Implement merge preflight/apply parity with explicit transactions, row-level locking, and throttle metadata enforcement.
+- [x] 05-02-PLAN.md - Implement merge preflight/apply parity with explicit transactions, row-level locking, and throttle metadata enforcement.
 - [ ] 05-03-PLAN.md - Implement push per-token retry/backoff parity with unregistered token cleanup and terminal-failure continuation.
 - [ ] 05-04-PLAN.md - Wire phase-5 runtime integration and add parity/security boundary regression suites for worker, push, merge, and throttling.
 

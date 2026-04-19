@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 05-01-PLAN.md
-last_updated: "2026-04-19T04:11:50.462Z"
+stopped_at: Completed 05-02-PLAN.md
+last_updated: "2026-04-19T04:22:47.856Z"
 last_activity: 2026-04-19
 progress:
   total_phases: 8
   completed_phases: 4
   total_plans: 17
-  completed_plans: 14
-  percent: 82
+  completed_plans: 15
+  percent: 88
 ---
 
 # Project State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-18)
 ## Current Position
 
 Phase: 05 (worker-push-merge-and-throttle-hardening) — EXECUTING
-Plan: 2 of 4
+Plan: 4 of 4
 Status: Ready to execute
 Last activity: 2026-04-19
 
@@ -66,6 +66,8 @@ _Updated after each plan completion_
 | Phase 04 P02 | n/a | 3 tasks | 3 files |
 | Phase 04 P03 | n/a | 2 tasks | 2 files |
 | Phase 05 P01 | 6 min | 3 tasks | 6 files |
+| Phase 05 P02 | 10 min | 3 tasks | 7 files |
+| Phase 05 P02 | 10 min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -81,6 +83,12 @@ Recent decisions affecting current work:
 - [Phase 05]: Reminder dispatch uses noteId-triggerTime identity as queue key for idempotent enqueue.
 - [Phase 05]: cron_state watermark advances only after successful enqueue fan-out commit.
 - [Phase 05]: Worker adapter executes reminder dispatch every minute with overlap protection.
+- [Phase 05]: Merge apply runs in one transaction with migration_attempts and target-user row locks.
+- [Phase 05]: both strategy resolution follows canonical resolveMergeResolution semantics before execution.
+- [Phase 05]: Merge routes expose stable rate_limit details only: retryAfterSeconds and resetAt.
+- [Phase 05]: Merge apply runs in one transaction with migration_attempts and target-user row locks.
+- [Phase 05]: both strategy resolution follows canonical resolveMergeResolution semantics before execution.
+- [Phase 05]: Merge routes expose stable rate_limit details only: retryAfterSeconds and resetAt.
 
 ### Pending Todos
 
@@ -92,6 +100,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-19T04:11:50.458Z
-Stopped at: Completed 05-01-PLAN.md
+Last session: 2026-04-19T04:22:47.853Z
+Stopped at: Completed 05-02-PLAN.md
 Resume file: None

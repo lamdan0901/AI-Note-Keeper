@@ -61,10 +61,10 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Merge and Throttle Parity
 
-- [ ] **MERG-01**: Merge preflight reports conflicts, counts, and emptiness checks consistently with legacy behavior
-- [ ] **MERG-02**: Merge apply supports cloud-wins, local-wins, and merge-both strategies in explicit transaction boundaries
-- [ ] **MERG-03**: Merge attempts are lock-safe under concurrency using row-level locking
-- [ ] **THRT-01**: Anti-abuse throttle applies threshold and block-window behavior equivalent to existing system
+- [x] **MERG-01**: Merge preflight reports conflicts, counts, and emptiness checks consistently with legacy behavior
+- [x] **MERG-02**: Merge apply supports cloud-wins, local-wins, and merge-both strategies in explicit transaction boundaries
+- [x] **MERG-03**: Merge attempts are lock-safe under concurrency using row-level locking
+- [x] **THRT-01**: Anti-abuse throttle applies threshold and block-window behavior equivalent to existing system
 
 ### Data Migration Execution
 
@@ -141,10 +141,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | JOBS-03     | Phase 5 | Complete |
 | PUSH-01     | Phase 5 | Pending |
 | PUSH-02     | Phase 5 | Pending |
-| MERG-01     | Phase 5 | Pending |
-| MERG-02     | Phase 5 | Pending |
-| MERG-03     | Phase 5 | Pending |
-| THRT-01     | Phase 5 | Pending |
+| MERG-01     | Phase 5 | Complete |
+| MERG-02     | Phase 5 | Complete |
+| MERG-03     | Phase 5 | Complete |
+| THRT-01     | Phase 5 | Complete |
 | MIGR-01     | Phase 6 | Pending |
 | MIGR-02     | Phase 6 | Pending |
 | MIGR-03     | Phase 6 | Pending |
