@@ -1,54 +1,43 @@
-import { useQuery } from 'convex/react';
-import { api } from '../../../../convex/_generated/api';
+import { useEffect, useState } from 'react';
 import { type Note } from '../db/notesRepo';
-import { coerceRepeatRule } from '../../../../packages/shared/utils/repeatCodec';
+import { fetchNotes } from '../sync/fetchNotes';
 
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mapDocToMobileNote(doc: any): Note {
-  const repeat = coerceRepeatRule({
-    repeat: doc.repeat,
-    repeatRule: doc.repeatRule,
-    repeatConfig: doc.repeatConfig,
-    triggerAt: doc.triggerAt,
-  });
-
-  return {
-    id: doc.id as string,
-    userId: doc.userId as string,
-    title: (doc.title ?? null) as string | null,
-    content: (doc.content ?? null) as string | null,
-    contentType: doc.contentType as Note['contentType'],
-    color: (doc.color ?? null) as string | null,
-    active: Boolean(doc.active),
-    done: Boolean(doc.done),
-    isPinned: Boolean(doc.isPinned),
-    triggerAt: doc.triggerAt,
-    repeatRule: doc.repeatRule,
-    repeatConfig: doc.repeatConfig,
-    repeat,
-    snoozedUntil: doc.snoozedUntil,
-    scheduleStatus: doc.scheduleStatus,
-    timezone: doc.timezone,
-    baseAtLocal: doc.baseAtLocal ?? null,
-    startAt: doc.startAt ?? null,
-    nextTriggerAt: doc.nextTriggerAt ?? null,
-    lastFiredAt: doc.lastFiredAt ?? null,
-    lastAcknowledgedAt: doc.lastAcknowledgedAt ?? null,
-    version: doc.version,
-    deletedAt: doc.deletedAt ?? undefined,
-    syncStatus: 'synced',
-    serverVersion: (doc.version ?? 0) as number,
-    updatedAt: doc.updatedAt as number,
-    createdAt: doc.createdAt as number,
-  };
-}
+const POLL_INTERVAL_MS = 30_000;
 
 export function useRealtimeNotes(userId: string, enabled = true): Note[] | undefined {
-  const raw = useQuery(
-    api.functions.notes.getNotes,
-    enabled ? { userId } : 'skip',
-  );
-  if (raw === undefined) return undefined;
-  return raw.map(mapDocToMobileNote).filter((note) => note.active);
+  const [notes, setNotes] = useState<Note[] | undefined>(enabled ? undefined : []);
+
+  useEffect(() => {
+    if (!enabled || !userId) {
+      setNotes([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    const refresh = async () => {
+      const result = await fetchNotes(userId);
+      if (cancelled) {
+        return;
+      }
+
+      if (result.status === 'ok') {
+        setNotes(result.notes.filter((note) => note.active));
+      } else {
+        setNotes([]);
+      }
+    };
+
+    void refresh();
+    const intervalId = setInterval(() => {
+      void refresh();
+    }, POLL_INTERVAL_MS);
+
+    return () => {
+      cancelled = true;
+      clearInterval(intervalId);
+    };
+  }, [enabled, userId]);
+
+  return notes;
 }

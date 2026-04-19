@@ -61,6 +61,17 @@ export const createSubscriptionsRoutes = (
     }),
   );
 
+  router.get(
+    '/trash',
+    requireAccessUser(),
+    withErrorBoundary(async (request, response) => {
+      const subscriptions = await service.listTrashed({
+        userId: getUserId(request as AuthenticatedRequest),
+      });
+      response.status(200).json({ subscriptions });
+    }),
+  );
+
   router.post(
     '/',
     requireAccessUser(),
@@ -91,7 +102,10 @@ export const createSubscriptionsRoutes = (
         billingCycleCustomDays: body.billingCycleCustomDays ?? null,
         nextBillingDate: new Date(body.nextBillingDate),
         notes: body.notes ?? null,
-        trialEndDate: body.trialEndDate ? new Date(body.trialEndDate) : null,
+        trialEndDate:
+          body.trialEndDate === null || body.trialEndDate === undefined
+            ? null
+            : new Date(body.trialEndDate),
         status: body.status,
         reminderDaysBefore: body.reminderDaysBefore,
       });
@@ -126,16 +140,27 @@ export const createSubscriptionsRoutes = (
         userId,
         patch: {
           ...body,
-          nextBillingDate: body.nextBillingDate ? new Date(body.nextBillingDate) : undefined,
+          nextBillingDate:
+            body.nextBillingDate === undefined ? undefined : new Date(body.nextBillingDate),
           trialEndDate: Object.hasOwn(body, 'trialEndDate')
-            ? body.trialEndDate
-              ? new Date(body.trialEndDate)
-              : null
+            ? body.trialEndDate === null || body.trialEndDate === undefined
+              ? null
+              : new Date(body.trialEndDate)
             : undefined,
         },
       });
 
       response.status(200).json({ subscription: updated });
+    }),
+  );
+
+  router.delete(
+    '/trash/empty',
+    requireAccessUser(),
+    withErrorBoundary(async (request, response) => {
+      const userId = getUserId(request as AuthenticatedRequest);
+      const deleted = await service.emptyTrash({ userId });
+      response.status(200).json({ deleted });
     }),
   );
 

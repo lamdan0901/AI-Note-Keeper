@@ -51,6 +51,8 @@ const createServiceDouble = (nowRef: Readonly<{ nowMs: () => number }>): Subscri
 
   return {
     list: async ({ userId }) => [...getUserMap(userId).values()].filter((entry) => entry.active),
+    listTrashed: async ({ userId }) =>
+      [...getUserMap(userId).values()].filter((entry) => !entry.active),
 
     create: async (input) => {
       const now = new Date(nowRef.nowMs());
@@ -161,6 +163,22 @@ const createServiceDouble = (nowRef: Readonly<{ nowMs: () => number }>): Subscri
 
       userSubscriptions.delete(subscriptionId);
       return true;
+    },
+
+    emptyTrash: async ({ userId }) => {
+      const userSubscriptions = getUserMap(userId);
+      let deleted = 0;
+
+      for (const [subscriptionId, subscription] of userSubscriptions.entries()) {
+        if (subscription.active) {
+          continue;
+        }
+
+        userSubscriptions.delete(subscriptionId);
+        deleted += 1;
+      }
+
+      return deleted;
     },
 
     purgeExpiredTrash: async ({ userId }) => {
@@ -295,7 +313,7 @@ test('subscriptions routes derive reminder fields on create and update', async (
 });
 
 test('subscriptions update enforces ownership by user-scoped lookup', async () => {
-  let nowValue = 1_700_000_000_000;
+  const nowValue = 1_700_000_000_000;
   const service = createServiceDouble({ nowMs: () => nowValue });
   const server = await startServer(service);
   const ownerToken = await createAccessToken('owner');

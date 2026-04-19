@@ -53,6 +53,8 @@ type WebAuthContextValue = {
   username: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  getAccessToken: () => string | null;
+  refreshAccessToken: () => Promise<string | null>;
   transitionState: TransitionState;
   pendingMerge: PendingMerge | null;
   login: (username: string, password: string) => Promise<AuthResult>;
@@ -287,6 +289,46 @@ export const WebAuthProvider: React.FC<{ children: React.ReactNode }> = ({ child
     [handleAuthSuccess, webAuthClient],
   );
 
+  const getAccessToken = useCallback((): string | null => {
+    return currentAccessTokenRef.current;
+  }, []);
+
+  const refreshAccessToken = useCallback(async (): Promise<string | null> => {
+    if (!webAuthClient) {
+      currentAccessTokenRef.current = null;
+      return null;
+    }
+
+    try {
+      const refreshed = await webAuthClient.refresh();
+      const nextSession: WebAuthSession = {
+        userId: refreshed.userId,
+        username: refreshed.username,
+        accessToken: refreshed.accessToken,
+      };
+      currentAccessTokenRef.current = refreshed.accessToken;
+      saveWebAuthSession(nextSession);
+      setSession(nextSession);
+      return refreshed.accessToken;
+    } catch {
+      currentAccessTokenRef.current = null;
+      setSession((previousSession) => {
+        if (!previousSession) {
+          return previousSession;
+        }
+
+        const downgradedSession: WebAuthSession = {
+          ...previousSession,
+          accessToken: undefined,
+        };
+        saveWebAuthSession(downgradedSession);
+        return downgradedSession;
+      });
+
+      return null;
+    }
+  }, [webAuthClient]);
+
   const register = useCallback(
     async (username: string, password: string): Promise<AuthResult> => {
       if (webAuthClient) {
@@ -378,6 +420,8 @@ export const WebAuthProvider: React.FC<{ children: React.ReactNode }> = ({ child
       username: session?.username ?? null,
       isAuthenticated: session !== null,
       isLoading,
+      getAccessToken,
+      refreshAccessToken,
       transitionState,
       pendingMerge,
       login,
@@ -388,11 +432,13 @@ export const WebAuthProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }),
     [
       cancelPendingMerge,
+      getAccessToken,
       isLoading,
       localUserId,
       login,
       logout,
       pendingMerge,
+      refreshAccessToken,
       register,
       resolvePendingMerge,
       session,

@@ -1,11 +1,10 @@
-import { ConvexHttpClient } from 'convex/browser';
-import { api } from '../../../../convex/_generated/api';
 import {
   defaultRetryPolicy,
   getRetryDelayMs,
   shouldRetry,
   type RetryPolicy,
 } from '../sync/retryPolicy';
+import { createDefaultMobileApiClient } from '../api/httpClient';
 import type {
   ContinueVoiceClarificationRequest,
   ParseVoiceNoteIntentRequest,
@@ -16,7 +15,6 @@ import type {
 type VoiceIntentClientOptions = {
   timeoutMs?: number;
   retryPolicy?: RetryPolicy;
-  client?: Pick<ConvexHttpClient, 'action'>;
 };
 
 const DEFAULT_TIMEOUT_MS = 45_000;
@@ -59,7 +57,8 @@ function isRetryableError(error: unknown): boolean {
     message.includes('fetch') ||
     message.includes('temporarily unavailable') ||
     message.includes('econnreset') ||
-    message.includes('etimedout')
+    message.includes('etimedout') ||
+    message.includes('500')
   );
 }
 
@@ -84,23 +83,12 @@ async function runWithRetry<T>(
   throw new Error('Voice intent request exhausted retries');
 }
 
-function createDefaultClient(): ConvexHttpClient {
-  const convexUrl = process.env.EXPO_PUBLIC_CONVEX_URL;
-  if (!convexUrl) {
-    throw new Error('Missing EXPO_PUBLIC_CONVEX_URL');
-  }
-  return new ConvexHttpClient(convexUrl);
-}
-
 export class ConvexVoiceIntentClient implements VoiceIntentClient {
-  private readonly client: Pick<ConvexHttpClient, 'action'>;
-
   private readonly timeoutMs: number;
 
   private readonly retryPolicy: RetryPolicy;
 
   constructor(options?: VoiceIntentClientOptions) {
-    this.client = options?.client ?? createDefaultClient();
     this.timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.retryPolicy = options?.retryPolicy ?? defaultRetryPolicy;
   }
@@ -108,11 +96,20 @@ export class ConvexVoiceIntentClient implements VoiceIntentClient {
   async parseVoiceNoteIntent(
     request: ParseVoiceNoteIntentRequest,
   ): Promise<VoiceIntentResponseDto> {
+    const apiClient = createDefaultMobileApiClient();
+
     return await runWithRetry(
       async () =>
-        await this.client.action(api.functions.aiNoteCapture.parseVoiceNoteIntent, {
-          ...request,
-          locale: request.locale,
+        await apiClient.requestJson<VoiceIntentResponseDto>('/api/ai/parse-voice', {
+          method: 'POST',
+          body: {
+            transcript: request.transcript,
+            userId: request.userId,
+            timezone: request.timezone,
+            nowEpochMs: request.nowEpochMs,
+            locale: request.locale,
+            sessionId: request.sessionId,
+          },
         }),
       this.retryPolicy,
       this.timeoutMs,
@@ -122,9 +119,14 @@ export class ConvexVoiceIntentClient implements VoiceIntentClient {
   async continueVoiceClarification(
     request: ContinueVoiceClarificationRequest,
   ): Promise<VoiceIntentResponseDto> {
+    const apiClient = createDefaultMobileApiClient();
+
     return await runWithRetry(
       async () =>
-        await this.client.action(api.functions.aiNoteCapture.continueVoiceClarification, request),
+        await apiClient.requestJson<VoiceIntentResponseDto>('/api/ai/clarify', {
+          method: 'POST',
+          body: request,
+        }),
       this.retryPolicy,
       this.timeoutMs,
     );

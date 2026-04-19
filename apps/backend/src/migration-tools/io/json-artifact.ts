@@ -1,6 +1,11 @@
 import { readFile } from 'node:fs/promises';
 
-import type { ExportDataset, ExportEntityName, ExportRecord, OrderedExportDataset } from '../contracts.js';
+import type {
+  ExportDataset,
+  ExportEntityName,
+  ExportRecord,
+  OrderedExportDataset,
+} from '../contracts.js';
 import { createOrderedDataset } from '../sources/ordering.js';
 
 const requiredEntities: ReadonlyArray<ExportEntityName> = [
@@ -44,7 +49,8 @@ const toExportDataset = (raw: unknown): ExportDataset => {
     throw new Error('Import artifact missing data object.');
   }
 
-  const generatedAt = typeof raw.generatedAt === 'string' ? raw.generatedAt : '1970-01-01T00:00:00.000Z';
+  const generatedAt =
+    typeof raw.generatedAt === 'string' ? raw.generatedAt : '1970-01-01T00:00:00.000Z';
   const resumeToken = typeof data.resumeToken === 'string' ? data.resumeToken : null;
 
   const entities = requiredEntities.reduce<Record<ExportEntityName, ReadonlyArray<ExportRecord>>>(

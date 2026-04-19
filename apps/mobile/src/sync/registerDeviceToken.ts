@@ -1,42 +1,20 @@
-import { ConvexHttpClient } from 'convex/browser';
 import * as Notifications from 'expo-notifications';
 import { getMessaging, getToken } from '@react-native-firebase/messaging';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import uuid from 'react-native-uuid';
 
-import { api } from '../../../../convex/_generated/api';
 import { logSyncEvent } from '../reminders/logging';
 import { resolveCurrentUserId } from '../auth/session';
+import { createDefaultMobileApiClient } from '../api/httpClient';
 
 const DEVICE_ID_KEY = 'DEVICE_UNIQUE_ID';
 const PUSH_PERMISSION_DENIED_LOG_TS_KEY = 'PUSH_PERMISSION_DENIED_LOG_TS';
 const PUSH_PERMISSION_DENIED_LOG_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 type RegisterDeviceTokenOptions = {
-  convexUrl?: string;
   userId?: string;
   deviceId?: string;
-};
-
-/**
- * IMPORTANT: Access `process.env.EXPO_PUBLIC_*` directly (no optional
- * chaining on `process.env`). Expo's babel transform only recognises
- * the exact pattern `process.env.VARIABLE_NAME` and replaces it with
- * the literal value at build time. Using `process.env?.VARIABLE_NAME`
- * creates an OptionalMemberExpression AST node that the babel plugin
- * does NOT match, leaving the var undefined at runtime in APK builds.
- */
-const resolveConvexUrl = (override?: string): string | null => {
-  if (override) {
-    return override;
-  }
-  // Direct access – babel inlines this at build time
-  const envUrl = process.env.EXPO_PUBLIC_CONVEX_URL;
-  if (envUrl) {
-    return envUrl;
-  }
-  return null;
 };
 
 const resolveUserId = async (override?: string): Promise<string> => {
@@ -100,16 +78,9 @@ export const registerDevicePushToken = async (
 
   console.log('[PushToken] ===== Registration START =====');
 
-  const convexUrl = resolveConvexUrl(options.convexUrl);
-  console.log('[PushToken] Resolved Convex URL:', convexUrl ?? 'NULL');
-  if (!convexUrl) {
-    console.warn(
-      '[PushToken] ABORT: No Convex URL. Env value:',
-      String(process.env.EXPO_PUBLIC_CONVEX_URL ?? 'undefined'),
-    );
-    logSyncEvent('warn', 'push_token_missing_convex_url', {
-      rawEnv: String(process.env.EXPO_PUBLIC_CONVEX_URL ?? 'undefined'),
-    });
+  if (!process.env.EXPO_PUBLIC_API_BASE_URL && !process.env.EXPO_PUBLIC_AUTH_API_URL) {
+    console.warn('[PushToken] ABORT: Missing API base URL');
+    logSyncEvent('warn', 'push_token_missing_api_base_url');
     return;
   }
 
@@ -148,10 +119,7 @@ export const registerDevicePushToken = async (
   let fcmToken: string;
   try {
     fcmToken = await getToken(messaging);
-    console.log(
-      '[PushToken] FCM token obtained:',
-      fcmToken ? `${fcmToken.slice(0, 20)}...` : 'EMPTY',
-    );
+    console.log('[PushToken] FCM token obtained:', fcmToken ? 'present' : 'EMPTY');
   } catch (err) {
     console.warn(
       '[PushToken] ABORT: FCM getToken error:',
@@ -172,15 +140,15 @@ export const registerDevicePushToken = async (
   console.log('[PushToken] DeviceId:', deviceId);
 
   try {
-    const client = new ConvexHttpClient(convexUrl);
-    console.log('[PushToken] Calling upsertDevicePushToken mutation...');
-    await client.mutation(api.functions.deviceTokens.upsertDevicePushToken, {
-      id: deviceId,
-      userId,
-      deviceId,
-      fcmToken,
-      platform: 'android',
-      updatedAt: Date.now(),
+    const client = createDefaultMobileApiClient();
+    console.log('[PushToken] Calling POST /api/device-tokens...');
+    await client.requestJson('/api/device-tokens', {
+      method: 'POST',
+      body: {
+        deviceId,
+        fcmToken,
+        platform: 'android',
+      },
     });
     console.log('[PushToken] ===== Registration SUCCESS =====');
     logSyncEvent('info', 'push_token_registered', { deviceId, userId });

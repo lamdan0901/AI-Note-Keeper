@@ -78,7 +78,9 @@ export const sortRecordsForExport = (
 };
 
 export const createOrderedDataset = (dataset: ExportDataset): OrderedExportDataset => {
-  const orderedEntities = canonicalEntityOrder.reduce<Record<ExportEntityName, ReadonlyArray<ExportRecord>>>(
+  const orderedEntities = canonicalEntityOrder.reduce<
+    Record<ExportEntityName, ReadonlyArray<ExportRecord>>
+  >(
     (accumulator, entity) => {
       accumulator[entity] = sortRecordsForExport(entity, dataset.entities[entity] ?? []);
       return accumulator;

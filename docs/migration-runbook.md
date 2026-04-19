@@ -47,18 +47,22 @@ npm --workspace apps/backend run migration-tools -- reconcile --dry-run --source
 ## Rollback Checkpoints
 
 Rollback checkpoint 1: Pre-import database snapshot.
+
 - Capture a PostgreSQL snapshot before first import write.
 - Abort criteria: Any migration-tools validation failure before import start.
 
 Rollback checkpoint 2: Post-batch import verification.
+
 - After each entity batch, verify row counts and dedupe constraints.
 - Abort criteria: duplicate writes detected or conflict policy mismatch in import logs.
 
 Rollback checkpoint 3: Reconcile threshold gate.
+
 - Reconcile must return `pass=true` and remain within configured thresholds.
 - Abort criteria: any threshold breach for count drift, checksum mismatch, or sample drift.
 
 Rollback checkpoint 4: Post-cutover smoke gate.
+
 - Validate core auth/notes/reminders flows against Express endpoints before expanding traffic.
 - Abort criteria: core flow regression or sustained non-2xx rate above SLO.
 
@@ -85,6 +89,7 @@ Record command outputs and sample record IDs in the rehearsal checklist.
 Staging rehearsal evidence is mandatory before production cutover.
 
 Required evidence bundle:
+
 - Export checksum and entity counts.
 - Import processed-record totals with checkpoint resume proof.
 - Reconcile report with thresholds and pass/fail decision.

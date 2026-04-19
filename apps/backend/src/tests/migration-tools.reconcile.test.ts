@@ -40,7 +40,10 @@ const targetFixture = {
   generatedAt: '2026-04-19T00:00:00.000Z',
   entities: {
     users: [{ id: 'user-a' }, { id: 'user-c' }],
-    notes: [{ id: 'note-a', userId: 'user-a' }, { id: 'note-b', userId: 'user-a' }],
+    notes: [
+      { id: 'note-a', userId: 'user-a' },
+      { id: 'note-b', userId: 'user-a' },
+    ],
     noteChangeEvents: [],
     subscriptions: [],
     devicePushTokens: [],

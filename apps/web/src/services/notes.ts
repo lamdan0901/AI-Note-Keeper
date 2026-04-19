@@ -1,8 +1,9 @@
-import { useMutation, useQuery } from 'convex/react';
-import { api } from '../../../../convex/_generated/api';
+import { sha256 } from 'js-sha256';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { NoteEditorDraft, WebNote } from './notesTypes';
 import { buildReminderSyncFields } from './reminderUtils';
 import { useWebAuth } from '../auth/AuthContext';
+import { createWebApiClient } from '../api/httpClient';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -12,46 +13,166 @@ export function getResolvedTimezone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
 }
 
+export const NOTES_POLL_INTERVAL_MS = 30_000;
+
 // ---------------------------------------------------------------------------
-// Raw Convex document → WebNote mapper
+// Raw API note document -> WebNote mapper
 // ---------------------------------------------------------------------------
 
 // The Convex `notes` query returns documents with internal fields `_id` and
 // `_creationTime` in addition to the schema fields.  We strip those and
 // normalise optional booleans so the rest of the app works with plain values.
+const toEpochMs = (value: unknown): number | undefined => {
+  if (typeof value === 'number') {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const parsed = Date.parse(value);
+    return Number.isNaN(parsed) ? undefined : parsed;
+  }
+
+  return undefined;
+};
+
+const toNullableEpochMs = (value: unknown): number | null | undefined => {
+  if (value === null) {
+    return null;
+  }
+
+  return toEpochMs(value);
+};
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapDocToWebNote(doc: any): WebNote {
   return {
-    id: doc.id as string,
-    userId: doc.userId as string,
+    id: String(doc.id),
+    userId: String(doc.userId),
     title: doc.title ?? null,
     content: doc.content ?? null,
     contentType: doc.contentType ?? undefined,
     color: doc.color ?? null,
-    active: doc.active as boolean,
+    active: Boolean(doc.active),
     done: doc.done ?? false,
     isPinned: doc.isPinned ?? false,
 
     // Reminder-related fields (preserved as-is; never modified by web)
-    triggerAt: doc.triggerAt,
+    triggerAt: toEpochMs(doc.triggerAt),
     repeatRule: doc.repeatRule,
     repeatConfig: doc.repeatConfig,
     repeat: doc.repeat,
-    snoozedUntil: doc.snoozedUntil,
+    snoozedUntil: toNullableEpochMs(doc.snoozedUntil),
     scheduleStatus: doc.scheduleStatus,
     timezone: doc.timezone,
     baseAtLocal: doc.baseAtLocal ?? null,
-    startAt: doc.startAt ?? null,
-    nextTriggerAt: doc.nextTriggerAt ?? null,
-    lastFiredAt: doc.lastFiredAt ?? null,
-    lastAcknowledgedAt: doc.lastAcknowledgedAt ?? null,
+    startAt: toNullableEpochMs(doc.startAt) ?? null,
+    nextTriggerAt: toNullableEpochMs(doc.nextTriggerAt) ?? null,
+    lastFiredAt: toNullableEpochMs(doc.lastFiredAt) ?? null,
+    lastAcknowledgedAt: toNullableEpochMs(doc.lastAcknowledgedAt) ?? null,
 
     version: doc.version,
-    deletedAt: doc.deletedAt ?? undefined,
-    updatedAt: doc.updatedAt as number,
-    createdAt: doc.createdAt as number,
+    deletedAt: toEpochMs(doc.deletedAt),
+    updatedAt: toEpochMs(doc.updatedAt) ?? Date.now(),
+    createdAt: toEpochMs(doc.createdAt) ?? Date.now(),
   };
 }
+
+type NotesSyncChange = Readonly<{
+  id: string;
+  userId: string;
+  operation: 'create' | 'update' | 'delete';
+  title?: string;
+  content?: string;
+  contentType?: string;
+  color?: string;
+  active?: boolean;
+  done?: boolean;
+  isPinned?: boolean;
+  triggerAt?: number;
+  repeatRule?: string;
+  repeatConfig?: Record<string, unknown> | null;
+  snoozedUntil?: number;
+  scheduleStatus?: string;
+  timezone?: string;
+  repeat?: Record<string, unknown> | null;
+  startAt?: number | null;
+  baseAtLocal?: string | null;
+  nextTriggerAt?: number | null;
+  lastFiredAt?: number | null;
+  lastAcknowledgedAt?: number | null;
+  deletedAt?: number;
+  version?: number;
+  createdAt: number;
+  updatedAt: number;
+}>;
+
+type NotesSyncRequest = Readonly<{
+  userId: string;
+  lastSyncAt: number;
+  changes: ReadonlyArray<NotesSyncChange>;
+}>;
+
+type NotesSyncResponse = Readonly<{
+  notes: ReadonlyArray<unknown>;
+  syncedAt: number;
+}>;
+
+const stableStringify = (value: unknown): string => {
+  if (Array.isArray(value)) {
+    return `[${value.map((entry) => stableStringify(entry)).join(',')}]`;
+  }
+
+  if (value && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>).sort(([left], [right]) =>
+      left.localeCompare(right),
+    );
+    return `{${entries
+      .map(([key, entry]) => `${JSON.stringify(key)}:${stableStringify(entry)}`)
+      .join(',')}}`;
+  }
+
+  return JSON.stringify(value);
+};
+
+const toSyncPayload = (change: NotesSyncChange): Record<string, unknown> => {
+  const payloadForHash: Record<string, unknown> = {
+    ...change,
+    deviceId: 'web',
+  };
+
+  const payloadHash = sha256(stableStringify(payloadForHash));
+  return {
+    ...payloadForHash,
+    payloadHash,
+  };
+};
+
+const notesRefreshListeners = new Set<() => void>();
+
+const subscribeToNotesRefresh = (listener: () => void): (() => void) => {
+  notesRefreshListeners.add(listener);
+  return () => {
+    notesRefreshListeners.delete(listener);
+  };
+};
+
+export const requestNotesRefresh = (): void => {
+  for (const listener of notesRefreshListeners) {
+    listener();
+  }
+};
+
+const useNotesRefreshSignal = (): number => {
+  const [signal, setSignal] = useState(0);
+
+  useEffect(() => {
+    return subscribeToNotesRefresh(() => {
+      setSignal((previousSignal) => previousSignal + 1);
+    });
+  }, []);
+
+  return signal;
+};
 
 // ---------------------------------------------------------------------------
 // Hooks
@@ -62,10 +183,45 @@ function mapDocToWebNote(doc: any): WebNote {
  * user, or `undefined` while the query is loading.
  */
 export function useNotes(): WebNote[] | undefined {
-  const { userId } = useWebAuth();
-  const raw = useQuery(api.functions.notes.getNotes, { userId });
-  if (raw === undefined) return undefined;
-  return raw.map(mapDocToWebNote);
+  const { getAccessToken, refreshAccessToken } = useWebAuth();
+  const [notes, setNotes] = useState<WebNote[] | undefined>(undefined);
+  const refreshSignal = useNotesRefreshSignal();
+
+  const apiClient = useMemo(
+    () =>
+      createWebApiClient({
+        getAccessToken,
+        refreshAccessToken,
+      }),
+    [getAccessToken, refreshAccessToken],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    setNotes(undefined);
+
+    const load = async () => {
+      try {
+        const response =
+          await apiClient.requestJson<Readonly<{ notes: ReadonlyArray<unknown> }>>('/api/notes');
+        if (!cancelled) {
+          setNotes(response.notes.map((entry) => mapDocToWebNote(entry)));
+        }
+      } catch {
+        if (!cancelled) {
+          setNotes([]);
+        }
+      }
+    };
+
+    void load();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [apiClient, refreshSignal]);
+
+  return notes;
 }
 
 /**
@@ -74,7 +230,33 @@ export function useNotes(): WebNote[] | undefined {
  * rather than calling this directly.
  */
 export function useSyncNotes() {
-  return useMutation(api.functions.notes.syncNotes);
+  const { getAccessToken, refreshAccessToken } = useWebAuth();
+  const apiClient = useMemo(
+    () =>
+      createWebApiClient({
+        getAccessToken,
+        refreshAccessToken,
+      }),
+    [getAccessToken, refreshAccessToken],
+  );
+
+  return useCallback(
+    async (input: NotesSyncRequest): Promise<Readonly<{ notes: ReadonlyArray<unknown> }>> => {
+      const payload = {
+        lastSyncAt: input.lastSyncAt,
+        changes: input.changes.map((change) => toSyncPayload(change)),
+      };
+
+      const response = await apiClient.requestJson<NotesSyncResponse>('/api/notes/sync', {
+        method: 'POST',
+        body: payload,
+      });
+
+      requestNotesRefresh();
+      return response;
+    },
+    [apiClient],
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -205,18 +387,62 @@ export async function deleteNote(sync: SyncFn, userId: string, id: string) {
 // ---------------------------------------------------------------------------
 
 export function useAllNotes(): WebNote[] | undefined {
-  const { userId } = useWebAuth();
-  const raw = useQuery(api.functions.notes.getNotes, { userId });
-  if (raw === undefined) return undefined;
-  return raw.map(mapDocToWebNote);
+  return useNotes();
 }
 
 export function usePermanentlyDeleteNote() {
-  return useMutation(api.functions.notes.permanentlyDeleteNote);
+  const { getAccessToken, refreshAccessToken } = useWebAuth();
+  const apiClient = useMemo(
+    () =>
+      createWebApiClient({
+        getAccessToken,
+        refreshAccessToken,
+      }),
+    [getAccessToken, refreshAccessToken],
+  );
+
+  return useCallback(
+    async (
+      input: Readonly<{ userId?: string; noteId: string }>,
+    ): Promise<Readonly<{ deleted: boolean }>> => {
+      const response = await apiClient.requestJson<Readonly<{ deleted: boolean }>>(
+        `/api/notes/${input.noteId}/permanent`,
+        {
+          method: 'DELETE',
+        },
+      );
+      requestNotesRefresh();
+      return response;
+    },
+    [apiClient],
+  );
 }
 
 export function useEmptyTrash() {
-  return useMutation(api.functions.notes.emptyTrash);
+  const { getAccessToken, refreshAccessToken } = useWebAuth();
+  const apiClient = useMemo(
+    () =>
+      createWebApiClient({
+        getAccessToken,
+        refreshAccessToken,
+      }),
+    [getAccessToken, refreshAccessToken],
+  );
+
+  return useCallback(
+    async (input?: Readonly<{ userId?: string }>): Promise<Readonly<{ deleted: number }>> => {
+      void input;
+      const response = await apiClient.requestJson<Readonly<{ deleted: number }>>(
+        '/api/notes/trash/empty',
+        {
+          method: 'DELETE',
+        },
+      );
+      requestNotesRefresh();
+      return response;
+    },
+    [apiClient],
+  );
 }
 
 /**

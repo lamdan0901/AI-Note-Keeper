@@ -1,6 +1,11 @@
 import { readFile } from 'node:fs/promises';
 
-import type { ExportDataset, ExportEntityName, ExportRecord, OrderedExportDataset } from '../contracts.js';
+import type {
+  ExportDataset,
+  ExportEntityName,
+  ExportRecord,
+  OrderedExportDataset,
+} from '../contracts.js';
 import { createOrderedDataset } from '../sources/ordering.js';
 
 const requiredEntities: ReadonlyArray<ExportEntityName> = [

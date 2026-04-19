@@ -5,6 +5,8 @@ import {
   useSyncNotes,
   usePermanentlyDeleteNote,
   useEmptyTrash,
+  NOTES_POLL_INTERVAL_MS,
+  requestNotesRefresh,
   createNote,
   updateNote,
   deleteNote,
@@ -44,7 +46,7 @@ export default function NotesPage({
   onSaveStatusChange,
   onTrashCountChange,
 }: NotesPageProps): JSX.Element {
-  const { userId } = useWebAuth();
+  const { userId, isAuthenticated } = useWebAuth();
   const allNotes = useNotes();
   const sync = useSyncNotes();
   const permanentlyDeleteNoteMutation = usePermanentlyDeleteNote();
@@ -97,6 +99,27 @@ export default function NotesPage({
   useEffect(() => {
     onTrashCountChange(trashNotes.length);
   }, [trashNotes.length, onTrashCountChange]);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      return;
+    }
+
+    const handleFocus = () => {
+      requestNotesRefresh();
+    };
+
+    requestNotesRefresh();
+    window.addEventListener('focus', handleFocus);
+    const intervalId = window.setInterval(() => {
+      requestNotesRefresh();
+    }, NOTES_POLL_INTERVAL_MS);
+
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      window.clearInterval(intervalId);
+    };
+  }, [isAuthenticated]);
 
   useEffect(() => {
     onSaveStatusChange(saveStatus);

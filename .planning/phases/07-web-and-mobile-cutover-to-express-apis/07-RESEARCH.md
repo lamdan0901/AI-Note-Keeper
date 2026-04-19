@@ -19,12 +19,12 @@ Requirements: WEB-01, WEB-02, MOBL-01, MOBL-02, CUTV-01
 - .planning/phases/05-worker-push-merge-and-throttle-hardening/05-04-SUMMARY.md
 - .planning/phases/06-data-migration-execution-and-reconciliation/06-03-SUMMARY.md
 - apps/web/src/main.tsx
-- apps/web/src/auth/*
-- apps/web/src/services/*
+- apps/web/src/auth/\*
+- apps/web/src/services/\*
 - apps/web/src/pages/NotesPage.tsx
 - apps/mobile/App.tsx
-- apps/mobile/src/auth/*
-- apps/mobile/src/sync/*
+- apps/mobile/src/auth/\*
+- apps/mobile/src/sync/\*
 - apps/mobile/src/subscriptions/service.ts
 - apps/mobile/src/voice/aiIntentClient.ts
 - apps/backend/src/runtime/createApiServer.ts

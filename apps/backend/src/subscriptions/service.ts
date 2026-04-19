@@ -19,6 +19,7 @@ type SubscriptionsServiceDeps = Readonly<{
 
 export type SubscriptionsService = Readonly<{
   list: (input: Readonly<{ userId: string }>) => Promise<ReadonlyArray<SubscriptionRecord>>;
+  listTrashed: (input: Readonly<{ userId: string }>) => Promise<ReadonlyArray<SubscriptionRecord>>;
   create: (input: SubscriptionCreateInput) => Promise<SubscriptionRecord>;
   update: (
     input: Readonly<{ subscriptionId: string; userId: string; patch: SubscriptionUpdatePatch }>,
@@ -28,6 +29,7 @@ export type SubscriptionsService = Readonly<{
   permanentlyDelete: (
     input: Readonly<{ subscriptionId: string; userId: string }>,
   ) => Promise<boolean>;
+  emptyTrash: (input: Readonly<{ userId: string }>) => Promise<number>;
   purgeExpiredTrash: (input: Readonly<{ userId: string }>) => Promise<number>;
 }>;
 
@@ -90,6 +92,10 @@ export const createSubscriptionsService = (
   return {
     list: async ({ userId }) => {
       return await subscriptionsRepository.listByUser(userId);
+    },
+
+    listTrashed: async ({ userId }) => {
+      return await subscriptionsRepository.listTrashedByUser(userId);
     },
 
     create: async (input) => {
@@ -191,6 +197,24 @@ export const createSubscriptionsService = (
       }
 
       return await subscriptionsRepository.hardDelete({ subscriptionId, userId });
+    },
+
+    emptyTrash: async ({ userId }) => {
+      const trashed = await subscriptionsRepository.listTrashedByUser(userId);
+      let deleted = 0;
+
+      for (const subscription of trashed) {
+        const removed = await subscriptionsRepository.hardDelete({
+          subscriptionId: subscription.id,
+          userId,
+        });
+
+        if (removed) {
+          deleted += 1;
+        }
+      }
+
+      return deleted;
     },
 
     purgeExpiredTrash: async ({ userId }) => {

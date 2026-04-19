@@ -57,4 +57,3 @@ Import tooling now supports deterministic dry-run execution, checkpoint resume, 
 - [Rule 2 - Missing Critical] Dry-run import initially persisted checkpoint files; fixed to keep dry-run side-effect free and added regression coverage in commit 1c963cd.
 
 ## Self-Check: PASSED
-

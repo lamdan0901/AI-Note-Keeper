@@ -104,15 +104,19 @@ Cross-system mapping concerns:
 ## Security and Reliability Risks
 
 1. PII leakage risk in export artifacts.
+
 - Mitigation: include strict output path policy, avoid logging record payloads, and document artifact handling.
 
 2. Replay/import duplication risk.
+
 - Mitigation: idempotent conflict handling and checkpoint continuity checks.
 
 3. Partial import failure causing inconsistent target state.
+
 - Mitigation: per-batch transactions, checkpoint only after successful commit, and resume from last committed boundary.
 
 4. False-positive reconciliation.
+
 - Mitigation: combine count, checksum, and sample drift; fail closed when thresholds exceeded.
 
 ## Recommended Plan Split
