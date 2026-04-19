@@ -69,7 +69,9 @@ const createHarness = (
   };
 };
 
-const createBaseJob = (input: Readonly<{ attempt: number; deviceIds: ReadonlyArray<string> }>): PushJobPayload => {
+const createBaseJob = (
+  input: Readonly<{ attempt: number; deviceIds: ReadonlyArray<string> }>,
+): PushJobPayload => {
   return {
     userId: 'user-1',
     reminderId: 'reminder-1',

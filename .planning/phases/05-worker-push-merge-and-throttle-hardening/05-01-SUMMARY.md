@@ -33,8 +33,8 @@ key-decisions:
   - Persist cron watermark only after enqueue fan-out completes successfully.
   - Keep worker delivery at-least-once by preserving failure propagation and retry-safe dedupe.
 patterns-established:
-  - "Dispatch contract: read watermark -> scan bounded window -> enqueue per occurrence -> commit watermark"
-  - "Adapter scheduling pattern: one-minute interval with overlap protection and health details"
+  - 'Dispatch contract: read watermark -> scan bounded window -> enqueue per occurrence -> commit watermark'
+  - 'Adapter scheduling pattern: one-minute interval with overlap protection and health details'
 requirements-completed: [JOBS-01, JOBS-02, JOBS-03]
 duration: 6 min
 completed: 2026-04-19
@@ -53,6 +53,7 @@ completed: 2026-04-19
 - **Files modified:** 6
 
 ## Accomplishments
+
 - Added reminder dispatch contracts for MAX_LOOKBACK guard, trigger precedence, and event identity generation.
 - Implemented durable `cron_state` persistence and bounded due-reminder scanner over `notes` using precedence-safe trigger selection.
 - Implemented dispatch job + worker scheduler integration that enqueues per occurrence, dedupes by stable key, and only advances watermark after enqueue success.
@@ -65,6 +66,7 @@ completed: 2026-04-19
 3. **Task 3: Add dispatch regression tests for watermark safety and idempotent enqueue** - `e061526` (test)
 
 ## Files Created/Modified
+
 - `apps/backend/src/jobs/reminders/contracts.ts` - Shared reminder dispatch types, MAX_LOOKBACK constant, and stable event-id helper.
 - `apps/backend/src/jobs/reminders/cron-state-repository.ts` - Durable cron watermark read/upsert helpers.
 - `apps/backend/src/jobs/reminders/due-reminder-scanner.ts` - Bounded `[since, now]` reminder scanner with snooze/nextTrigger/trigger precedence.
@@ -73,6 +75,7 @@ completed: 2026-04-19
 - `apps/backend/src/tests/jobs/reminder-dispatch.test.ts` - Regression tests for bounded lookback, commit-order safety, and idempotent queue keys.
 
 ## Decisions Made
+
 - Preserve Convex parity semantics for identity and lookback: `eventId = noteId-triggerTime`, `MAX_LOOKBACK_MS = 5 minutes`.
 - Keep watermark progression durable and post-enqueue only, so enqueue failures cannot silently skip due reminders.
 - Model dedupe at queue-key level (`jobKey=eventId`) to preserve at-least-once retries without duplicate side effects.

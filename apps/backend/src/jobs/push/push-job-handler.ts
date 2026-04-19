@@ -32,7 +32,9 @@ export type PushJobHandler = Readonly<{
   handle: (job: PushJobPayload) => Promise<PushJobRunResult>;
 }>;
 
-const toFailureReason = (input: Readonly<{ statusCode?: number; errorCode?: string; message?: string }>): string => {
+const toFailureReason = (
+  input: Readonly<{ statusCode?: number; errorCode?: string; message?: string }>,
+): string => {
   if (input.errorCode) {
     return input.errorCode;
   }

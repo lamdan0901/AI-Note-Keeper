@@ -60,103 +60,112 @@ const createAuthServiceDouble = (): AuthService => ({
   }),
 });
 
-const createNoopNotesService = (): NotesService => ({
-  listNotes: async () => [],
-  sync: async () => ({ notes: [], syncedAt: Date.now() }),
-  restoreNote: async () => false,
-  trashNote: async () => false,
-  permanentlyDeleteNote: async () => false,
-  emptyTrash: async () => 0,
-  purgeExpiredTrash: async () => 0,
-} as unknown as NotesService);
+const createNoopNotesService = (): NotesService =>
+  ({
+    listNotes: async () => [],
+    sync: async () => ({ notes: [], syncedAt: Date.now() }),
+    restoreNote: async () => false,
+    trashNote: async () => false,
+    permanentlyDeleteNote: async () => false,
+    emptyTrash: async () => 0,
+    purgeExpiredTrash: async () => 0,
+  }) as unknown as NotesService;
 
-const createNoopRemindersService = (): RemindersService => ({
-  listReminders: async () => [],
-  getReminder: async () => null,
-  createReminder: async () => {
-    throw new Error('not implemented in parity test');
-  },
-  updateReminder: async () => {
-    throw new Error('not implemented in parity test');
-  },
-  deleteReminder: async () => false,
-  ackReminder: async () => null,
-  snoozeReminder: async () => null,
-} satisfies RemindersService);
+const createNoopRemindersService = (): RemindersService =>
+  ({
+    listReminders: async () => [],
+    getReminder: async () => null,
+    createReminder: async () => {
+      throw new Error('not implemented in parity test');
+    },
+    updateReminder: async () => {
+      throw new Error('not implemented in parity test');
+    },
+    deleteReminder: async () => false,
+    ackReminder: async () => null,
+    snoozeReminder: async () => null,
+  }) satisfies RemindersService;
 
-const createNoopSubscriptionsService = (): SubscriptionsService => ({
-  list: async () => [],
-  create: async () => {
-    throw new Error('not implemented in parity test');
-  },
-  update: async () => {
-    throw new Error('not implemented in parity test');
-  },
-  trash: async () => false,
-  restore: async () => false,
-  permanentlyDelete: async () => false,
-  purgeExpiredTrash: async () => 0,
-} as unknown as SubscriptionsService);
+const createNoopSubscriptionsService = (): SubscriptionsService =>
+  ({
+    list: async () => [],
+    create: async () => {
+      throw new Error('not implemented in parity test');
+    },
+    update: async () => {
+      throw new Error('not implemented in parity test');
+    },
+    trash: async () => false,
+    restore: async () => false,
+    permanentlyDelete: async () => false,
+    purgeExpiredTrash: async () => 0,
+  }) as unknown as SubscriptionsService;
 
-const createNoopDeviceTokensService = (): DeviceTokensService => ({
-  upsert: async () => ({
-    id: 'token-id',
-    userId: 'user-id',
-    deviceId: 'device-id',
-    fcmToken: 'fcm-token',
-    platform: 'android',
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  }),
-  deleteByDeviceId: async () => false,
-} as unknown as DeviceTokensService);
+const createNoopDeviceTokensService = (): DeviceTokensService =>
+  ({
+    upsert: async () => ({
+      id: 'token-id',
+      userId: 'user-id',
+      deviceId: 'device-id',
+      fcmToken: 'fcm-token',
+      platform: 'android',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }),
+    deleteByDeviceId: async () => false,
+  }) as unknown as DeviceTokensService;
 
-const createNoopAiService = (): AiService => ({
-  parseVoiceNoteIntent: async (request: { transcript: string }) => ({
-    draft: {
-      title: null,
-      content: request.transcript,
-      reminderAtEpochMs: null,
-      repeat: null,
-      keepTranscriptInContent: true,
-      normalizedTranscript: request.transcript,
-    },
-    confidence: {
-      title: 1,
-      content: 1,
-      reminder: 0,
-      repeat: 0,
-    },
-    clarification: {
-      required: false,
-      question: null,
-      missingFields: [],
-    },
-  }),
-  continueVoiceClarification: async (request: { priorDraft: Record<string, unknown> }) => ({
-    draft: request.priorDraft,
-    confidence: {
-      title: 1,
-      content: 1,
-      reminder: 1,
-      repeat: 1,
-    },
-    clarification: {
-      required: false,
-      question: null,
-      missingFields: [],
-    },
-  }),
-} as unknown as AiService);
+const createNoopAiService = (): AiService =>
+  ({
+    parseVoiceNoteIntent: async (request: { transcript: string }) => ({
+      draft: {
+        title: null,
+        content: request.transcript,
+        reminderAtEpochMs: null,
+        repeat: null,
+        keepTranscriptInContent: true,
+        normalizedTranscript: request.transcript,
+      },
+      confidence: {
+        title: 1,
+        content: 1,
+        reminder: 0,
+        repeat: 0,
+      },
+      clarification: {
+        required: false,
+        question: null,
+        missingFields: [],
+      },
+    }),
+    continueVoiceClarification: async (request: { priorDraft: Record<string, unknown> }) => ({
+      draft: request.priorDraft,
+      confidence: {
+        title: 1,
+        content: 1,
+        reminder: 1,
+        repeat: 1,
+      },
+      clarification: {
+        required: false,
+        question: null,
+        missingFields: [],
+      },
+    }),
+  }) as unknown as AiService;
 
 const createNoopAiRateLimiter = (): AiRateLimiter => ({
   enforce: () => undefined,
 });
 
-const startApi = async (isDependencyDegraded: () => boolean): Promise<Readonly<{
-  baseUrl: string;
-  close: () => Promise<void>;
-}>> => {
+const startApi = async (
+  isDependencyDegraded: () => boolean,
+): Promise<
+  Readonly<{
+    baseUrl: string;
+    close: () => Promise<void>;
+  }>
+> => {
   const app = createApiServer({
     authService: createAuthServiceDouble(),
     notesService: createNoopNotesService(),

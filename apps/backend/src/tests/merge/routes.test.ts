@@ -7,7 +7,11 @@ import express from 'express';
 import { createTokenFactory } from '../../auth/tokens.js';
 import type { MergeService } from '../../merge/service.js';
 import { createMergeRoutes } from '../../merge/routes.js';
-import { AppError, errorMiddleware, notFoundMiddleware } from '../../middleware/error-middleware.js';
+import {
+  AppError,
+  errorMiddleware,
+  notFoundMiddleware,
+} from '../../middleware/error-middleware.js';
 
 const createServiceDouble = (): MergeService => {
   return {
@@ -255,7 +259,10 @@ test('merge throttle rejection returns rate_limit with retryAfterSeconds and res
     assert.equal(payload.status, 429);
     assert.equal(payload.details?.retryAfterSeconds, 12);
     assert.equal(payload.details?.resetAt, 1_700_000_012_000);
-    assert.equal(Object.prototype.hasOwnProperty.call(payload.details ?? {}, 'internalStack'), false);
+    assert.equal(
+      Object.prototype.hasOwnProperty.call(payload.details ?? {}, 'internalStack'),
+      false,
+    );
   } finally {
     await server.close();
   }

@@ -78,7 +78,9 @@ export type PushDeliveryService = Readonly<{
 }>;
 
 export type PushRetryScheduler = Readonly<{
-  scheduleRetry: (input: Readonly<{ delayMs: number; job: PushRetryJobPayload; jobKey: string }>) => Promise<void>;
+  scheduleRetry: (
+    input: Readonly<{ delayMs: number; job: PushRetryJobPayload; jobKey: string }>,
+  ) => Promise<void>;
 }>;
 
 export type PushTerminalFailureRecord = Readonly<{
@@ -100,7 +102,9 @@ const toTimestamp = (value: Date | number): number => {
   return value instanceof Date ? value.getTime() : value;
 };
 
-export const createPushTokenIdentity = (input: Readonly<{ reminderId: string; changeEventId: string; deviceId: string }>): string => {
+export const createPushTokenIdentity = (
+  input: Readonly<{ reminderId: string; changeEventId: string; deviceId: string }>,
+): string => {
   return `${input.reminderId}-${input.changeEventId}-${input.deviceId}`;
 };
 

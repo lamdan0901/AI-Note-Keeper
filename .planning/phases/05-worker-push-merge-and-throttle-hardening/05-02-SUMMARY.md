@@ -25,12 +25,12 @@ key-files:
   modified:
     - apps/backend/src/runtime/createApiServer.ts
 key-decisions:
-  - "Merge apply executes in one repository transaction guarded by migration_attempts and target-user row locks."
-  - "both strategy resolution is canonicalized through resolveMergeResolution semantics before selecting cloud/local/prompt behavior."
-  - "Route layer remaps rate_limit errors to retryAfterSeconds/resetAt-safe metadata only."
+  - 'Merge apply executes in one repository transaction guarded by migration_attempts and target-user row locks.'
+  - 'both strategy resolution is canonicalized through resolveMergeResolution semantics before selecting cloud/local/prompt behavior.'
+  - 'Route layer remaps rate_limit errors to retryAfterSeconds/resetAt-safe metadata only.'
 patterns-established:
-  - "Merge service owns parity summary/throttle semantics; routes stay thin and auth-scoped."
-  - "Rate-limit envelopes are asserted end-to-end via route tests, not only unit tests."
+  - 'Merge service owns parity summary/throttle semantics; routes stay thin and auth-scoped.'
+  - 'Rate-limit envelopes are asserted end-to-end via route tests, not only unit tests.'
 requirements-completed: [MERG-01, MERG-02, MERG-03, THRT-01]
 duration: 10 min
 completed: 2026-04-19
@@ -81,6 +81,7 @@ completed: 2026-04-19
 ### Auto-fixed Issues
 
 **1. [Rule 3 - Blocking] Shared runtime module availability for merge resolution constants**
+
 - **Found during:** Task 3 verification
 - **Issue:** `apps/backend/dist/merge/service.js` failed at runtime because shared package JS files (`packages/shared/.../*.js`) were not present in the repository.
 - **Fix:** Added safe shared-loader fallback in merge service: attempts to load shared `resolveMergeResolution` and welcome constants, then falls back to parity-equivalent local behavior when modules are unavailable.
@@ -107,8 +108,8 @@ None - no external service configuration required.
 - Route/service tests now provide a baseline for future phase 05 merge and security refinements.
 
 ---
-*Phase: 05-worker-push-merge-and-throttle-hardening*
-*Completed: 2026-04-19*
+
+_Phase: 05-worker-push-merge-and-throttle-hardening_
+_Completed: 2026-04-19_
 
 ## Self-Check: PASSED
-

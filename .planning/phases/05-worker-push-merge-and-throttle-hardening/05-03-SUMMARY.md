@@ -24,9 +24,9 @@ key-files:
   modified:
     - apps/backend/src/worker/boss-adapter.ts
 key-decisions:
-  - "Push retry policy remains parity-locked at exactly two retries with 30s then 60s delays."
-  - "Retry scheduling is scoped to individual device tokens so sibling successes are never retried."
-  - "UNREGISTERED responses trigger immediate user/device-scoped token deletion while terminal failures are recorded without stopping other tokens."
+  - 'Push retry policy remains parity-locked at exactly two retries with 30s then 60s delays.'
+  - 'Retry scheduling is scoped to individual device tokens so sibling successes are never retried.'
+  - 'UNREGISTERED responses trigger immediate user/device-scoped token deletion while terminal failures are recorded without stopping other tokens.'
 requirements-completed: [PUSH-01, PUSH-02, JOBS-03]
 duration: 18 min
 completed: 2026-04-19

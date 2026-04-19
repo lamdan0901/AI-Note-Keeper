@@ -13,7 +13,12 @@ provides:
 affects: [phase-05-verification, backend-runtime-guards, parity-regression-gates]
 tech-stack:
   added: []
-  patterns: [runtime contract parity tests, security boundary regression harnesses, startup health passthrough]
+  patterns:
+    [
+      runtime contract parity tests,
+      security boundary regression harnesses,
+      startup health passthrough,
+    ]
 key-files:
   created:
     - apps/backend/src/tests/parity/phase5.http.contract.test.ts
@@ -24,12 +29,12 @@ key-files:
     - apps/backend/src/worker/index.ts
     - apps/backend/src/reminders/service.ts
 key-decisions:
-  - "Worker bootstrap exposes adapter health so phase-5 startup telemetry can be asserted in parity tests."
-  - "Phase-5 parity/security suites run through createApiServer with explicit service doubles to keep boundary assertions deterministic."
-  - "Security boundary tests lock rate_limit metadata, conflict-safe concurrent apply outcomes, and stable non-2xx envelope shape."
+  - 'Worker bootstrap exposes adapter health so phase-5 startup telemetry can be asserted in parity tests.'
+  - 'Phase-5 parity/security suites run through createApiServer with explicit service doubles to keep boundary assertions deterministic.'
+  - 'Security boundary tests lock rate_limit metadata, conflict-safe concurrent apply outcomes, and stable non-2xx envelope shape.'
 patterns-established:
-  - "Mount-level parity tests should verify dependency-gate ordering before auth-protected route behavior."
-  - "Worker restart safety is validated by idempotent queue-key assertions under repeated start/stop cycles."
+  - 'Mount-level parity tests should verify dependency-gate ordering before auth-protected route behavior.'
+  - 'Worker restart safety is validated by idempotent queue-key assertions under repeated start/stop cycles.'
 requirements-completed: [JOBS-01, PUSH-01, MERG-01, THRT-01]
 duration: 12 min
 completed: 2026-04-19
@@ -81,6 +86,7 @@ completed: 2026-04-19
 ### Auto-fixed Issues
 
 **1. [Rule 3 - Blocking] Missing shared recurrence JS artifact caused backend runtime imports to fail in parity tests**
+
 - **Found during:** Task 1 verification
 - **Issue:** `packages/shared/utils/recurrence.js` was absent in this workspace, causing runtime module-load failures for reminders routes when mounting createApiServer.
 - **Fix:** Added guarded recurrence loader in reminders service with parity-safe fallback behavior when shared JS artifact is unavailable.
