@@ -50,10 +50,7 @@ export type SyncResult = {
 // Main Sync Function
 // ============================================================================
 
-export const syncNotes = async (
-  db: SQLiteDatabase,
-  userId: string,
-): Promise<SyncResult> => {
+export const syncNotes = async (db: SQLiteDatabase, userId: string): Promise<SyncResult> => {
   const startTime = Date.now();
   let pullCount = 0;
   let conflictCount = 0;

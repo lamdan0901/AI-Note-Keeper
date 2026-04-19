@@ -7,10 +7,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import {
-  MergeStrategy,
-  MergeSummary,
-} from '../../../../packages/shared/auth/userDataMerge';
+import { MergeStrategy, MergeSummary } from '../../../../packages/shared/auth/userDataMerge';
 import {
   clearWebAuthSession,
   getOrCreateWebLocalUserId,

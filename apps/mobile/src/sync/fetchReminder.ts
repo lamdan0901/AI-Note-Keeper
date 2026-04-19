@@ -7,9 +7,7 @@ export type FetchReminderResult =
   | { status: 'not_found'; reminder: null }
   | { status: 'error'; reminder: null; error: unknown };
 
-export const fetchReminder = async (
-  reminderId: string,
-): Promise<FetchReminderResult> => {
+export const fetchReminder = async (reminderId: string): Promise<FetchReminderResult> => {
   try {
     const apiClient = createDefaultMobileApiClient();
     const response = await apiClient.requestJson<Readonly<{ reminder: Reminder | null }>>(

@@ -30,10 +30,7 @@ import {
   migrateLocalUserData as migrateLocalUserDataInDb,
 } from './localUserData';
 import { clearMobileWelcomeCompleted, hasCompletedMobileWelcome } from './localMode';
-import {
-  MergeStrategy,
-  MergeSummary,
-} from '../../../../packages/shared/auth/userDataMerge';
+import { MergeStrategy, MergeSummary } from '../../../../packages/shared/auth/userDataMerge';
 
 type AuthTransitionState =
   | 'idle'

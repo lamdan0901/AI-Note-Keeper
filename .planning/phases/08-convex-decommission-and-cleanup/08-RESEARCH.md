@@ -70,15 +70,19 @@ No deferred ideas exist for this phase.
 ## Security and Reliability Risks
 
 1. Premature disable risk.
+
 - Mitigation: enforce ordered finalization guard requiring reconcile and archive artifacts before any disable step (D-05, D-07, D-08).
 
 2. Evidence spoofing or incomplete sign-off.
+
 - Mitigation: explicit checklist schema with required sign-off fields and release-owner identity gate (D-04, D-07).
 
 3. Hidden Convex runtime coupling after cleanup.
+
 - Mitigation: source-scan regression tests that fail on `convex/*` runtime imports in web/mobile source.
 
 4. Stability-window under-observation.
+
 - Mitigation: codify 7-day gate and daily required evidence rows with fail-closed evaluation (D-01, D-02, D-03).
 
 ## Recommended Plan Split

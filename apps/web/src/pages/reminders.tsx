@@ -92,9 +92,8 @@ export default function RemindersPage(): JSX.Element {
     const load = async (): Promise<void> => {
       setLoading(true);
       try {
-        const response = await apiClient.requestJson<Readonly<{ reminders: unknown[] }>>(
-          '/api/reminders',
-        );
+        const response =
+          await apiClient.requestJson<Readonly<{ reminders: unknown[] }>>('/api/reminders');
         if (!cancelled) {
           setReminders((response.reminders ?? []).map(mapApiReminderToReminder));
         }

@@ -59,7 +59,11 @@ export const evaluateFinalizeGuard = (input: FinalizeGuardInput): FinalizeGuardR
 
   const stageATimestamp = parseIso(input.stageAVerifiedAt);
   const reconcileTimestamp = parseIso(input.reconcileArtifactAt);
-  if (stageATimestamp !== null && reconcileTimestamp !== null && reconcileTimestamp < stageATimestamp) {
+  if (
+    stageATimestamp !== null &&
+    reconcileTimestamp !== null &&
+    reconcileTimestamp < stageATimestamp
+  ) {
     reasons.push('reconcile_artifact_outdated');
   }
 
@@ -75,11 +79,7 @@ export const evaluateFinalizeGuard = (input: FinalizeGuardInput): FinalizeGuardR
     );
     pushIf(reasons, !containsToken(checklist, 'reconcile'), 'checklist_reconcile_missing');
     pushIf(reasons, !containsToken(checklist, 'sign-off'), 'checklist_sign_off_missing');
-    pushIf(
-      reasons,
-      !containsToken(checklist, 'release owner'),
-      'checklist_release_owner_missing',
-    );
+    pushIf(reasons, !containsToken(checklist, 'release owner'), 'checklist_release_owner_missing');
   }
 
   return {

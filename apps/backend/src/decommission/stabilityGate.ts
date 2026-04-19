@@ -22,7 +22,9 @@ const buildFlagReason = (
   return null;
 };
 
-const evaluateDayEvidence = (day: DailyStabilityEvidence): ReadonlyArray<DecommissionGateReason> => {
+const evaluateDayEvidence = (
+  day: DailyStabilityEvidence,
+): ReadonlyArray<DecommissionGateReason> => {
   const results = [
     buildFlagReason(day.regressionPassed, 'daily_regression_missing', 'daily_regression_failed'),
     buildFlagReason(day.smokePassed, 'daily_smoke_missing', 'daily_smoke_failed'),
@@ -32,11 +34,15 @@ const evaluateDayEvidence = (day: DailyStabilityEvidence): ReadonlyArray<Decommi
   return results;
 };
 
-const unique = (values: ReadonlyArray<DecommissionGateReason>): ReadonlyArray<DecommissionGateReason> => {
+const unique = (
+  values: ReadonlyArray<DecommissionGateReason>,
+): ReadonlyArray<DecommissionGateReason> => {
   return Array.from(new Set(values));
 };
 
-export const evaluateDecommissionStabilityGate = (input: StabilityGateInput): StabilityGateResult => {
+export const evaluateDecommissionStabilityGate = (
+  input: StabilityGateInput,
+): StabilityGateResult => {
   const reasons: DecommissionGateReason[] = [];
 
   // D-01: fail closed unless 7 full-cohort calendar days are observed.

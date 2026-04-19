@@ -181,9 +181,9 @@ Plans:
 
 Plans:
 
-- [ ] 08-01-PLAN.md - Codify stability-window and sign-off governance contracts before cleanup.
-- [ ] 08-02-PLAN.md - Execute Stage A web Convex runtime cleanup and guard tests.
-- [ ] 08-03-PLAN.md - Execute Stage A mobile Convex runtime cleanup and guard tests.
+- [x] 08-01-PLAN.md - Codify stability-window and sign-off governance contracts before cleanup.
+- [x] 08-02-PLAN.md - Execute Stage A web Convex runtime cleanup and guard tests.
+- [x] 08-03-PLAN.md - Execute Stage A mobile Convex runtime cleanup and guard tests.
 - [ ] 08-04-PLAN.md - Enforce Stage B finalization gate and controlled Convex disable flow.
 ## Progress
 
