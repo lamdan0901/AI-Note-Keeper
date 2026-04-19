@@ -28,10 +28,10 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Notes Sync Parity
 
-- [ ] **NOTE-01**: User can list, create, update, trash, and purge notes with ownership enforcement
-- [ ] **NOTE-02**: Notes sync applies last-write-wins using updatedAt precedence matching existing behavior
-- [ ] **NOTE-03**: Duplicate sync payloads are idempotent via payload-hash event deduplication
-- [ ] **NOTE-04**: Concurrent sync operations resolve deterministically without data corruption
+- [x] **NOTE-01**: User can list, create, update, trash, and purge notes with ownership enforcement
+- [x] **NOTE-02**: Notes sync applies last-write-wins using updatedAt precedence matching existing behavior
+- [x] **NOTE-03**: Duplicate sync payloads are idempotent via payload-hash event deduplication
+- [x] **NOTE-04**: Concurrent sync operations resolve deterministically without data corruption
 
 ### Subscriptions, AI, and Device Tokens
 
@@ -120,10 +120,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | AUTH-03     | Phase 2 | Complete |
 | AUTH-04     | Phase 2 | Complete |
 | AUTH-05     | Phase 2 | Complete |
-| NOTE-01     | Phase 3 | Pending |
-| NOTE-02     | Phase 3 | Pending |
-| NOTE-03     | Phase 3 | Pending |
-| NOTE-04     | Phase 3 | Pending |
+| NOTE-01     | Phase 3 | Complete |
+| NOTE-02     | Phase 3 | Complete |
+| NOTE-03     | Phase 3 | Complete |
+| NOTE-04     | Phase 3 | Complete |
 | SUBS-01     | Phase 3 | Pending |
 | SUBS-02     | Phase 3 | Pending |
 | DEVC-01     | Phase 3 | Pending |

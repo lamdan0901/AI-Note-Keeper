@@ -80,7 +80,7 @@ Plans:
 
 Plans:
 
-- [ ] 03-01-PLAN.md - Build authenticated notes sync parity with LWW, idempotency, and trash lifecycle behaviors.
+- [x] 03-01-PLAN.md - Build authenticated notes sync parity with LWW, idempotency, and trash lifecycle behaviors.
 - [ ] 03-02-PLAN.md - Implement subscription lifecycle and Android-only device-token idempotency APIs with ownership guards.
 - [ ] 03-03-PLAN.md - Implement AI parse/clarify parity endpoints with deterministic fallback, normalization, and rate limits.
 - [ ] 03-04-PLAN.md - Mount phase-3 domains in API runtime and add HTTP parity/security regression suites.
