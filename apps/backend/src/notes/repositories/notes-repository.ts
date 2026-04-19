@@ -58,7 +58,7 @@ export type NoteCreateInput = Readonly<{
   updatedAt: Date;
 }>;
 
-export type NotePatchInput = Readonly<{
+export type NotePatchInput = {
   title?: string | null;
   content?: string | null;
   contentType?: string | null;
@@ -81,7 +81,7 @@ export type NotePatchInput = Readonly<{
   deletedAt?: Date | null;
   updatedAt?: Date;
   version?: number;
-}>;
+};
 
 export type NotesRepository = Readonly<{
   listByUser: (userId: string) => Promise<ReadonlyArray<NoteRecord>>;
@@ -322,3 +322,5 @@ export const createNotesRepository = (deps: Readonly<{ db?: DbQueryClient }> = {
     },
   };
 };
+
+
