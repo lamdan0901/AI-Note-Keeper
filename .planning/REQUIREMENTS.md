@@ -56,8 +56,8 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **JOBS-01**: Cron jobs run in dedicated worker and preserve reminder scanning guard MAX_LOOKBACK_MS
 - [x] **JOBS-02**: cron_state watermark updates are durable and rely on unique key upsert semantics
 - [x] **JOBS-03**: Due reminder processing is idempotent across retries and restarts
-- [ ] **PUSH-01**: Push delivery retries transient failures with defined backoff policy
-- [ ] **PUSH-02**: Unregistered device tokens are cleaned up automatically on provider error responses
+- [x] **PUSH-01**: Push delivery retries transient failures with defined backoff policy
+- [x] **PUSH-02**: Unregistered device tokens are cleaned up automatically on provider error responses
 
 ### Merge and Throttle Parity
 
@@ -139,8 +139,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | JOBS-01     | Phase 5 | Complete |
 | JOBS-02     | Phase 5 | Complete |
 | JOBS-03     | Phase 5 | Complete |
-| PUSH-01     | Phase 5 | Pending |
-| PUSH-02     | Phase 5 | Pending |
+| PUSH-01     | Phase 5 | Complete |
+| PUSH-02     | Phase 5 | Complete |
 | MERG-01     | Phase 5 | Complete |
 | MERG-02     | Phase 5 | Complete |
 | MERG-03     | Phase 5 | Complete |

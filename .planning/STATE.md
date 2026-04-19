@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Completed 05-02-PLAN.md
-last_updated: "2026-04-19T04:22:47.856Z"
+status: verifying
+stopped_at: Completed 05-03-PLAN.md
+last_updated: "2026-04-19T04:28:34.289Z"
 last_activity: 2026-04-19
 progress:
   total_phases: 8
   completed_phases: 4
   total_plans: 17
-  completed_plans: 15
-  percent: 88
+  completed_plans: 16
+  percent: 94
 ---
 
 # Project State
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-04-18)
 
 Phase: 05 (worker-push-merge-and-throttle-hardening) — EXECUTING
 Plan: 4 of 4
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-04-19
 
 Progress: [██████████] 100%
@@ -68,6 +68,7 @@ _Updated after each plan completion_
 | Phase 05 P01 | 6 min | 3 tasks | 6 files |
 | Phase 05 P02 | 10 min | 3 tasks | 7 files |
 | Phase 05 P02 | 10 min | 3 tasks | 7 files |
+| Phase 05 P03 | 18 min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -89,6 +90,9 @@ Recent decisions affecting current work:
 - [Phase 05]: Merge apply runs in one transaction with migration_attempts and target-user row locks.
 - [Phase 05]: both strategy resolution follows canonical resolveMergeResolution semantics before execution.
 - [Phase 05]: Merge routes expose stable rate_limit details only: retryAfterSeconds and resetAt.
+- [Phase 05]: Push retry policy remains parity-locked at two retries with 30s then 60s delays.
+- [Phase 05]: Push retries are isolated per device token so successful siblings are never retried.
+- [Phase 05]: UNREGISTERED tokens are deleted by scoped user/device identity and exhausted retries emit terminal failure records without blocking siblings.
 
 ### Pending Todos
 
@@ -100,6 +104,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-19T04:22:47.853Z
-Stopped at: Completed 05-02-PLAN.md
+Last session: 2026-04-19T04:28:34.285Z
+Stopped at: Completed 05-03-PLAN.md
 Resume file: None
