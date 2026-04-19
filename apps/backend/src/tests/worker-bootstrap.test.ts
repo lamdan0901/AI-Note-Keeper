@@ -2,8 +2,42 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { createApiServer } from '../runtime/createApiServer.js';
-import { createPgBossAdapter } from '../worker/boss-adapter.js';
+import { createInFlightPushJobTracker, createPgBossAdapter } from '../worker/boss-adapter.js';
 import { startWorker } from '../worker/index.js';
+
+test('push in-flight tracker waits for all tracked retry promises', async () => {
+  const tracker = createInFlightPushJobTracker();
+
+  const createDeferred = (): Readonly<{ promise: Promise<void>; resolve: () => void }> => {
+    let resolve: () => void = () => {};
+    const promise = new Promise<void>((nextResolve) => {
+      resolve = nextResolve;
+    });
+
+    return {
+      promise,
+      resolve,
+    };
+  };
+
+  const first = createDeferred();
+  const second = createDeferred();
+
+  tracker.track(first.promise);
+  tracker.track(second.promise);
+
+  assert.equal(tracker.hasInFlight(), true);
+
+  const waiting = tracker.waitForAll();
+
+  first.resolve();
+  await Promise.resolve();
+  assert.equal(tracker.hasInFlight(), true);
+
+  second.resolve();
+  await waiting;
+  assert.equal(tracker.hasInFlight(), false);
+});
 
 test('worker boot initializes and shuts down adapter through contract methods', async () => {
   let started = false;

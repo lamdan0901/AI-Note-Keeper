@@ -1,6 +1,9 @@
 import type { WorkerAdapter, WorkerHealthSnapshot, WorkerRuntimeStatus } from './contracts.js';
 import { createCronStateRepository } from '../jobs/reminders/cron-state-repository.js';
-import { createReminderDispatchJob, type ReminderDispatchJob } from '../jobs/reminders/dispatch-due-reminders.js';
+import {
+  createReminderDispatchJob,
+  type ReminderDispatchJob,
+} from '../jobs/reminders/dispatch-due-reminders.js';
 import { createDueReminderScanner } from '../jobs/reminders/due-reminder-scanner.js';
 import { createPushDeliveryService } from '../jobs/push/push-delivery-service.js';
 import { createPushJobHandler, type PushJobHandler } from '../jobs/push/push-job-handler.js';
@@ -82,10 +85,36 @@ const createInMemoryDispatchQueue = (logger: AdapterLogger): ReminderDispatchQue
   };
 };
 
+export const createInFlightPushJobTracker = (): Readonly<{
+  track: (promise: Promise<void>) => void;
+  hasInFlight: () => boolean;
+  waitForAll: () => Promise<void>;
+}> => {
+  const inFlightPushJobs = new Set<Promise<void>>();
+
+  return {
+    track: (promise) => {
+      inFlightPushJobs.add(promise);
+      void promise.finally(() => {
+        inFlightPushJobs.delete(promise);
+      });
+    },
+    hasInFlight: () => inFlightPushJobs.size > 0,
+    waitForAll: async () => {
+      if (inFlightPushJobs.size === 0) {
+        return;
+      }
+
+      await Promise.allSettled([...inFlightPushJobs]);
+    },
+  };
+};
+
 export const createPgBossAdapter = (options: PgBossAdapterOptions = {}): WorkerAdapter => {
   const logger = options.logger ?? defaultLogger;
   const scheduler = options.scheduler ?? defaultScheduler;
-  const setTimeoutFn = scheduler.setTimeout ?? ((callback: () => void, ms: number) => setTimeout(callback, ms));
+  const setTimeoutFn =
+    scheduler.setTimeout ?? ((callback: () => void, ms: number) => setTimeout(callback, ms));
   const clearTimeoutFn =
     scheduler.clearTimeout ??
     ((handle: NodeJS.Timeout) => {
@@ -116,7 +145,7 @@ export const createPgBossAdapter = (options: PgBossAdapterOptions = {}): WorkerA
     } satisfies PushTerminalFailureRecorder);
 
   let status: WorkerRuntimeStatus = 'idle';
-  let inFlightPushJob: Promise<void> | null = null;
+  const inFlightPushJobs = createInFlightPushJobTracker();
   let pushRetriesScheduled = 0;
   let pushRetriesExecuted = 0;
   const scheduledPushRetryHandles = new Set<NodeJS.Timeout>();
@@ -140,7 +169,7 @@ export const createPgBossAdapter = (options: PgBossAdapterOptions = {}): WorkerA
           }
 
           pushRetriesExecuted += 1;
-          inFlightPushJob = (async () => {
+          const retryPromise = (async () => {
             try {
               await pushJobHandlerRef.handle({
                 userId: job.userId,
@@ -152,12 +181,12 @@ export const createPgBossAdapter = (options: PgBossAdapterOptions = {}): WorkerA
               });
             } catch (error) {
               logger.error(`[worker] push retry execution failed for job=${jobKey}`, error);
-            } finally {
-              inFlightPushJob = null;
             }
           })();
 
-          void inFlightPushJob;
+          inFlightPushJobs.track(retryPromise);
+
+          void retryPromise;
         }, delayMs);
 
         scheduledPushRetryHandles.add(retryHandle);
@@ -196,7 +225,7 @@ export const createPgBossAdapter = (options: PgBossAdapterOptions = {}): WorkerA
       lastDispatchAt,
       lastDispatchError,
       dispatchInFlight: inFlightDispatch !== null,
-      pushJobInFlight: inFlightPushJob !== null,
+      pushJobInFlight: inFlightPushJobs.hasInFlight(),
       skippedTicks,
       pushRetriesScheduled,
       pushRetriesExecuted,
@@ -270,9 +299,7 @@ export const createPgBossAdapter = (options: PgBossAdapterOptions = {}): WorkerA
         await inFlightDispatch;
       }
 
-      if (inFlightPushJob) {
-        await inFlightPushJob;
-      }
+      await inFlightPushJobs.waitForAll();
 
       status = 'stopped';
       logger.info('[worker] adapter stopped');
