@@ -113,9 +113,17 @@ export type MergeRepositoryTransaction = Readonly<{
   ) => Promise<MigrationAttemptRecord>;
   lockTargetUserById: (userId: string) => Promise<MergeUserRecord | null>;
   readSnapshotForUser: (userId: string) => Promise<MergeSnapshot>;
-  replaceTargetWithSource: (input: Readonly<{ sourceUserId: string; targetUserId: string }>) => Promise<void>;
+  replaceTargetWithSource: (
+    input: Readonly<{ sourceUserId: string; targetUserId: string }>,
+  ) => Promise<void>;
   mergeSourceIntoTarget: (
-    input: Readonly<{ source: MergeSnapshot; target: MergeSnapshot; targetUserId: string; conflictingNoteIds: ReadonlySet<string> }>,
+    input: Readonly<{
+      source: MergeSnapshot;
+      target: MergeSnapshot;
+      sourceUserId: string;
+      targetUserId: string;
+      conflictingNoteIds: ReadonlySet<string>;
+    }>,
   ) => Promise<void>;
 }>;
 
@@ -427,20 +435,41 @@ const createTransactionApi = (db: DbQueryClient): MergeRepositoryTransaction => 
       await db.query('DELETE FROM subscriptions WHERE user_id = $1', [targetUserId]);
       await db.query('DELETE FROM notes WHERE user_id = $1', [targetUserId]);
 
-      await db.query('UPDATE notes SET user_id = $1 WHERE user_id = $2', [targetUserId, sourceUserId]);
-      await db.query('UPDATE subscriptions SET user_id = $1 WHERE user_id = $2', [targetUserId, sourceUserId]);
-      await db.query('UPDATE device_push_tokens SET user_id = $1 WHERE user_id = $2', [targetUserId, sourceUserId]);
-      await db.query('UPDATE note_change_events SET user_id = $1 WHERE user_id = $2', [targetUserId, sourceUserId]);
+      await db.query('UPDATE notes SET user_id = $1 WHERE user_id = $2', [
+        targetUserId,
+        sourceUserId,
+      ]);
+      await db.query('UPDATE subscriptions SET user_id = $1 WHERE user_id = $2', [
+        targetUserId,
+        sourceUserId,
+      ]);
+      await db.query('UPDATE device_push_tokens SET user_id = $1 WHERE user_id = $2', [
+        targetUserId,
+        sourceUserId,
+      ]);
+      await db.query('UPDATE note_change_events SET user_id = $1 WHERE user_id = $2', [
+        targetUserId,
+        sourceUserId,
+      ]);
     },
 
-    mergeSourceIntoTarget: async ({ source, target, targetUserId, conflictingNoteIds }) => {
+    mergeSourceIntoTarget: async ({
+      source,
+      target,
+      sourceUserId,
+      targetUserId,
+      conflictingNoteIds,
+    }) => {
       const targetNoteIds = new Set(target.notes.map((note) => note.id));
       const movedNoteIds: string[] = [];
       const conflictCopies = new Map<string, string>();
 
       for (const sourceNote of source.notes) {
         if (!targetNoteIds.has(sourceNote.id)) {
-          await db.query('UPDATE notes SET user_id = $1 WHERE id = $2', [targetUserId, sourceNote.id]);
+          await db.query('UPDATE notes SET user_id = $1 WHERE id = $2', [
+            targetUserId,
+            sourceNote.id,
+          ]);
           movedNoteIds.push(sourceNote.id);
           continue;
         }
@@ -526,15 +555,18 @@ const createTransactionApi = (db: DbQueryClient): MergeRepositoryTransaction => 
             WHERE user_id = $2
               AND note_id = ANY($3::text[])
           `,
-          [targetUserId, source.events[0]?.userId ?? '', movedNoteIds],
+          [targetUserId, sourceUserId, movedNoteIds],
         );
       }
 
-      const sourceUserId = source.notes[0]?.userId ?? source.subscriptions[0]?.userId ?? source.tokens[0]?.userId;
-      if (sourceUserId) {
-        await db.query('UPDATE subscriptions SET user_id = $1 WHERE user_id = $2', [targetUserId, sourceUserId]);
-        await db.query('UPDATE device_push_tokens SET user_id = $1 WHERE user_id = $2', [targetUserId, sourceUserId]);
-      }
+      await db.query('UPDATE subscriptions SET user_id = $1 WHERE user_id = $2', [
+        targetUserId,
+        sourceUserId,
+      ]);
+      await db.query('UPDATE device_push_tokens SET user_id = $1 WHERE user_id = $2', [
+        targetUserId,
+        sourceUserId,
+      ]);
 
       if (conflictCopies.size > 0) {
         for (const sourceEvent of source.events) {

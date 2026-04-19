@@ -391,6 +391,7 @@ export const createMergeService = (deps: MergeServiceDeps = {}): MergeService =>
           await transaction.mergeSourceIntoTarget({
             source,
             target,
+            sourceUserId: input.fromUserId,
             targetUserId: input.toUserId,
             conflictingNoteIds,
           });

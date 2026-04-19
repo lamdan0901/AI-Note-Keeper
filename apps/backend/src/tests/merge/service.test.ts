@@ -32,6 +32,7 @@ type RepoStats = {
   lockUserIds: string[];
   replaceCalls: number;
   mergeCalls: number;
+  mergeSourceUserIds: string[];
 };
 
 const createNote = (
@@ -171,6 +172,7 @@ const createRepositoryDouble = (
     lockUserIds: [],
     replaceCalls: 0,
     mergeCalls: 0,
+    mergeSourceUserIds: [],
   };
 
   const createTransaction = (): MergeRepositoryTransaction => {
@@ -254,8 +256,15 @@ const createRepositoryDouble = (
         });
       },
 
-      mergeSourceIntoTarget: async ({ source, target, targetUserId, conflictingNoteIds }) => {
+      mergeSourceIntoTarget: async ({
+        source,
+        target,
+        sourceUserId,
+        targetUserId,
+        conflictingNoteIds,
+      }) => {
         stats.mergeCalls += 1;
+        stats.mergeSourceUserIds.push(sourceUserId);
 
         const byTargetNoteId = new Map(target.notes.map((note) => [note.id, note]));
         const mergedNotes = [...target.notes];
@@ -590,6 +599,43 @@ test('strategy both uses canonical shared resolution semantics', async () => {
   assert.equal(sampleOnlyResult.strategy, 'cloud');
   assert.equal(sampleOnlyRepo.stats.mergeCalls, 0);
   assert.equal(sampleOnlyRepo.stats.replaceCalls, 0);
+});
+
+test('strategy both passes explicit sourceUserId for event-only source snapshots', async () => {
+  const { repository, stats } = createRepositoryDouble({
+    users: [validUser],
+    snapshots: {
+      'source-user': {
+        notes: [],
+        subscriptions: [],
+        tokens: [],
+        events: [createEvent({ id: 'e-1', noteId: 'orphan-note', userId: 'source-user' })],
+      },
+      'target-user': {
+        notes: [],
+        subscriptions: [createSubscription({ id: 's-1', userId: 'target-user' })],
+        tokens: [],
+        events: [],
+      },
+    },
+  });
+
+  const service = createMergeService({
+    repository,
+    verifyPasswordFn: validPasswordCheck,
+  });
+
+  const result = await service.apply({
+    fromUserId: 'source-user',
+    toUserId: 'target-user',
+    username: 'alice',
+    password: 'correct-password',
+    strategy: 'both',
+  });
+
+  assert.equal(result.strategy, 'both');
+  assert.equal(stats.mergeCalls, 1);
+  assert.deepEqual(stats.mergeSourceUserIds, ['source-user']);
 });
 
 test('throttle is keyed by toUserId and uses threshold 3 with 60s base backoff', async () => {
