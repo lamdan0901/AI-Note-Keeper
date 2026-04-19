@@ -143,7 +143,7 @@ Plans:
 
 - [x] 06-01-PLAN.md - Implement deterministic Convex export execution with canonical ordering and stable checksums.
 - [x] 06-02-PLAN.md - Implement idempotent Postgres import with dry-run and checkpoint resume semantics.
-- [ ] 06-03-PLAN.md - Implement thresholded reconciliation outputs and rollback-ready migration runbook evidence.
+- [x] 06-03-PLAN.md - Implement thresholded reconciliation outputs and rollback-ready migration runbook evidence.
 
 ### Phase 7: Web and Mobile Cutover to Express APIs
 
