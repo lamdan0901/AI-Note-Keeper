@@ -83,7 +83,7 @@ async function runWithRetry<T>(
   throw new Error('Voice intent request exhausted retries');
 }
 
-export class ConvexVoiceIntentClient implements VoiceIntentClient {
+export class MobileVoiceIntentClient implements VoiceIntentClient {
   private readonly timeoutMs: number;
 
   private readonly retryPolicy: RetryPolicy;

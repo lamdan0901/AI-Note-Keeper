@@ -1,6 +1,6 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import type { RetryPolicy } from '../../src/sync/retryPolicy';
-import { ConvexVoiceIntentClient } from '../../src/voice/aiIntentClient';
+import { MobileVoiceIntentClient } from '../../src/voice/aiIntentClient';
 import type {
   ContinueVoiceClarificationRequest,
   ParseVoiceNoteIntentRequest,
@@ -77,7 +77,7 @@ describe('ConvexVoiceIntentClient', () => {
         });
       });
 
-      const client = new ConvexVoiceIntentClient({
+      const client = new MobileVoiceIntentClient({
         timeoutMs: 300,
         retryPolicy: fastRetryPolicy,
       });
@@ -104,7 +104,7 @@ describe('ConvexVoiceIntentClient', () => {
         return await new Promise<VoiceIntentResponseDto>(() => {});
       });
 
-      const client = new ConvexVoiceIntentClient({
+      const client = new MobileVoiceIntentClient({
         timeoutMs: 50,
         retryPolicy: fastRetryPolicy,
       });
@@ -135,7 +135,7 @@ describe('ConvexVoiceIntentClient', () => {
         return fixedResponse;
       });
 
-      const client = new ConvexVoiceIntentClient({
+      const client = new MobileVoiceIntentClient({
         timeoutMs: 300,
         retryPolicy: fastRetryPolicy,
       });
@@ -161,7 +161,7 @@ describe('ConvexVoiceIntentClient', () => {
         return await new Promise<VoiceIntentResponseDto>(() => {});
       });
 
-      const client = new ConvexVoiceIntentClient({
+      const client = new MobileVoiceIntentClient({
         timeoutMs: 50,
         retryPolicy: fastRetryPolicy,
       });

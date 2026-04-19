@@ -10,7 +10,6 @@
       "env": {
         "APP_APPLICATION_ID": "com.andersonho.ainotekeeper.dev",
         "GOOGLE_SERVICES_JSON": "@GOOGLE_SERVICES_JSON",
-        "EXPO_PUBLIC_CONVEX_URL": "@EXPO_PUBLIC_CONVEX_URL",
         "EXPO_PUBLIC_USER_ID": "@EXPO_PUBLIC_USER_ID",
         "EXPO_PUBLIC_DEVICE_ID": "@EXPO_PUBLIC_DEVICE_ID"
       }
@@ -22,7 +21,6 @@
       },
       "env": {
         "GOOGLE_SERVICES_JSON": "@GOOGLE_SERVICES_JSON",
-        "EXPO_PUBLIC_CONVEX_URL": "@EXPO_PUBLIC_CONVEX_URL",
         "EXPO_PUBLIC_USER_ID": "@EXPO_PUBLIC_USER_ID",
         "EXPO_PUBLIC_DEVICE_ID": "@EXPO_PUBLIC_DEVICE_ID"
       }
@@ -30,7 +28,6 @@
     "production": {
       "env": {
         "GOOGLE_SERVICES_JSON": "@GOOGLE_SERVICES_JSON",
-        "EXPO_PUBLIC_CONVEX_URL": "@EXPO_PUBLIC_CONVEX_URL",
         "EXPO_PUBLIC_USER_ID": "@EXPO_PUBLIC_USER_ID",
         "EXPO_PUBLIC_DEVICE_ID": "@EXPO_PUBLIC_DEVICE_ID"
       }
