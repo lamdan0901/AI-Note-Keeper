@@ -250,7 +250,14 @@ export const ackReminder = mutation({
 
     if (ackType === 'done') {
       updates.done = true;
-      const hasRecurrence = !!(existing.repeat && existing.startAt && existing.baseAtLocal);
+      const recurrenceRule = existing.repeat as RepeatRule | undefined;
+      const recurrenceStartAt = typeof existing.startAt === 'number' ? existing.startAt : undefined;
+      const recurrenceBaseAtLocal =
+        typeof existing.baseAtLocal === 'string' ? existing.baseAtLocal : undefined;
+      const hasRecurrence =
+        Boolean(recurrenceRule) &&
+        recurrenceStartAt !== undefined &&
+        recurrenceBaseAtLocal !== undefined;
       if (!hasRecurrence && existing.snoozedUntil && existing.snoozedUntil > now) {
         updates.scheduleStatus = 'scheduled';
         updates.nextTriggerAt = existing.snoozedUntil;
@@ -261,9 +268,9 @@ export const ackReminder = mutation({
         if (hasRecurrence) {
           const next = computeNextTrigger(
             now,
-            existing.startAt,
-            existing.baseAtLocal,
-            existing.repeat as RepeatRule,
+            recurrenceStartAt,
+            recurrenceBaseAtLocal,
+            recurrenceRule as RepeatRule,
             existing.timezone || 'UTC',
           );
 

@@ -160,6 +160,7 @@ export const createPgBossAdapter = (options: PgBossAdapterOptions = {}): WorkerA
           `[worker] scheduled push retry job=${jobKey} delay=${Math.round(delayMs / 1000)}s`,
         );
 
+        /* eslint-disable prefer-const -- TDZ-safe self-reference for callback cleanup. */
         let retryHandle: NodeJS.Timeout;
         retryHandle = setTimeoutFn(() => {
           scheduledPushRetryHandles.delete(retryHandle);
@@ -188,6 +189,7 @@ export const createPgBossAdapter = (options: PgBossAdapterOptions = {}): WorkerA
 
           void retryPromise;
         }, delayMs);
+        /* eslint-enable prefer-const */
 
         scheduledPushRetryHandles.add(retryHandle);
       },

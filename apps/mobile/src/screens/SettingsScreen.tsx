@@ -151,7 +151,7 @@ const createStyles = (theme: Theme) =>
       gap: theme.spacing.sm,
     },
     accountPrimary: {
-      fontSize: theme.typography.sizes.md,
+      fontSize: theme.typography.sizes.base,
       color: theme.colors.text,
       fontWeight: '600',
     },

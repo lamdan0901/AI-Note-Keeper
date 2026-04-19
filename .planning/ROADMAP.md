@@ -161,12 +161,12 @@ Plans:
 
 Plans:
 
-- [ ] 07-01-PLAN.md - Establish web auth transport and refresh-and-retry API client contracts.
-- [ ] 07-02-PLAN.md - Cut web notes/reminders/subscriptions to Express APIs and enforce polling gates.
-- [ ] 07-03-PLAN.md - Preserve mobile secure-store auth and legacy session upgrade under Express auth.
-- [ ] 07-04-PLAN.md - Cut mobile sync, subscriptions, device tokens, and AI transport to Express with offline parity coverage.
-- [ ] 07-05-PLAN.md - Add cohort rollout gates, rollback drills, and cutover runbook evidence.
-   **UI hint**: yes
+- [x] 07-01-PLAN.md - Establish web auth transport and refresh-and-retry API client contracts.
+- [x] 07-02-PLAN.md - Cut web notes/reminders/subscriptions to Express APIs and enforce polling gates.
+- [x] 07-03-PLAN.md - Preserve mobile secure-store auth and legacy session upgrade under Express auth.
+- [x] 07-04-PLAN.md - Cut mobile sync, subscriptions, device tokens, and AI transport to Express with offline parity coverage.
+- [x] 07-05-PLAN.md - Add cohort rollout gates, rollback drills, and cutover runbook evidence.
+      **UI hint**: yes
 
 ### Phase 8: Convex Decommission and Cleanup
 
@@ -189,8 +189,5 @@ Plans:
 | 4. Reminder Domain Parity                      | 3/3            | Complete    | 2026-04-19 |
 | 5. Worker, Push, Merge, and Throttle Hardening | 4/4            | Complete    | 2026-04-19 |
 | 6. Data Migration Execution and Reconciliation | 3/3            | Complete    | 2026-04-19 |
-| 7. Web and Mobile Cutover to Express APIs      | 0/5            | Not started | -          |
+| 7. Web and Mobile Cutover to Express APIs      | 5/5            | Complete    | 2026-04-19 |
 | 8. Convex Decommission and Cleanup             | 0/TBD          | Not started | -          |
-
-
-

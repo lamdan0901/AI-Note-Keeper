@@ -266,15 +266,20 @@ export function useSyncNotes() {
 type SyncFn = ReturnType<typeof useSyncNotes>;
 type SyncChange = Parameters<SyncFn>[0]['changes'][number];
 
+const LEGACY_REMINDER_FIELDS = new Set([
+  'repeat',
+  'startAt',
+  'baseAtLocal',
+  'nextTriggerAt',
+  'lastFiredAt',
+  'lastAcknowledgedAt',
+]);
+
 function toLegacySyncChange(change: SyncChange): SyncChange {
-  const legacyCompatible = { ...change } as Partial<SyncChange>;
-  delete legacyCompatible.repeat;
-  delete legacyCompatible.startAt;
-  delete legacyCompatible.baseAtLocal;
-  delete legacyCompatible.nextTriggerAt;
-  delete legacyCompatible.lastFiredAt;
-  delete legacyCompatible.lastAcknowledgedAt;
-  return legacyCompatible as SyncChange;
+  const filteredEntries = Object.entries(change).filter(
+    ([key]) => !LEGACY_REMINDER_FIELDS.has(key),
+  );
+  return Object.fromEntries(filteredEntries) as SyncChange;
 }
 
 /**
@@ -306,7 +311,6 @@ export async function createNote(sync: SyncFn, userId: string, draft: NoteEditor
         isPinned: draft.isPinned,
         ...reminderFields,
         operation: 'create',
-        deviceId: 'web',
         createdAt: now,
         updatedAt: now,
       }),
@@ -350,7 +354,6 @@ export async function updateNote(
         isPinned: draft.isPinned,
         ...reminderFields,
         operation: 'update',
-        deviceId: 'web',
         version: existingNote.version,
         createdAt: existingNote.createdAt,
         updatedAt: now,
@@ -374,7 +377,6 @@ export async function deleteNote(sync: SyncFn, userId: string, id: string) {
         active: false,
         deletedAt: now,
         operation: 'delete',
-        deviceId: 'web',
         createdAt: now,
         updatedAt: now,
       },
@@ -478,7 +480,6 @@ export async function restoreNote(sync: SyncFn, userId: string, note: WebNote) {
         lastFiredAt: null,
         lastAcknowledgedAt: null,
         operation: 'update',
-        deviceId: 'web',
         version: note.version,
         createdAt: note.createdAt,
         updatedAt: now,

@@ -157,9 +157,9 @@ export default function App(): JSX.Element | null {
   const effectiveEditNoteId = editNoteId;
   const content = (
     <AppContent
-      rescheduleNoteId={effectiveRescheduleNoteId}
+      rescheduleNoteId={effectiveRescheduleNoteId ?? undefined}
       onRescheduleHandled={() => setRescheduleNoteId(null)}
-      editNoteId={effectiveEditNoteId}
+      editNoteId={effectiveEditNoteId ?? undefined}
       onEditHandled={() => setEditNoteId(null)}
       hasConvexClient={hasApiBackend}
     />

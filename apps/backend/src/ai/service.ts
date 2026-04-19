@@ -34,8 +34,6 @@ const EMPTY_CONFIDENCE = {
   repeat: 0,
 } as const;
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-
 const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> => {
   return typeof value === 'object' && value !== null;
 };

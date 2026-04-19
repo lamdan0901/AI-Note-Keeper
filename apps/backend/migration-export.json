@@ -1,0 +1,123 @@
+{
+  "command": "export",
+  "generatedAt": "1970-01-01T00:00:00.000Z",
+  "checksum": "63e19483a91d326f433b357785d5cbafbde14612d8a5be3eef23ea6607926dac",
+  "data": {
+    "batchSize": 1000,
+    "checkpointPath": null,
+    "entities": {
+      "cronState": [
+        {
+          "key": "check-reminders",
+          "lastCheckedAt": 1700000000000
+        }
+      ],
+      "devicePushTokens": [
+        {
+          "deviceId": "device-1",
+          "id": "token-1",
+          "tokenHash": "th-1",
+          "userId": "user-a"
+        },
+        {
+          "deviceId": "device-2",
+          "id": "token-2",
+          "tokenHash": "th-2",
+          "userId": "user-a"
+        }
+      ],
+      "migrationAttempts": [
+        {
+          "id": "attempt-1",
+          "key": "merge-user-0"
+        },
+        {
+          "id": "attempt-2",
+          "key": "merge-user-a"
+        }
+      ],
+      "noteChangeEvents": [
+        {
+          "id": "event-1",
+          "noteId": "note-1",
+          "operation": "created",
+          "payloadHash": "hash-1",
+          "userId": "user-a"
+        },
+        {
+          "id": "event-2",
+          "noteId": "note-2",
+          "operation": "updated",
+          "payloadHash": "hash-2",
+          "userId": "user-a"
+        }
+      ],
+      "notes": [
+        {
+          "createdAt": 4,
+          "id": "note-1",
+          "updatedAt": 10,
+          "userId": "user-a"
+        },
+        {
+          "createdAt": 5,
+          "id": "note-2",
+          "updatedAt": 20,
+          "userId": "user-a"
+        }
+      ],
+      "refreshTokens": [
+        {
+          "id": "refresh-1",
+          "tokenHash": "rh-1",
+          "userId": "user-a"
+        },
+        {
+          "id": "refresh-2",
+          "tokenHash": "rh-2",
+          "userId": "user-a"
+        }
+      ],
+      "subscriptions": [
+        {
+          "id": "sub-1",
+          "serviceName": "music-box",
+          "userId": "user-a"
+        }
+      ],
+      "users": [
+        {
+          "id": "user-a",
+          "username": "alice"
+        },
+        {
+          "id": "user-b",
+          "username": "bob"
+        }
+      ]
+    },
+    "entityCounts": {
+      "cronState": 1,
+      "devicePushTokens": 2,
+      "migrationAttempts": 2,
+      "noteChangeEvents": 2,
+      "notes": 2,
+      "refreshTokens": 2,
+      "subscriptions": 1,
+      "users": 2
+    },
+    "entityOrder": [
+      "users",
+      "notes",
+      "noteChangeEvents",
+      "subscriptions",
+      "devicePushTokens",
+      "cronState",
+      "migrationAttempts",
+      "refreshTokens"
+    ],
+    "outputPath": "migration-export.json",
+    "recordsScanned": 14,
+    "resumeToken": null
+  }
+}
