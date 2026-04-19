@@ -15,4 +15,5 @@ export type WorkerAdapter = Readonly<{
 export type WorkerBootstrap = Readonly<{
   adapterName: string;
   shutdown: () => Promise<void>;
+  health: () => Promise<WorkerHealthSnapshot>;
 }>;

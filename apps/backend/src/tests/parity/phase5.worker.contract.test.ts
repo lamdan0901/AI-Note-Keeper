@@ -2,16 +2,173 @@ import assert from 'node:assert/strict';
 import type { Server } from 'node:net';
 import test from 'node:test';
 
-import { createApiServer } from '../../runtime/createApiServer.js';
-import { startWorker } from '../../worker/index.js';
+import type { AuthService } from '../../auth/service.js';
+import type { AiRateLimiter } from '../../ai/rate-limit.js';
+import type { AiService } from '../../ai/service.js';
+import type { DeviceTokensService } from '../../device-tokens/service.js';
+import type { NotesService } from '../../notes/service.js';
+import type { RemindersService } from '../../reminders/service.js';
+import type { SubscriptionsService } from '../../subscriptions/service.js';
 
 process.env.DATABASE_URL ??= 'postgres://localhost:5432/ai-note-keeper-test';
+
+const { createApiServer } = await import('../../runtime/createApiServer.js');
+const { startWorker } = await import('../../worker/index.js');
+
+const createAuthServiceDouble = (): AuthService => {
+  return {
+    register: async (input) => ({
+      userId: 'stub-user',
+      username: input.username,
+      tokens: {
+        accessToken: 'stub-access',
+        refreshToken: 'stub-refresh',
+        accessExpiresAt: Date.now() + 60_000,
+        refreshExpiresAt: Date.now() + 120_000,
+      },
+    }),
+    login: async (input) => ({
+      userId: 'stub-user',
+      username: input.username,
+      tokens: {
+        accessToken: 'stub-access',
+        refreshToken: 'stub-refresh',
+        accessExpiresAt: Date.now() + 60_000,
+        refreshExpiresAt: Date.now() + 120_000,
+      },
+    }),
+    refresh: async () => ({
+      userId: 'stub-user',
+      username: 'stub-user',
+      tokens: {
+        accessToken: 'stub-access',
+        refreshToken: 'stub-refresh',
+        accessExpiresAt: Date.now() + 60_000,
+        refreshExpiresAt: Date.now() + 120_000,
+      },
+    }),
+    logout: async () => undefined,
+    upgradeSession: async (input) => ({
+      userId: input.userId,
+      username: 'stub-user',
+      tokens: {
+        accessToken: 'stub-access',
+        refreshToken: 'stub-refresh',
+        accessExpiresAt: Date.now() + 60_000,
+        refreshExpiresAt: Date.now() + 120_000,
+      },
+    }),
+  };
+};
+
+const createNoopNotesService = (): NotesService => ({
+  listNotes: async () => [],
+  sync: async () => ({ notes: [], syncedAt: Date.now() }),
+  restoreNote: async () => false,
+  trashNote: async () => false,
+  permanentlyDeleteNote: async () => false,
+  emptyTrash: async () => 0,
+  purgeExpiredTrash: async () => 0,
+} as unknown as NotesService);
+
+const createNoopRemindersService = (): RemindersService => ({
+  listByUser: async () => [],
+  create: async () => {
+    throw new Error('not implemented in parity test');
+  },
+  patch: async () => {
+    throw new Error('not implemented in parity test');
+  },
+  remove: async () => false,
+  ack: async () => {
+    throw new Error('not implemented in parity test');
+  },
+  snooze: async () => {
+    throw new Error('not implemented in parity test');
+  },
+} as unknown as RemindersService);
+
+const createNoopSubscriptionsService = (): SubscriptionsService => ({
+  list: async () => [],
+  create: async () => {
+    throw new Error('not implemented in parity test');
+  },
+  update: async () => {
+    throw new Error('not implemented in parity test');
+  },
+  trash: async () => false,
+  restore: async () => false,
+  permanentlyDelete: async () => false,
+  purgeExpiredTrash: async () => 0,
+} as unknown as SubscriptionsService);
+
+const createNoopDeviceTokensService = (): DeviceTokensService => ({
+  upsert: async () => ({
+    id: 'token-id',
+    userId: 'user-id',
+    deviceId: 'device-id',
+    fcmToken: 'fcm-token',
+    platform: 'android',
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  }),
+  deleteByDeviceId: async () => false,
+} as unknown as DeviceTokensService);
+
+const createNoopAiService = (): AiService => ({
+  parseVoiceNoteIntent: async (request: { transcript: string }) => ({
+    draft: {
+      title: null,
+      content: request.transcript,
+      reminderAtEpochMs: null,
+      repeat: null,
+      keepTranscriptInContent: true,
+      normalizedTranscript: request.transcript,
+    },
+    confidence: {
+      title: 1,
+      content: 1,
+      reminder: 0,
+      repeat: 0,
+    },
+    clarification: {
+      required: false,
+      question: null,
+      missingFields: [],
+    },
+  }),
+  continueVoiceClarification: async (request: { priorDraft: Record<string, unknown> }) => ({
+    draft: request.priorDraft,
+    confidence: {
+      title: 1,
+      content: 1,
+      reminder: 1,
+      repeat: 1,
+    },
+    clarification: {
+      required: false,
+      question: null,
+      missingFields: [],
+    },
+  }),
+} as unknown as AiService);
+
+const createNoopAiRateLimiter = (): AiRateLimiter => ({
+  enforce: () => undefined,
+});
 
 const startApi = async (isDependencyDegraded: () => boolean): Promise<Readonly<{
   baseUrl: string;
   close: () => Promise<void>;
 }>> => {
   const app = createApiServer({
+    authService: createAuthServiceDouble(),
+    notesService: createNoopNotesService(),
+    remindersService: createNoopRemindersService(),
+    subscriptionsService: createNoopSubscriptionsService(),
+    deviceTokensService: createNoopDeviceTokensService(),
+    aiService: createNoopAiService(),
+    aiRateLimiter: createNoopAiRateLimiter(),
     isDependencyDegraded,
     readinessProbe: async () => ({
       ok: true,

@@ -68,6 +68,7 @@ export const startWorker = async (options: StartWorkerOptions = {}): Promise<Wor
   return {
     adapterName: adapter.name,
     shutdown,
+    health: async () => await adapter.health(),
   };
 };
 
