@@ -117,7 +117,14 @@ Plans:
 3. Push delivery retries transient failures with defined backoff and cleans up unregistered device tokens automatically.
 4. Merge preflight and apply flows report and execute cloud-wins, local-wins, and merge-both strategies within explicit transaction boundaries.
 5. Merge attempts are lock-safe under concurrency and anti-abuse throttling preserves threshold and block-window parity.
-   **Plans**: TBD
+   **Plans**: 4 plans
+
+Plans:
+
+- [ ] 05-01-PLAN.md - Implement durable reminder dispatch in dedicated worker with bounded lookback, commit-ordered watermark, and idempotent enqueue identity.
+- [ ] 05-02-PLAN.md - Implement merge preflight/apply parity with explicit transactions, row-level locking, and throttle metadata enforcement.
+- [ ] 05-03-PLAN.md - Implement push per-token retry/backoff parity with unregistered token cleanup and terminal-failure continuation.
+- [ ] 05-04-PLAN.md - Wire phase-5 runtime integration and add parity/security boundary regression suites for worker, push, merge, and throttling.
 
 ### Phase 6: Data Migration Execution and Reconciliation
 
@@ -166,7 +173,7 @@ Plans:
 | 2. Auth Compatibility and Session Continuity   | 3/3            | Complete    | 2026-04-18 |
 | 3. Notes and Adjacent Domain API Parity        | 4/4            | Complete    | 2026-04-19 |
 | 4. Reminder Domain Parity                      | 3/3            | Complete    | 2026-04-19 |
-| 5. Worker, Push, Merge, and Throttle Hardening | 0/TBD          | Not started | -          |
+| 5. Worker, Push, Merge, and Throttle Hardening | 0/4            | Not started | -          |
 | 6. Data Migration Execution and Reconciliation | 0/TBD          | Not started | -          |
 | 7. Web and Mobile Cutover to Express APIs      | 0/TBD          | Not started | -          |
 | 8. Convex Decommission and Cleanup             | 0/TBD          | Not started | -          |
