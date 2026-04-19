@@ -97,7 +97,13 @@ Plans:
 3. Snooze operations update due state and timing deterministically.
 4. Recurrence behavior is timezone and DST safe through shared recurrence utility semantics.
 5. Reminder change-event writes preserve payload-hash dedupe behavior.
-   **Plans**: TBD
+   **Plans**: 3 plans
+
+Plans:
+
+- [x] 04-01-PLAN.md - Implement reminder core service transitions, recurrence/timezone validation, and change-event dedupe semantics.
+- [x] 04-02-PLAN.md - Expose reminder HTTP routes and runtime mounting with auth-scoped parity contracts.
+- [x] 04-03-PLAN.md - Add integrated phase-4 parity and security boundary regression suites.
 
 ### Phase 5: Worker, Push, Merge, and Throttle Hardening
 
@@ -159,12 +165,8 @@ Plans:
 | 1. Foundation and Runtime Baseline             | 3/3            | Complete    | 2026-04-18 |
 | 2. Auth Compatibility and Session Continuity   | 3/3            | Complete    | 2026-04-18 |
 | 3. Notes and Adjacent Domain API Parity        | 4/4            | Complete    | 2026-04-19 |
-| 4. Reminder Domain Parity                      | 0/TBD          | Not started | -          |
+| 4. Reminder Domain Parity                      | 3/3            | Complete    | 2026-04-19 |
 | 5. Worker, Push, Merge, and Throttle Hardening | 0/TBD          | Not started | -          |
 | 6. Data Migration Execution and Reconciliation | 0/TBD          | Not started | -          |
 | 7. Web and Mobile Cutover to Express APIs      | 0/TBD          | Not started | -          |
 | 8. Convex Decommission and Cleanup             | 0/TBD          | Not started | -          |
-
-
-
-

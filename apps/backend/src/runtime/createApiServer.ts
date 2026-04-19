@@ -14,6 +14,8 @@ import { errorMiddleware, notFoundMiddleware } from '../middleware/error-middlew
 import { withErrorBoundary } from '../middleware/validate.js';
 import { createNotesRoutes } from '../notes/routes.js';
 import type { NotesService } from '../notes/service.js';
+import { createRemindersRoutes } from '../reminders/routes.js';
+import type { RemindersService } from '../reminders/service.js';
 import { createSubscriptionsRoutes } from '../subscriptions/routes.js';
 import type { SubscriptionsService } from '../subscriptions/service.js';
 
@@ -22,6 +24,7 @@ export type ApiServerFactoryOptions = Readonly<{
   isDependencyDegraded?: () => boolean;
   authService?: AuthService;
   notesService?: NotesService;
+  remindersService?: RemindersService;
   subscriptionsService?: SubscriptionsService;
   deviceTokensService?: DeviceTokensService;
   aiService?: AiService;
@@ -113,6 +116,7 @@ export const createApiServer = (options: ApiServerFactoryOptions = {}): express.
 
   app.use('/api/auth', createAuthRoutes(options.authService));
   app.use('/api/notes', createNotesRoutes(options.notesService));
+  app.use('/api/reminders', createRemindersRoutes(options.remindersService));
   app.use('/api/subscriptions', createSubscriptionsRoutes(options.subscriptionsService));
   app.use('/api/device-tokens', createDeviceTokensRoutes(options.deviceTokensService));
   app.use('/api/ai', createAiRoutes(options.aiService, options.aiRateLimiter));
