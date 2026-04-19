@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
 import test from 'node:test';
 
 import { createCheckpoint, validateCheckpoint } from '../migration-tools/checkpoints.js';
@@ -9,7 +10,67 @@ import {
   createReconcileReport,
 } from '../migration-tools/reporting.js';
 
-test('migration-tools export/import/reconcile commands parse options and execute no-op adapters', async () => {
+test('migration-tools export/import/reconcile commands parse options and execute adapters', async () => {
+  await mkdir('tmp', { recursive: true });
+
+  await writeFile(
+    'tmp/source.json',
+    JSON.stringify(
+      {
+        command: 'export',
+        generatedAt: '2026-04-19T00:00:00.000Z',
+        checksum: 'source',
+        data: {
+          entityOrder: [
+            'users',
+            'notes',
+            'noteChangeEvents',
+            'subscriptions',
+            'devicePushTokens',
+            'cronState',
+            'migrationAttempts',
+            'refreshTokens',
+          ],
+          entities: {
+            users: [{ id: 'user-a' }],
+            notes: [],
+            noteChangeEvents: [],
+            subscriptions: [],
+            devicePushTokens: [],
+            cronState: [],
+            migrationAttempts: [],
+            refreshTokens: [],
+          },
+        },
+      },
+      null,
+      2,
+    ),
+    'utf8',
+  );
+
+  await writeFile(
+    'tmp/target.json',
+    JSON.stringify(
+      {
+        generatedAt: '2026-04-19T00:00:00.000Z',
+        entities: {
+          users: [{ id: 'user-a' }, { id: 'user-b' }],
+          notes: [],
+          noteChangeEvents: [],
+          subscriptions: [],
+          devicePushTokens: [],
+          cronState: [],
+          migrationAttempts: [],
+          refreshTokens: [],
+        },
+      },
+      null,
+      2,
+    ),
+    'utf8',
+  );
+
   const exportResult = await runMigrationToolCommand([
     'node',
     'migration-tools',
@@ -55,6 +116,8 @@ test('migration-tools export/import/reconcile commands parse options and execute
   assert.equal(reconcileResult.report.thresholds.maxCountDrift, 2);
   assert.equal(reconcileResult.report.thresholds.maxChecksumMismatch, 1);
   assert.equal(reconcileResult.report.thresholds.maxSampleDrift, 1);
+
+  await rm('tmp', { recursive: true, force: true });
 });
 
 test('dry-run artifacts and summaries are deterministic for identical input', () => {
@@ -93,6 +156,7 @@ test('checkpoint validation and reconcile report contracts include threshold pas
   assert.ok(invalidCheckpoint.issues.length > 0);
 
   const report = createReconcileReport(
+    [],
     {
       source: 100,
       target: 99,

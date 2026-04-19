@@ -87,6 +87,18 @@ export type ReconcileOptions = Readonly<{
   thresholds: ReconcileThresholds;
 }>;
 
+export type ReconcileEntityMetric = Readonly<{
+  entity: ExportEntityName;
+  sourceCount: number;
+  targetCount: number;
+  countDrift: number;
+  sourceChecksum: string;
+  targetChecksum: string;
+  checksumMismatch: number;
+  sampleSize: number;
+  sampleDrift: number;
+}>;
+
 export type ExportCommandResult = Readonly<{
   command: 'export';
   dryRun: DryRunArtifact;
@@ -98,6 +110,7 @@ export type ImportCommandResult = Readonly<{
 }>;
 
 export type ReconcileReport = Readonly<{
+  byEntity: ReadonlyArray<ReconcileEntityMetric>;
   counts: Readonly<{
     source: number;
     target: number;

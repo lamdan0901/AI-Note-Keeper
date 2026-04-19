@@ -77,8 +77,8 @@ test('reconcile computes source/target counts and checksum mismatches from real 
     },
   });
 
-  assert.equal(result.report.counts.source, 3);
-  assert.equal(result.report.counts.target, 4);
+  assert.equal(result.report.counts.source, 4);
+  assert.equal(result.report.counts.target, 5);
   assert.equal(result.report.counts.drift, 1);
   assert.ok(result.report.checksums.mismatch > 0);
 });
@@ -99,3 +99,4 @@ test('reconcile is fail-closed when sample drift exceeds configured threshold', 
   assert.equal(result.report.sampling.drift > 0, true);
   assert.equal(result.report.pass, false);
 });
+

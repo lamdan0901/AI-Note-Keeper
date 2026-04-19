@@ -2,6 +2,8 @@ import { sha256 } from 'js-sha256';
 
 import type {
   DryRunArtifact,
+  ExportRecord,
+  ReconcileEntityMetric,
   ReconcileReport,
   ReconcileThresholds,
   ToolCommand,
@@ -62,6 +64,48 @@ export const createDryRunArtifact = (input: DryRunInput): DryRunArtifact => {
   };
 };
 
+export const checksumRecords = (records: ReadonlyArray<ExportRecord>): string => {
+  return sha256(toStableJson(records));
+};
+
+export const calculateSampleDrift = (
+  source: ReadonlyArray<ExportRecord>,
+  target: ReadonlyArray<ExportRecord>,
+): Readonly<{ sampled: number; drift: number }> => {
+  const maxLength = Math.max(source.length, target.length);
+  if (maxLength === 0) {
+    return {
+      sampled: 0,
+      drift: 0,
+    };
+  }
+
+  const sampleSize = Math.min(maxLength, 10);
+  const step = Math.max(1, Math.floor(maxLength / sampleSize));
+
+  let sampled = 0;
+  let drift = 0;
+
+  for (let index = 0; index < maxLength; index += step) {
+    const left = source[index] ?? null;
+    const right = target[index] ?? null;
+    sampled += 1;
+
+    if (toStableJson(left) !== toStableJson(right)) {
+      drift += 1;
+    }
+
+    if (sampled >= sampleSize) {
+      break;
+    }
+  }
+
+  return {
+    sampled,
+    drift,
+  };
+};
+
 export const evaluateReconcileThresholds = (
   countsDrift: number,
   checksumMismatch: number,
@@ -76,12 +120,14 @@ export const evaluateReconcileThresholds = (
 };
 
 export const createReconcileReport = (
+  byEntity: ReadonlyArray<ReconcileEntityMetric>,
   counts: Readonly<{ source: number; target: number; drift: number }>,
   checksums: Readonly<{ source: string; target: string; mismatch: number }>,
   sampling: Readonly<{ sampled: number; drift: number }>,
   thresholds: ReconcileThresholds,
 ): ReconcileReport => {
   return {
+    byEntity,
     counts,
     checksums,
     sampling,
