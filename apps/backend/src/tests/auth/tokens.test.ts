@@ -9,6 +9,7 @@ const baseConfig: AuthConfig = {
   JWT_AUDIENCE: 'ai-note-keeper-clients',
   JWT_ACCESS_SECRET: 'access-secret-that-is-at-least-32-characters',
   JWT_REFRESH_SECRET: 'refresh-secret-that-is-at-least-32-characters',
+  LEGACY_UPGRADE_SECRET: 'legacy-upgrade-secret-at-least-32-char',
   JWT_ACCESS_TTL_SECONDS: 120,
   JWT_REFRESH_TTL_SECONDS: 300,
 };

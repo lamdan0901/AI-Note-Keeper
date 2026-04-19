@@ -15,6 +15,11 @@ export type AuthSession = {
   refreshToken?: string;
 };
 
+export type LegacyMobileUpgradeSession = {
+  userId: string;
+  legacySessionToken?: string;
+};
+
 export const getOrCreateDeviceId = async (): Promise<string> => {
   const envDeviceId = process.env.EXPO_PUBLIC_DEVICE_ID;
   if (envDeviceId) return envDeviceId;
@@ -55,27 +60,34 @@ export const loadAuthSession = async (): Promise<AuthSession | null> => {
   }
 };
 
-export const loadLegacySessionUserId = async (): Promise<string | null> => {
-  try {
-    const raw = await SecureStore.getItemAsync(AUTH_SESSION_KEY);
-    if (!raw) {
+export const loadLegacySessionUpgradePayload =
+  async (): Promise<LegacyMobileUpgradeSession | null> => {
+    try {
+      const raw = await SecureStore.getItemAsync(AUTH_SESSION_KEY);
+      if (!raw) {
+        return null;
+      }
+
+      const parsed = JSON.parse(raw) as Partial<AuthSession>;
+      if (!parsed.userId || typeof parsed.userId !== 'string') {
+        return null;
+      }
+
+      if (parsed.username && parsed.username.trim().length > 0) {
+        return null;
+      }
+
+      return {
+        userId: parsed.userId,
+        legacySessionToken:
+          typeof parsed.accessToken === 'string' && parsed.accessToken.trim().length > 0
+            ? parsed.accessToken
+            : undefined,
+      };
+    } catch {
       return null;
     }
-
-    const parsed = JSON.parse(raw) as Partial<AuthSession>;
-    if (!parsed.userId || typeof parsed.userId !== 'string') {
-      return null;
-    }
-
-    if (parsed.username && parsed.username.trim().length > 0) {
-      return null;
-    }
-
-    return parsed.userId;
-  } catch {
-    return null;
-  }
-};
+  };
 
 export const saveAuthSession = async (session: AuthSession): Promise<void> => {
   await SecureStore.setItemAsync(AUTH_SESSION_KEY, JSON.stringify(session));

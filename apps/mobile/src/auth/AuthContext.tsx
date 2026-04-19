@@ -19,7 +19,7 @@ import {
   getOrCreateDeviceId,
   hasCompletedInstallBootstrap,
   hasStoredDeviceId,
-  loadLegacySessionUserId,
+  loadLegacySessionUpgradePayload,
   loadAuthSession,
   markInstallBootstrapCompleted,
   saveAuthSession,
@@ -200,9 +200,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     pendingMerge: null,
   });
   const currentSecretRef = useRef<{ username: string; password: string } | null>(null);
-  const currentTokensRef = useRef<
-    Readonly<{ accessToken: string; refreshToken?: string }> | null
-  >(null);
+  const currentTokensRef = useRef<Readonly<{ accessToken: string; refreshToken?: string }> | null>(
+    null,
+  );
   const authHttpClient = useMemo(() => createMobileAuthHttpClient(), []);
 
   useEffect(() => {
@@ -303,11 +303,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         }
 
         if (authHttpClient) {
-          const legacyUserId = await loadLegacySessionUserId();
-          if (legacyUserId) {
+          const legacyUpgrade = await loadLegacySessionUpgradePayload();
+          if (legacyUpgrade) {
             try {
               const upgraded = await authHttpClient.upgradeSession({
-                userId: legacyUserId,
+                userId: legacyUpgrade.userId,
+                legacySessionToken: legacyUpgrade.legacySessionToken,
                 deviceId,
               });
 

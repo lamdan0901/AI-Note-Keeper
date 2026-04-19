@@ -3,6 +3,7 @@ import type { Server } from 'node:net';
 import test from 'node:test';
 
 import type { AuthService } from '../../auth/service.js';
+import { AppError } from '../../middleware/error-middleware.js';
 import { createApiServer } from '../../runtime/createApiServer.js';
 
 const createAuthServiceDouble = () => {
@@ -72,7 +73,9 @@ const createAuthServiceDouble = () => {
   };
 };
 
-const startServer = async (authService: AuthService): Promise<Readonly<{ baseUrl: string; close: () => Promise<void> }>> => {
+const startServer = async (
+  authService: AuthService,
+): Promise<Readonly<{ baseUrl: string; close: () => Promise<void> }>> => {
   const app = createApiServer({
     authService,
     isDependencyDegraded: () => false,
@@ -222,6 +225,7 @@ test('upgrade-session endpoint exchanges legacy user id to JWT-compatible sessio
       },
       body: JSON.stringify({
         userId: 'legacy-user-id',
+        legacySessionToken: 'legacy-token-proof',
         deviceId: 'device-1',
       }),
     });
@@ -235,7 +239,70 @@ test('upgrade-session endpoint exchanges legacy user id to JWT-compatible sessio
     const upgradeCall = calls.find((entry) => entry.method === 'upgradeSession');
     assert.deepStrictEqual(upgradeCall?.args, {
       userId: 'legacy-user-id',
+      legacySessionToken: 'legacy-token-proof',
       deviceId: 'device-1',
+    });
+  } finally {
+    await server.close();
+  }
+});
+
+test('upgrade-session rejects tokenless legacy upgrade requests by default', async () => {
+  const authService: AuthService = {
+    register: async () => {
+      throw new Error('Not used in this test');
+    },
+    login: async () => {
+      throw new Error('Not used in this test');
+    },
+    refresh: async () => {
+      throw new Error('Not used in this test');
+    },
+    logout: async () => {
+      throw new Error('Not used in this test');
+    },
+    upgradeSession: async (input) => {
+      if (!input.legacySessionToken) {
+        throw new AppError({
+          code: 'auth',
+          message: 'Legacy session token is required for upgrade-session',
+        });
+      }
+
+      return {
+        userId: input.userId,
+        username: 'legacy-user',
+        tokens: {
+          accessToken: 'access-upgrade',
+          refreshToken: 'refresh-upgrade',
+          accessExpiresAt: Date.now() + 60_000,
+          refreshExpiresAt: Date.now() + 120_000,
+        },
+      };
+    },
+  };
+
+  const server = await startServer(authService);
+
+  try {
+    const response = await fetch(`${server.baseUrl}/api/auth/upgrade-session`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-client-platform': 'mobile',
+      },
+      body: JSON.stringify({
+        userId: 'legacy-user-id',
+        deviceId: 'device-1',
+      }),
+    });
+
+    const payload = (await response.json()) as Record<string, unknown>;
+    assert.equal(response.status, 401);
+    assert.deepStrictEqual(payload, {
+      code: 'auth',
+      message: 'Legacy session token is required for upgrade-session',
+      status: 401,
     });
   } finally {
     await server.close();

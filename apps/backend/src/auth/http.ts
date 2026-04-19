@@ -20,6 +20,7 @@ export const logoutSchema = z.object({
 
 export const upgradeSessionSchema = z.object({
   userId: z.string().min(1),
+  legacySessionToken: z.string().min(1).optional(),
   deviceId: z.string().min(1).max(128).optional(),
 });
 
@@ -59,6 +60,11 @@ export const resolveRefreshToken = (
 };
 
 const shouldUseCookieTransport = (request: Request): boolean => {
+  const requestOrigin = request.header('origin');
+  if (requestOrigin) {
+    return true;
+  }
+
   const transportHint = request.header('x-client-platform');
   if (transportHint) {
     return transportHint.toLowerCase() === 'web';
@@ -67,11 +73,24 @@ const shouldUseCookieTransport = (request: Request): boolean => {
   return true;
 };
 
-const buildCookieOptions = (expiresAt: number) => {
+const isSecureCookieRequest = (request: Request): boolean => {
+  if (process.env.NODE_ENV === 'production') {
+    return true;
+  }
+
+  const forwardedProto = request.header('x-forwarded-proto');
+  if (forwardedProto && forwardedProto.toLowerCase() === 'https') {
+    return true;
+  }
+
+  return request.secure;
+};
+
+const buildCookieOptions = (request: Request, expiresAt: number) => {
   return {
     httpOnly: true,
     sameSite: 'lax' as const,
-    secure: false,
+    secure: isSecureCookieRequest(request),
     path: '/',
     expires: new Date(expiresAt),
   };
@@ -83,18 +102,22 @@ export const writeAuthTransport = (
   tokenPair: TokenPair,
 ): Readonly<{ transport: 'cookie' | 'json' }> => {
   if (shouldUseCookieTransport(request)) {
-    response.cookie(REFRESH_COOKIE_NAME, tokenPair.refreshToken, buildCookieOptions(tokenPair.refreshExpiresAt));
+    response.cookie(
+      REFRESH_COOKIE_NAME,
+      tokenPair.refreshToken,
+      buildCookieOptions(request, tokenPair.refreshExpiresAt),
+    );
     return { transport: 'cookie' };
   }
 
   return { transport: 'json' };
 };
 
-export const clearAuthTransport = (response: Response): void => {
+export const clearAuthTransport = (request: Request, response: Response): void => {
   response.clearCookie(REFRESH_COOKIE_NAME, {
     httpOnly: true,
     sameSite: 'lax',
-    secure: false,
+    secure: isSecureCookieRequest(request),
     path: '/',
   });
 };

@@ -64,10 +64,10 @@ export const createUsersRepository = (db: DbQueryClient = pool): UsersRepository
     },
 
     updatePasswordHash: async (input) => {
-      await db.query('UPDATE users SET password_hash = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', [
-        input.passwordHash,
-        input.userId,
-      ]);
+      await db.query(
+        'UPDATE users SET password_hash = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+        [input.passwordHash, input.userId],
+      );
     },
   };
 };

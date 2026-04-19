@@ -18,7 +18,7 @@ import {
 import {
   clearWebAuthSession,
   getOrCreateWebLocalUserId,
-  loadLegacyWebAuthUserId,
+  loadLegacyWebAuthUpgradeSession,
   loadWebAuthSession,
   saveWebAuthSession,
   WebAuthSession,
@@ -96,8 +96,8 @@ export const WebAuthProvider: React.FC<{ children: React.ReactNode }> = ({ child
         return;
       }
 
-      const legacyUserId = loadLegacyWebAuthUserId();
-      if (!legacyUserId || !webAuthClient) {
+      const legacyUpgrade = loadLegacyWebAuthUpgradeSession();
+      if (!legacyUpgrade || !webAuthClient) {
         if (!cancelled) {
           setSession(null);
           setIsLoading(false);
@@ -106,7 +106,10 @@ export const WebAuthProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
 
       try {
-        const upgraded = await webAuthClient.upgradeSession({ userId: legacyUserId });
+        const upgraded = await webAuthClient.upgradeSession({
+          userId: legacyUpgrade.userId,
+          legacySessionToken: legacyUpgrade.legacySessionToken,
+        });
         if (!cancelled) {
           const nextSession: WebAuthSession = {
             userId: upgraded.userId,

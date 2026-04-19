@@ -13,6 +13,7 @@ type AuthCredentials = Readonly<{
 
 type UpgradeSessionInput = Readonly<{
   userId: string;
+  legacySessionToken?: string;
   deviceId?: string;
 }>;
 
@@ -28,9 +29,7 @@ const normalizeBaseUrl = (baseUrl: string): string => {
 };
 
 const parseErrorMessage = async (response: Response): Promise<string> => {
-  const payload = (await response.json().catch(() => null)) as
-    | { message?: unknown }
-    | null;
+  const payload = (await response.json().catch(() => null)) as { message?: unknown } | null;
 
   if (payload && typeof payload.message === 'string') {
     return payload.message;
@@ -39,10 +38,7 @@ const parseErrorMessage = async (response: Response): Promise<string> => {
   return `Auth request failed (${response.status})`;
 };
 
-const postJson = async <T>(
-  path: string,
-  body: Record<string, unknown>,
-): Promise<T> => {
+const postJson = async <T>(path: string, body: Record<string, unknown>): Promise<T> => {
   if (!AUTH_API_URL) {
     throw new Error('EXPO_PUBLIC_AUTH_API_URL is required for mobile auth API client');
   }

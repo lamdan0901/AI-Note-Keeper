@@ -20,11 +20,11 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Authentication Compatibility
 
-- [ ] **AUTH-01**: User can register with unique credentials and receive secure session tokens under JWT model
-- [ ] **AUTH-02**: Existing user can log in with legacy salt:sha256 credentials and be upgraded lazily to argon2id without lockout
-- [ ] **AUTH-03**: Existing client with legacy userId can exchange session identity via upgrade endpoint without forced re-authentication
-- [ ] **AUTH-04**: Refresh token rotation revokes prior token and issues a new token pair on each refresh
-- [ ] **AUTH-05**: Logout revokes active refresh token so future reuse is rejected
+- [x] **AUTH-01**: User can register with unique credentials and receive secure session tokens under JWT model
+- [x] **AUTH-02**: Existing user can log in with legacy salt:sha256 credentials and be upgraded lazily to argon2id without lockout
+- [x] **AUTH-03**: Existing client with legacy userId can exchange session identity via upgrade endpoint without forced re-authentication
+- [x] **AUTH-04**: Refresh token rotation revokes prior token and issues a new token pair on each refresh
+- [x] **AUTH-05**: Logout revokes active refresh token so future reuse is rejected
 
 ### Notes Sync Parity
 
@@ -115,11 +115,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | BASE-06     | Phase 1 | Complete |
 | BASE-07     | Phase 1 | Complete |
 | SHRD-01     | Phase 1 | Complete |
-| AUTH-01     | Phase 2 | Pending |
-| AUTH-02     | Phase 2 | Pending |
-| AUTH-03     | Phase 2 | Pending |
-| AUTH-04     | Phase 2 | Pending |
-| AUTH-05     | Phase 2 | Pending |
+| AUTH-01     | Phase 2 | Complete |
+| AUTH-02     | Phase 2 | Complete |
+| AUTH-03     | Phase 2 | Complete |
+| AUTH-04     | Phase 2 | Complete |
+| AUTH-05     | Phase 2 | Complete |
 | NOTE-01     | Phase 3 | Pending |
 | NOTE-02     | Phase 3 | Pending |
 | NOTE-03     | Phase 3 | Pending |

@@ -11,6 +11,7 @@ const authEnvSchema = z.object({
   JWT_AUDIENCE: z.string().min(1, 'JWT_AUDIENCE is required'),
   JWT_ACCESS_SECRET: z.string().min(32, 'JWT_ACCESS_SECRET must be at least 32 characters'),
   JWT_REFRESH_SECRET: z.string().min(32, 'JWT_REFRESH_SECRET must be at least 32 characters'),
+  LEGACY_UPGRADE_SECRET: z.string().min(32, 'LEGACY_UPGRADE_SECRET must be at least 32 characters'),
   JWT_ACCESS_TTL_SECONDS: z.coerce
     .number()
     .int('JWT_ACCESS_TTL_SECONDS must be an integer')
@@ -28,6 +29,7 @@ const authDefaults: AuthConfig = {
   JWT_AUDIENCE: 'ai-note-keeper-clients',
   JWT_ACCESS_SECRET: 'dev-access-secret-that-is-at-least-32-chars',
   JWT_REFRESH_SECRET: 'dev-refresh-secret-that-is-at-least-32-chars',
+  LEGACY_UPGRADE_SECRET: 'dev-legacy-upgrade-secret-at-least-32',
   JWT_ACCESS_TTL_SECONDS: 900,
   JWT_REFRESH_TTL_SECONDS: 2_592_000,
 };

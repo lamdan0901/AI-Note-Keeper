@@ -11,8 +11,8 @@ This roadmap delivers a parity-first migration from Convex to Express plus Postg
 - Integer phases (1, 2, 3): Planned milestone work
 - Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
 
-- [ ] **Phase 1: Foundation and Runtime Baseline** - Stand up fail-fast backend foundation, migration system, health probes, validation, error contracts, and worker split.
-- [ ] **Phase 2: Auth Compatibility and Session Continuity** - Deliver secure JWT auth while preserving legacy password and session upgrade paths.
+- [x] **Phase 1: Foundation and Runtime Baseline** - Stand up fail-fast backend foundation, migration system, health probes, validation, error contracts, and worker split.
+- [x] **Phase 2: Auth Compatibility and Session Continuity** - Deliver secure JWT auth while preserving legacy password and session upgrade paths.
 - [ ] **Phase 3: Notes and Adjacent Domain API Parity** - Reach parity for notes sync, subscriptions, device tokens, and AI endpoints.
 - [ ] **Phase 4: Reminder Domain Parity** - Port reminder lifecycle semantics with recurrence and dedupe parity.
 - [ ] **Phase 5: Worker, Push, Merge, and Throttle Hardening** - Replace scheduler behavior with durable workers and preserve merge and anti-abuse correctness.
@@ -39,6 +39,7 @@ This roadmap delivers a parity-first migration from Convex to Express plus Postg
    **Plans**: 3 plans
 
 Plans:
+
 - [x] 01-01-PLAN.md — Lock startup/readiness/error/validation runtime contracts.
 - [x] 01-02-PLAN.md — Split API and worker entrypoints with shared infra scaffolding.
 - [x] 01-03-PLAN.md — Harden migration runner and add export/import/reconcile tooling skeleton.
@@ -57,9 +58,10 @@ Plans:
    **Plans**: 3 plans
 
 Plans:
-- [ ] 02-01-PLAN.md — Build backend auth crypto and refresh persistence foundations.
-- [ ] 02-02-PLAN.md — Implement register/login/refresh/logout/upgrade-session API surface.
-- [ ] 02-03-PLAN.md — Wire web/mobile auth contexts for cookie versus secure-storage continuity.
+
+- [x] 02-01-PLAN.md — Build backend auth crypto and refresh persistence foundations.
+- [x] 02-02-PLAN.md — Implement register/login/refresh/logout/upgrade-session API surface.
+- [x] 02-03-PLAN.md — Wire web/mobile auth contexts for cookie versus secure-storage continuity.
 
 ### Phase 3: Notes and Adjacent Domain API Parity
 
@@ -145,17 +147,13 @@ Plans:
 
 ## Progress
 
-| Phase                                          | Plans Complete | Status      | Completed |
-| ---------------------------------------------- | -------------- | ----------- | --------- |
-| 1. Foundation and Runtime Baseline             | 0/3            | Not started | -         |
-| 2. Auth Compatibility and Session Continuity   | 0/TBD          | Not started | -         |
-| 3. Notes and Adjacent Domain API Parity        | 0/TBD          | Not started | -         |
-| 4. Reminder Domain Parity                      | 0/TBD          | Not started | -         |
-| 5. Worker, Push, Merge, and Throttle Hardening | 0/TBD          | Not started | -         |
-| 6. Data Migration Execution and Reconciliation | 0/TBD          | Not started | -         |
-| 7. Web and Mobile Cutover to Express APIs      | 0/TBD          | Not started | -         |
-| 8. Convex Decommission and Cleanup             | 0/TBD          | Not started | -         |
-
-
-
-
+| Phase                                          | Plans Complete | Status      | Completed  |
+| ---------------------------------------------- | -------------- | ----------- | ---------- |
+| 1. Foundation and Runtime Baseline             | 3/3            | Complete    | 2026-04-18 |
+| 2. Auth Compatibility and Session Continuity   | 3/3            | Complete    | 2026-04-18 |
+| 3. Notes and Adjacent Domain API Parity        | 0/TBD          | Not started | -          |
+| 4. Reminder Domain Parity                      | 0/TBD          | Not started | -          |
+| 5. Worker, Push, Merge, and Throttle Hardening | 0/TBD          | Not started | -          |
+| 6. Data Migration Execution and Reconciliation | 0/TBD          | Not started | -          |
+| 7. Web and Mobile Cutover to Express APIs      | 0/TBD          | Not started | -          |
+| 8. Convex Decommission and Cleanup             | 0/TBD          | Not started | -          |

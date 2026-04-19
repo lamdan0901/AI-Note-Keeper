@@ -14,11 +14,69 @@ export type ApiServerFactoryOptions = Readonly<{
   authService?: AuthService;
 }>;
 
+const parseTrustProxySetting = (): boolean | number | string => {
+  const raw = process.env.TRUST_PROXY;
+  if (!raw) {
+    return false;
+  }
+
+  const normalized = raw.trim().toLowerCase();
+  if (normalized === 'false' || normalized === 'off' || normalized === '0') {
+    return false;
+  }
+
+  if (normalized === 'true' || normalized === 'on') {
+    return 1;
+  }
+
+  if (/^\d+$/.test(normalized)) {
+    return Number.parseInt(normalized, 10);
+  }
+
+  return raw;
+};
+
 export const createApiServer = (options: ApiServerFactoryOptions = {}): express.Express => {
   const app = express();
   const isDependencyDegraded = options.isDependencyDegraded ?? (() => false);
+  const trustProxy = parseTrustProxySetting();
 
-  app.use(cors());
+  app.set('trust proxy', trustProxy);
+
+  const allowedOrigins = (process.env.CORS_ALLOWED_ORIGINS ?? '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter((origin) => origin.length > 0);
+
+  const defaultDevelopmentOrigins = ['http://localhost:5173', 'http://127.0.0.1:5173'];
+  const effectiveAllowedOrigins =
+    allowedOrigins.length > 0
+      ? allowedOrigins
+      : process.env.NODE_ENV === 'production'
+        ? []
+        : defaultDevelopmentOrigins;
+
+  const isAllowedOrigin = (origin: string): boolean => {
+    if (effectiveAllowedOrigins.length === 0) {
+      return false;
+    }
+
+    return effectiveAllowedOrigins.includes(origin);
+  };
+
+  app.use(
+    cors({
+      credentials: true,
+      origin: (origin, callback) => {
+        if (!origin) {
+          callback(null, true);
+          return;
+        }
+
+        callback(null, isAllowedOrigin(origin));
+      },
+    }),
+  );
   app.use(express.json());
 
   app.get('/health/live', (_request, response) => {

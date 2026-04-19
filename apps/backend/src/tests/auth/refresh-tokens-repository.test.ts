@@ -51,6 +51,31 @@ const createInMemoryDb = (): DbQueryClient => {
         return { rows: (found ? [found] : []) as unknown as ReadonlyArray<Row> };
       }
 
+      if (
+        normalized.startsWith('update refresh_tokens') &&
+        normalized.includes('where token_hash = $1')
+      ) {
+        const [tokenHash] = values as [string];
+        const index = rows.findIndex(
+          (row) =>
+            row.token_hash === tokenHash &&
+            row.revoked === false &&
+            row.expires_at.getTime() > Date.now(),
+        );
+
+        if (index === -1) {
+          return { rows: [] as ReadonlyArray<Row> };
+        }
+
+        const updated: StoredRefreshRow = {
+          ...rows[index],
+          revoked: true,
+        };
+        rows[index] = updated;
+
+        return { rows: [updated] as unknown as ReadonlyArray<Row> };
+      }
+
       if (normalized.startsWith('update refresh_tokens set revoked = true where id =')) {
         const [id] = values as [string];
         const index = rows.findIndex((row) => row.id === id);

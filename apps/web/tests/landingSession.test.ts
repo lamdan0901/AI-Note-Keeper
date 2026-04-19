@@ -6,7 +6,7 @@ import {
   isLandingDismissedInSession,
   shouldShowLanding,
 } from '../src/services/landingSession';
-import { loadLegacyWebAuthUserId } from '../src/auth/session';
+import { loadLegacyWebAuthUpgradeSession } from '../src/auth/session';
 
 describe('landingSession', () => {
   it('shows landing only when auth is not loading, user is unauthenticated, and landing is not dismissed', () => {
@@ -111,7 +111,10 @@ describe('landingSession', () => {
     (globalThis as { window?: unknown }).window = { localStorage };
 
     try {
-      expect(loadLegacyWebAuthUserId()).toBe('legacy-user');
+      expect(loadLegacyWebAuthUpgradeSession()).toEqual({
+        userId: 'legacy-user',
+        legacySessionToken: undefined,
+      });
     } finally {
       (globalThis as { window?: unknown }).window = previousWindow;
     }

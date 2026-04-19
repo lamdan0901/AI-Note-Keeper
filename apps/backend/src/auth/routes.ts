@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, type RequestHandler } from 'express';
 
 import { AppError } from '../middleware/error-middleware.js';
 import { validateRequest, withErrorBoundary } from '../middleware/validate.js';
@@ -20,6 +20,87 @@ const toAuthError = (message: string): AppError => {
 const toDeviceId = (value: unknown): string | null => {
   return typeof value === 'string' && value.trim().length > 0 ? value : null;
 };
+
+type RateLimitState = Readonly<{
+  count: number;
+  resetAt: number;
+}>;
+
+const createAuthRateLimiter = (
+  input: Readonly<{ maxRequests: number; windowMs: number }>,
+): RequestHandler => {
+  const byIp = new Map<string, RateLimitState>();
+  const maxEntries = 5_000;
+  let requestCounter = 0;
+
+  const evictExpiredEntries = (now: number): void => {
+    for (const [key, state] of byIp.entries()) {
+      if (state.resetAt <= now) {
+        byIp.delete(key);
+      }
+    }
+  };
+
+  const evictOldestWhenCapped = (): void => {
+    if (byIp.size < maxEntries) {
+      return;
+    }
+
+    const oldestKey = byIp.keys().next().value;
+    if (typeof oldestKey === 'string') {
+      byIp.delete(oldestKey);
+    }
+  };
+
+  return (request, _response, next) => {
+    const now = Date.now();
+    requestCounter += 1;
+
+    if (requestCounter % 100 === 0) {
+      evictExpiredEntries(now);
+    }
+
+    const key = request.ip ?? 'unknown-ip';
+    const existing = byIp.get(key);
+
+    if (!existing || now >= existing.resetAt) {
+      evictOldestWhenCapped();
+      byIp.set(key, {
+        count: 1,
+        resetAt: now + input.windowMs,
+      });
+      next();
+      return;
+    }
+
+    if (existing.count >= input.maxRequests) {
+      const retryAfterSeconds = Math.max(1, Math.ceil((existing.resetAt - now) / 1000));
+      next(
+        new AppError({
+          code: 'rate_limit',
+          details: {
+            retryAfterSeconds,
+            resetAt: new Date(existing.resetAt).toISOString(),
+          },
+        }),
+      );
+      return;
+    }
+
+    byIp.set(key, {
+      ...existing,
+      count: existing.count + 1,
+    });
+
+    next();
+  };
+};
+
+const registerRateLimit = createAuthRateLimiter({ maxRequests: 20, windowMs: 60_000 });
+const loginRateLimit = createAuthRateLimiter({ maxRequests: 30, windowMs: 60_000 });
+const refreshRateLimit = createAuthRateLimiter({ maxRequests: 60, windowMs: 60_000 });
+const upgradeRateLimit = createAuthRateLimiter({ maxRequests: 15, windowMs: 60_000 });
+const logoutRateLimit = createAuthRateLimiter({ maxRequests: 60, windowMs: 60_000 });
 
 const buildAuthResponse = (
   input: Readonly<{
@@ -53,6 +134,7 @@ export const createAuthRoutes = (authService: AuthService = createAuthService())
 
   router.post(
     '/register',
+    registerRateLimit,
     validateRequest({ body: authCredentialsSchema }),
     withErrorBoundary(async (request, response) => {
       const body = request.body as { username: string; password: string; deviceId?: string };
@@ -78,6 +160,7 @@ export const createAuthRoutes = (authService: AuthService = createAuthService())
 
   router.post(
     '/login',
+    loginRateLimit,
     validateRequest({ body: authCredentialsSchema }),
     withErrorBoundary(async (request, response) => {
       const body = request.body as { username: string; password: string; deviceId?: string };
@@ -103,6 +186,7 @@ export const createAuthRoutes = (authService: AuthService = createAuthService())
 
   router.post(
     '/refresh',
+    refreshRateLimit,
     validateRequest({ body: refreshSchema }),
     withErrorBoundary(async (request, response) => {
       const body = request.body as { refreshToken?: string; deviceId?: string };
@@ -133,6 +217,7 @@ export const createAuthRoutes = (authService: AuthService = createAuthService())
 
   router.post(
     '/logout',
+    logoutRateLimit,
     validateRequest({ body: logoutSchema }),
     withErrorBoundary(async (request, response) => {
       const body = request.body as { refreshToken?: string };
@@ -143,18 +228,24 @@ export const createAuthRoutes = (authService: AuthService = createAuthService())
       }
 
       await authService.logout({ refreshToken });
-      clearAuthTransport(response);
+      clearAuthTransport(request, response);
       response.status(204).send();
     }),
   );
 
   router.post(
     '/upgrade-session',
+    upgradeRateLimit,
     validateRequest({ body: upgradeSessionSchema }),
     withErrorBoundary(async (request, response) => {
-      const body = request.body as { userId: string; deviceId?: string };
+      const body = request.body as {
+        userId: string;
+        legacySessionToken?: string;
+        deviceId?: string;
+      };
       const session = await authService.upgradeSession({
         userId: body.userId,
+        legacySessionToken: body.legacySessionToken,
         deviceId: toDeviceId(body.deviceId),
       });
 
