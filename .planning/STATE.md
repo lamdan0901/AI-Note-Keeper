@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: verifying
-stopped_at: Completed 05-03-PLAN.md
-last_updated: "2026-04-19T04:28:34.289Z"
+stopped_at: Completed 05-04-PLAN.md
+last_updated: "2026-04-19T04:44:02.807Z"
 last_activity: 2026-04-19
 progress:
   total_phases: 8
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 17
-  completed_plans: 16
-  percent: 94
+  completed_plans: 17
+  percent: 100
 ---
 
 # Project State
@@ -69,6 +69,7 @@ _Updated after each plan completion_
 | Phase 05 P02 | 10 min | 3 tasks | 7 files |
 | Phase 05 P02 | 10 min | 3 tasks | 7 files |
 | Phase 05 P03 | 18 min | 3 tasks | 6 files |
+| Phase 05 P04 | 12 min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -93,6 +94,9 @@ Recent decisions affecting current work:
 - [Phase 05]: Push retry policy remains parity-locked at two retries with 30s then 60s delays.
 - [Phase 05]: Push retries are isolated per device token so successful siblings are never retried.
 - [Phase 05]: UNREGISTERED tokens are deleted by scoped user/device identity and exhausted retries emit terminal failure records without blocking siblings.
+- [Phase 05]: Worker bootstrap exposes adapter health so phase-5 startup telemetry can be asserted in parity tests.
+- [Phase 05]: Phase-5 parity and security suites run through createApiServer with explicit service doubles for deterministic boundary assertions.
+- [Phase 05]: Security boundary checks lock rate_limit metadata, concurrent apply conflict safety, and stable non-2xx envelopes.
 
 ### Pending Todos
 
@@ -104,6 +108,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-19T04:28:34.285Z
-Stopped at: Completed 05-03-PLAN.md
+Last session: 2026-04-19T04:44:02.803Z
+Stopped at: Completed 05-04-PLAN.md
 Resume file: None
