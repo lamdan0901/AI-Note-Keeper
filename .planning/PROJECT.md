@@ -15,12 +15,12 @@ Migrate backend infrastructure to Express/PostgreSQL with no user-facing regress
 - ✓ Convex-backed auth, notes, reminders, subscriptions, push, and AI capture flows exist and are currently serving web/mobile clients — existing
 - ✓ Shared cross-surface domain utilities exist in packages/shared and are already relied on by runtime logic and tests — existing
 - ✓ Mobile offline/local persistence and notification workflows operate today and must be preserved across backend cutover — existing
+- ✓ Replace scheduler/crons with durable worker execution using pg-boss and a dedicated worker process — validated in Phase 05 (worker, push, merge, and throttle hardening)
 
 ### Active
 
 - [ ] Build and harden Express/PostgreSQL backend foundation with migration tooling, health probes, and standardized error contracts
 - [ ] Reach behavior parity for auth, notes sync, reminders, subscriptions, device tokens, and AI endpoints under HTTP APIs
-- [ ] Replace scheduler/crons with durable worker execution using pg-boss and a dedicated worker process
 - [ ] Execute deterministic Convex to PostgreSQL data migration with reconciliation and rollback checkpoints
 - [ ] Cut over web and mobile clients to Express APIs behind feature flags, then decommission Convex safely
 
@@ -81,4 +81,4 @@ This document evolves at phase transitions and milestone boundaries.
 
 ---
 
-_Last updated: 2026-04-18 after initialization_
+_Last updated: 2026-04-19 after Phase 05 completion_
