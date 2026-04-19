@@ -1,8 +1,13 @@
 import assert from 'node:assert/strict';
+import { mkdir, rm } from 'node:fs/promises';
 import test from 'node:test';
 
 import { runExportCommand } from '../migration-tools/commands/export.js';
 import { runMigrationToolCommand } from '../migration-tools/index.js';
+
+const TMP_DIR = 'tmp/export-suite';
+const OUTPUT_PATH = `${TMP_DIR}/export.json`;
+const CHECKPOINT_PATH = `${TMP_DIR}/export.checkpoint.json`;
 
 const canonicalOrder = [
   'users',
@@ -35,11 +40,18 @@ const stableSerialize = (value: unknown): string => {
   return JSON.stringify(sortObject(value));
 };
 
-// RED: This suite intentionally fails until deterministic export is implemented.
+test.beforeEach(async () => {
+  await mkdir(TMP_DIR, { recursive: true });
+});
+
+test.afterEach(async () => {
+  await rm(TMP_DIR, { recursive: true, force: true });
+});
+
 test('export uses canonical entity order', async () => {
   const result = await runExportCommand({
     dryRun: true,
-    outputPath: 'tmp/export.json',
+    outputPath: OUTPUT_PATH,
     batchSize: 500,
   });
 
@@ -48,12 +60,11 @@ test('export uses canonical entity order', async () => {
   assert.deepEqual(entityOrder, canonicalOrder);
 });
 
-// RED: This suite intentionally fails until deterministic export is implemented.
 test('repeated export from identical source returns byte-identical payload and checksum', async () => {
   const options = {
     dryRun: true,
-    outputPath: 'tmp/export.json',
-    checkpointPath: 'tmp/export.checkpoint.json',
+    outputPath: OUTPUT_PATH,
+    checkpointPath: CHECKPOINT_PATH,
     batchSize: 50,
   };
 
@@ -64,11 +75,10 @@ test('repeated export from identical source returns byte-identical payload and c
   assert.equal(stableSerialize(first.dryRun.data), stableSerialize(second.dryRun.data));
 });
 
-// RED: This suite intentionally fails until deterministic export is implemented.
 test('records inside each entity are sorted deterministically by stable keys', async () => {
   const result = await runExportCommand({
     dryRun: true,
-    outputPath: 'tmp/export.json',
+    outputPath: OUTPUT_PATH,
     batchSize: 100,
   });
 
@@ -90,7 +100,7 @@ test('migration-tools command parser forwards output path and batch size for exp
     'export',
     '--dry-run',
     '--output',
-    'tmp/export.json',
+    OUTPUT_PATH,
     '--batch-size',
     '50',
   ]);
@@ -98,6 +108,6 @@ test('migration-tools command parser forwards output path and batch size for exp
   assert.equal(commandResult.command, 'export');
 
   const data = commandResult.dryRun.data as Record<string, unknown>;
-  assert.equal(data.outputPath, 'tmp/export.json');
+  assert.equal(data.outputPath, OUTPUT_PATH);
   assert.equal(data.batchSize, 50);
 });

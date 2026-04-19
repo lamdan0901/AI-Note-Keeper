@@ -10,11 +10,17 @@ import {
   createReconcileReport,
 } from '../migration-tools/reporting.js';
 
-test('migration-tools export/import/reconcile commands parse options and execute adapters', async () => {
-  await mkdir('tmp', { recursive: true });
+const TMP_DIR = 'tmp/tools-suite';
+const SOURCE_PATH = `${TMP_DIR}/source.json`;
+const TARGET_PATH = `${TMP_DIR}/target.json`;
+const EXPORT_PATH = `${TMP_DIR}/export.json`;
+const CHECKPOINT_PATH = `${TMP_DIR}/import.checkpoint.json`;
+
+const writeReconcileFixtures = async (): Promise<void> => {
+  await mkdir(TMP_DIR, { recursive: true });
 
   await writeFile(
-    'tmp/source.json',
+    SOURCE_PATH,
     JSON.stringify(
       {
         command: 'export',
@@ -50,7 +56,7 @@ test('migration-tools export/import/reconcile commands parse options and execute
   );
 
   await writeFile(
-    'tmp/target.json',
+    TARGET_PATH,
     JSON.stringify(
       {
         generatedAt: '2026-04-19T00:00:00.000Z',
@@ -70,14 +76,24 @@ test('migration-tools export/import/reconcile commands parse options and execute
     ),
     'utf8',
   );
+};
 
+test.beforeEach(async () => {
+  await writeReconcileFixtures();
+});
+
+test.afterEach(async () => {
+  await rm(TMP_DIR, { recursive: true, force: true });
+});
+
+test('migration-tools export/import/reconcile commands parse options and execute adapters', async () => {
   const exportResult = await runMigrationToolCommand([
     'node',
     'migration-tools',
     'export',
     '--dry-run',
     '--output',
-    'tmp/export.json',
+    EXPORT_PATH,
     '--batch-size',
     '500',
   ]);
@@ -88,9 +104,9 @@ test('migration-tools export/import/reconcile commands parse options and execute
     'import',
     '--dry-run',
     '--input',
-    'tmp/export.json',
+    EXPORT_PATH,
     '--checkpoint',
-    'tmp/import.checkpoint.json',
+    CHECKPOINT_PATH,
   ]);
 
   const reconcileResult = await runMigrationToolCommand([
@@ -99,9 +115,9 @@ test('migration-tools export/import/reconcile commands parse options and execute
     'reconcile',
     '--dry-run',
     '--source',
-    'tmp/source.json',
+    SOURCE_PATH,
     '--target',
-    'tmp/target.json',
+    TARGET_PATH,
     '--max-count-drift',
     '2',
     '--max-checksum-mismatch',
@@ -116,8 +132,6 @@ test('migration-tools export/import/reconcile commands parse options and execute
   assert.equal(reconcileResult.report.thresholds.maxCountDrift, 2);
   assert.equal(reconcileResult.report.thresholds.maxChecksumMismatch, 1);
   assert.equal(reconcileResult.report.thresholds.maxSampleDrift, 1);
-
-  await rm('tmp', { recursive: true, force: true });
 });
 
 test('dry-run artifacts and summaries are deterministic for identical input', () => {

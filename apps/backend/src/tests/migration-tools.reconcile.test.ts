@@ -4,7 +4,7 @@ import test from 'node:test';
 
 import { runReconcileCommand } from '../migration-tools/commands/reconcile.js';
 
-const TMP_DIR = 'tmp';
+const TMP_DIR = 'tmp/reconcile-suite';
 const SOURCE_PATH = `${TMP_DIR}/source-reconcile.json`;
 const TARGET_PATH = `${TMP_DIR}/target-reconcile.json`;
 
@@ -64,7 +64,6 @@ test.afterEach(async () => {
   await rm(TMP_DIR, { recursive: true, force: true });
 });
 
-// RED: no-op reconcile currently returns zeroed placeholder metrics.
 test('reconcile computes source/target counts and checksum mismatches from real snapshots', async () => {
   const result = await runReconcileCommand({
     dryRun: true,
@@ -83,7 +82,6 @@ test('reconcile computes source/target counts and checksum mismatches from real 
   assert.ok(result.report.checksums.mismatch > 0);
 });
 
-// RED: no-op reconcile currently reports pass=true with zero sample drift.
 test('reconcile is fail-closed when sample drift exceeds configured threshold', async () => {
   const result = await runReconcileCommand({
     dryRun: true,
@@ -99,4 +97,3 @@ test('reconcile is fail-closed when sample drift exceeds configured threshold', 
   assert.equal(result.report.sampling.drift > 0, true);
   assert.equal(result.report.pass, false);
 });
-

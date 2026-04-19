@@ -11,7 +11,7 @@ import type {
 } from '../migration-tools/contracts.js';
 import { runMigrationToolCommand } from '../migration-tools/index.js';
 
-const TMP_DIR = 'tmp';
+const TMP_DIR = 'tmp/import-suite';
 const INPUT_PATH = `${TMP_DIR}/import-export.json`;
 const CHECKPOINT_PATH = `${TMP_DIR}/import.checkpoint.json`;
 
@@ -227,4 +227,3 @@ test('import command parser forwards checkpoint and batch size for dry-run', asy
   assert.equal(data.checkpointPath, CHECKPOINT_PATH);
   assert.equal(data.batchSize, 100);
 });
-
