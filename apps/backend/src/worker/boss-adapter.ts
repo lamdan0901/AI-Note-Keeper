@@ -2,12 +2,19 @@ import type { WorkerAdapter, WorkerHealthSnapshot, WorkerRuntimeStatus } from '.
 import { createCronStateRepository } from '../jobs/reminders/cron-state-repository.js';
 import { createReminderDispatchJob, type ReminderDispatchJob } from '../jobs/reminders/dispatch-due-reminders.js';
 import { createDueReminderScanner } from '../jobs/reminders/due-reminder-scanner.js';
+import { createPushDeliveryService } from '../jobs/push/push-delivery-service.js';
+import { createPushJobHandler, type PushJobHandler } from '../jobs/push/push-job-handler.js';
 import type {
   CronStateRepository,
   DueReminderScanner,
   ReminderDispatchQueue,
   ReminderQueueEnqueueResult,
 } from '../jobs/reminders/contracts.js';
+import type {
+  PushRetryScheduler,
+  PushTerminalFailureRecord,
+  PushTerminalFailureRecorder,
+} from '../jobs/push/contracts.js';
 
 type AdapterLogger = Readonly<{
   info: (message: string) => void;
@@ -29,20 +36,29 @@ export type PgBossAdapterOptions = Readonly<{
   scheduler?: Readonly<{
     setInterval: (callback: () => void, ms: number) => NodeJS.Timeout;
     clearInterval: (handle: NodeJS.Timeout) => void;
+    setTimeout?: (callback: () => void, ms: number) => NodeJS.Timeout;
+    clearTimeout?: (handle: NodeJS.Timeout) => void;
   }>;
   queue?: ReminderDispatchQueue;
   scanner?: DueReminderScanner;
   cronStateRepository?: CronStateRepository;
   dispatchJob?: ReminderDispatchJob;
+  pushJobHandler?: PushJobHandler;
+  pushRetryScheduler?: PushRetryScheduler;
+  terminalFailureRecorder?: PushTerminalFailureRecorder;
   now?: () => Date;
 }>;
 
 const defaultScheduler: Readonly<{
   setInterval: (callback: () => void, ms: number) => NodeJS.Timeout;
   clearInterval: (handle: NodeJS.Timeout) => void;
+  setTimeout: (callback: () => void, ms: number) => NodeJS.Timeout;
+  clearTimeout: (handle: NodeJS.Timeout) => void;
 }> = {
   setInterval: (callback, ms) => setInterval(callback, ms),
   clearInterval: (handle) => clearInterval(handle),
+  setTimeout: (callback, ms) => setTimeout(callback, ms),
+  clearTimeout: (handle) => clearTimeout(handle),
 };
 
 const createInMemoryDispatchQueue = (logger: AdapterLogger): ReminderDispatchQueue => {
@@ -69,6 +85,12 @@ const createInMemoryDispatchQueue = (logger: AdapterLogger): ReminderDispatchQue
 export const createPgBossAdapter = (options: PgBossAdapterOptions = {}): WorkerAdapter => {
   const logger = options.logger ?? defaultLogger;
   const scheduler = options.scheduler ?? defaultScheduler;
+  const setTimeoutFn = scheduler.setTimeout ?? ((callback: () => void, ms: number) => setTimeout(callback, ms));
+  const clearTimeoutFn =
+    scheduler.clearTimeout ??
+    ((handle: NodeJS.Timeout) => {
+      clearTimeout(handle);
+    });
   const dispatchIntervalMs = options.dispatchIntervalMs ?? 60_000;
   const queue = options.queue ?? createInMemoryDispatchQueue(logger);
   const scanner = options.scanner ?? createDueReminderScanner();
@@ -81,8 +103,86 @@ export const createPgBossAdapter = (options: PgBossAdapterOptions = {}): WorkerA
       queue,
       now: options.now,
     });
+  const terminalFailures: PushTerminalFailureRecord[] = [];
+  const terminalFailureRecorder =
+    options.terminalFailureRecorder ??
+    ({
+      record: async (failure) => {
+        terminalFailures.push(failure);
+        logger.error(
+          `[worker] terminal push failure token=${failure.tokenIdentity} reason=${failure.reason}`,
+        );
+      },
+    } satisfies PushTerminalFailureRecorder);
 
   let status: WorkerRuntimeStatus = 'idle';
+  let inFlightPushJob: Promise<void> | null = null;
+  let pushRetriesScheduled = 0;
+  let pushRetriesExecuted = 0;
+  const scheduledPushRetryHandles = new Set<NodeJS.Timeout>();
+  let pushJobHandlerRef: PushJobHandler | null = null;
+
+  const pushRetryScheduler =
+    options.pushRetryScheduler ??
+    ({
+      scheduleRetry: async ({ delayMs, job, jobKey }) => {
+        pushRetriesScheduled += 1;
+        logger.info(
+          `[worker] scheduled push retry job=${jobKey} delay=${Math.round(delayMs / 1000)}s`,
+        );
+
+        let retryHandle: NodeJS.Timeout;
+        retryHandle = setTimeoutFn(() => {
+          scheduledPushRetryHandles.delete(retryHandle);
+
+          if (status !== 'running' || pushJobHandlerRef === null) {
+            return;
+          }
+
+          pushRetriesExecuted += 1;
+          inFlightPushJob = (async () => {
+            try {
+              await pushJobHandlerRef.handle({
+                userId: job.userId,
+                reminderId: job.reminderId,
+                changeEventId: job.changeEventId,
+                isTrigger: job.isTrigger,
+                attempt: job.attempt,
+                tokens: [job.token],
+              });
+            } catch (error) {
+              logger.error(`[worker] push retry execution failed for job=${jobKey}`, error);
+            } finally {
+              inFlightPushJob = null;
+            }
+          })();
+
+          void inFlightPushJob;
+        }, delayMs);
+
+        scheduledPushRetryHandles.add(retryHandle);
+      },
+    } satisfies PushRetryScheduler);
+
+  const pushJobHandler =
+    options.pushJobHandler ??
+    createPushJobHandler({
+      deliveryService: createPushDeliveryService({
+        provider: {
+          sendToToken: async () => ({
+            ok: true,
+          }),
+        },
+      }),
+      deviceTokensRepository: {
+        deleteByDeviceIdForUser: async () => false,
+      },
+      retryScheduler: pushRetryScheduler,
+      terminalFailureRecorder,
+    });
+
+  pushJobHandlerRef = pushJobHandler;
+
   let dispatchHandle: NodeJS.Timeout | null = null;
   let inFlightDispatch: Promise<void> | null = null;
   let lastDispatchAt: string | null = null;
@@ -96,7 +196,12 @@ export const createPgBossAdapter = (options: PgBossAdapterOptions = {}): WorkerA
       lastDispatchAt,
       lastDispatchError,
       dispatchInFlight: inFlightDispatch !== null,
+      pushJobInFlight: inFlightPushJob !== null,
       skippedTicks,
+      pushRetriesScheduled,
+      pushRetriesExecuted,
+      pushRetryTimersPending: scheduledPushRetryHandles.size,
+      terminalPushFailures: terminalFailures.length,
     },
   });
 
@@ -137,7 +242,7 @@ export const createPgBossAdapter = (options: PgBossAdapterOptions = {}): WorkerA
       }
 
       status = 'running';
-      logger.info('[worker] adapter started (dispatch enabled)');
+      logger.info('[worker] adapter started (dispatch + push handlers enabled)');
 
       dispatchHandle = scheduler.setInterval(() => {
         void runDispatchCycle();
@@ -155,8 +260,18 @@ export const createPgBossAdapter = (options: PgBossAdapterOptions = {}): WorkerA
         dispatchHandle = null;
       }
 
+      for (const retryHandle of scheduledPushRetryHandles) {
+        clearTimeoutFn(retryHandle);
+      }
+
+      scheduledPushRetryHandles.clear();
+
       if (inFlightDispatch) {
         await inFlightDispatch;
+      }
+
+      if (inFlightPushJob) {
+        await inFlightPushJob;
       }
 
       status = 'stopped';
