@@ -76,7 +76,14 @@ Plans:
 4. Users can create, update, trash, restore, and hard-delete subscriptions while reminder scheduling fields stay consistent.
 5. Device token upsert and delete operations are idempotent, and notification_ledger behavior remains mobile-local only with no PostgreSQL persistence or API exposure.
 6. AI parse and clarify endpoints return parity-compatible results with validation, rate limits, and deterministic fallback when providers fail.
-   **Plans**: TBD
+   **Plans**: 4 plans
+
+Plans:
+
+- [ ] 03-01-PLAN.md - Build authenticated notes sync parity with LWW, idempotency, and trash lifecycle behaviors.
+- [ ] 03-02-PLAN.md - Implement subscription lifecycle and Android-only device-token idempotency APIs with ownership guards.
+- [ ] 03-03-PLAN.md - Implement AI parse/clarify parity endpoints with deterministic fallback, normalization, and rate limits.
+- [ ] 03-04-PLAN.md - Mount phase-3 domains in API runtime and add HTTP parity/security regression suites.
 
 ### Phase 4: Reminder Domain Parity
 
@@ -157,3 +164,4 @@ Plans:
 | 6. Data Migration Execution and Reconciliation | 0/TBD          | Not started | -          |
 | 7. Web and Mobile Cutover to Express APIs      | 0/TBD          | Not started | -          |
 | 8. Convex Decommission and Cleanup             | 0/TBD          | Not started | -          |
+
