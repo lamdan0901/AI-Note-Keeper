@@ -2,6 +2,7 @@ import { uuidv4 } from '../../../../packages/shared/utils/uuid';
 
 const WEB_AUTH_SESSION_KEY = 'web-auth-session';
 const WEB_LOCAL_USER_KEY = 'web-local-user-id';
+const WEB_GUEST_USER_ID_PREFIX = 'web-guest-';
 
 export type WebAuthSession = {
   userId: string;
@@ -19,7 +20,8 @@ export const getOrCreateWebLocalUserId = (): string => {
   if (existing) {
     return existing;
   }
-  const next = uuidv4();
+
+  const next = `${WEB_GUEST_USER_ID_PREFIX}${uuidv4()}`;
   window.localStorage.setItem(WEB_LOCAL_USER_KEY, next);
   return next;
 };

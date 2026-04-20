@@ -1,7 +1,10 @@
 import { Router } from 'express';
 import { z } from 'zod';
 
-import { requireAccessUser, type AuthenticatedRequest } from '../auth/access-middleware.js';
+import {
+  requireAccessUserOrWebGuest,
+  type AuthenticatedRequest,
+} from '../auth/access-middleware.js';
 import { validateRequest, withErrorBoundary } from '../middleware/validate.js';
 import { createSubscriptionsService, type SubscriptionsService } from './service.js';
 import type { BillingCycle, SubscriptionStatus } from './contracts.js';
@@ -52,7 +55,7 @@ export const createSubscriptionsRoutes = (
 
   router.get(
     '/',
-    requireAccessUser(),
+    requireAccessUserOrWebGuest(),
     withErrorBoundary(async (request, response) => {
       const subscriptions = await service.list({
         userId: getUserId(request as AuthenticatedRequest),
@@ -63,7 +66,7 @@ export const createSubscriptionsRoutes = (
 
   router.get(
     '/trash',
-    requireAccessUser(),
+    requireAccessUserOrWebGuest(),
     withErrorBoundary(async (request, response) => {
       const subscriptions = await service.listTrashed({
         userId: getUserId(request as AuthenticatedRequest),
@@ -74,7 +77,7 @@ export const createSubscriptionsRoutes = (
 
   router.post(
     '/',
-    requireAccessUser(),
+    requireAccessUserOrWebGuest(),
     validateRequest({ body: createSubscriptionSchema }),
     withErrorBoundary(async (request, response) => {
       const userId = getUserId(request as AuthenticatedRequest);
@@ -116,7 +119,7 @@ export const createSubscriptionsRoutes = (
 
   router.patch(
     '/:subscriptionId',
-    requireAccessUser(),
+    requireAccessUserOrWebGuest(),
     validateRequest({ params: subscriptionIdParamsSchema, body: updateSubscriptionSchema }),
     withErrorBoundary(async (request, response) => {
       const userId = getUserId(request as AuthenticatedRequest);
@@ -156,7 +159,7 @@ export const createSubscriptionsRoutes = (
 
   router.delete(
     '/trash/empty',
-    requireAccessUser(),
+    requireAccessUserOrWebGuest(),
     withErrorBoundary(async (request, response) => {
       const userId = getUserId(request as AuthenticatedRequest);
       const deleted = await service.emptyTrash({ userId });
@@ -166,7 +169,7 @@ export const createSubscriptionsRoutes = (
 
   router.delete(
     '/:subscriptionId',
-    requireAccessUser(),
+    requireAccessUserOrWebGuest(),
     validateRequest({ params: subscriptionIdParamsSchema }),
     withErrorBoundary(async (request, response) => {
       const userId = getUserId(request as AuthenticatedRequest);
@@ -178,7 +181,7 @@ export const createSubscriptionsRoutes = (
 
   router.post(
     '/:subscriptionId/restore',
-    requireAccessUser(),
+    requireAccessUserOrWebGuest(),
     validateRequest({ params: subscriptionIdParamsSchema }),
     withErrorBoundary(async (request, response) => {
       const userId = getUserId(request as AuthenticatedRequest);
@@ -190,7 +193,7 @@ export const createSubscriptionsRoutes = (
 
   router.delete(
     '/:subscriptionId/permanent',
-    requireAccessUser(),
+    requireAccessUserOrWebGuest(),
     validateRequest({ params: subscriptionIdParamsSchema }),
     withErrorBoundary(async (request, response) => {
       const userId = getUserId(request as AuthenticatedRequest);

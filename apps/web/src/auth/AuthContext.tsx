@@ -16,7 +16,7 @@ import {
   saveWebAuthSession,
   WebAuthSession,
 } from './session';
-import { createWebAuthHttpClient } from './httpClient';
+import { createWebAuthHttpClient, WebAuthHttpError } from './httpClient';
 
 type TransitionState = 'idle' | 'preflight' | 'awaiting-strategy' | 'applying' | 'logout-snapshot';
 
@@ -56,18 +56,19 @@ const WebAuthContext = createContext<WebAuthContextValue | undefined>(undefined)
 
 export const WebAuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [localUserId] = useState(() => getOrCreateWebLocalUserId());
-  const [session, setSession] = useState<WebAuthSession | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const initialSession = useMemo(() => loadWebAuthSession(), []);
+  const [session, setSession] = useState<WebAuthSession | null>(() => initialSession);
+  const [isLoading, setIsLoading] = useState(() => initialSession === null);
   const [transitionState, setTransitionState] = useState<TransitionState>('idle');
   const [pendingMerge, setPendingMerge] = useState<PendingMerge | null>(null);
-  const currentAccessTokenRef = useRef<string | null>(null);
+  const currentAccessTokenRef = useRef<string | null>(initialSession?.accessToken ?? null);
   const webAuthClient = useMemo(() => createWebAuthHttpClient(), []);
 
   useEffect(() => {
     let cancelled = false;
 
     const bootstrap = async () => {
-      const existing = loadWebAuthSession();
+      const existing = initialSession;
       if (existing) {
         if (!cancelled) {
           currentAccessTokenRef.current = existing.accessToken ?? null;
@@ -230,24 +231,16 @@ export const WebAuthProvider: React.FC<{ children: React.ReactNode }> = ({ child
       saveWebAuthSession(nextSession);
       setSession(nextSession);
       return refreshed.accessToken;
-    } catch {
-      currentAccessTokenRef.current = null;
-      setSession((previousSession) => {
-        if (!previousSession) {
-          return previousSession;
-        }
-
-        const downgradedSession: WebAuthSession = {
-          ...previousSession,
-          accessToken: undefined,
-        };
-        saveWebAuthSession(downgradedSession);
-        return downgradedSession;
-      });
+    } catch (error) {
+      if (error instanceof WebAuthHttpError && error.status === 401) {
+        clearWebAuthSession();
+        currentAccessTokenRef.current = null;
+        setSession(null);
+      }
 
       return null;
     }
-  }, [webAuthClient]);
+  }, [initialSession, webAuthClient]);
 
   const register = useCallback(
     async (username: string, password: string): Promise<AuthResult> => {
@@ -260,7 +253,11 @@ export const WebAuthProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
 
       try {
-        const result = await webAuthClient.register({ username, password });
+        const result = await webAuthClient.register({
+          username,
+          password,
+          guestUserId: localUserId,
+        });
         return await handleAuthSuccess({
           accountUserId: result.userId,
           accountUsername: result.username,
@@ -274,7 +271,7 @@ export const WebAuthProvider: React.FC<{ children: React.ReactNode }> = ({ child
         };
       }
     },
-    [handleAuthSuccess, webAuthClient],
+    [handleAuthSuccess, localUserId, webAuthClient],
   );
 
   const resolvePendingMerge = useCallback(

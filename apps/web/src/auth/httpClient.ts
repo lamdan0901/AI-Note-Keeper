@@ -9,6 +9,7 @@ type AuthCredentials = Readonly<{
   username: string;
   password: string;
   deviceId?: string;
+  guestUserId?: string;
 }>;
 
 type UpgradeSessionInput = Readonly<{
@@ -27,6 +28,16 @@ const AUTH_BASE_URL = import.meta.env.VITE_AUTH_API_BASE_URL as string | undefin
 const normalizeBaseUrl = (baseUrl: string): string => {
   return baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
 };
+
+export class WebAuthHttpError extends Error {
+  public readonly status: number;
+
+  public constructor(message: string, status: number) {
+    super(message);
+    this.name = 'WebAuthHttpError';
+    this.status = status;
+  }
+}
 
 const parseErrorMessage = async (response: Response): Promise<string> => {
   const payload = (await response.json().catch(() => null)) as { message?: unknown } | null;
@@ -54,7 +65,7 @@ const postJson = async <T>(path: string, body: Record<string, unknown>): Promise
   });
 
   if (!response.ok) {
-    throw new Error(await parseErrorMessage(response));
+    throw new WebAuthHttpError(await parseErrorMessage(response), response.status);
   }
 
   if (response.status === 204) {

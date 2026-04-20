@@ -3,10 +3,32 @@ import { z } from 'zod';
 
 import type { TokenPair } from './contracts.js';
 
+const WEB_GUEST_USER_ID_PREFIX = 'web-guest-';
+const UUID_V4_LIKE_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+const isWebGuestUserId = (value: string): boolean => {
+  if (value.startsWith(WEB_GUEST_USER_ID_PREFIX)) {
+    const suffix = value.slice(WEB_GUEST_USER_ID_PREFIX.length);
+    return UUID_V4_LIKE_PATTERN.test(suffix);
+  }
+
+  // Backward compatibility for older installs that stored raw UUID guest IDs.
+  return UUID_V4_LIKE_PATTERN.test(value);
+};
+
 export const authCredentialsSchema = z.object({
   username: z.string().min(3).max(30),
   password: z.string().min(8).max(128),
   deviceId: z.string().min(1).max(128).optional(),
+  guestUserId: z
+    .string()
+    .min(1)
+    .max(128)
+    .optional()
+    .refine((value) => value === undefined || isWebGuestUserId(value), {
+      message: 'guestUserId must be a valid web guest identifier',
+    }),
 });
 
 export const refreshSchema = z.object({

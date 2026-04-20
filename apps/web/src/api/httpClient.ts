@@ -6,6 +6,8 @@ import type {
   WebApiClient,
 } from './contracts';
 
+const WEB_LOCAL_USER_KEY = 'web-local-user-id';
+
 const readApiBaseUrl = (): string | undefined => {
   return (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? process.env.VITE_API_BASE_URL;
 };
@@ -25,6 +27,23 @@ const toApiUrl = (path: string): string => {
   }
 
   return `${baseUrl}/${path}`;
+};
+
+const readGuestUserId = (): string | null => {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  try {
+    const value = window.localStorage.getItem(WEB_LOCAL_USER_KEY);
+    if (!value || value.length === 0) {
+      return null;
+    }
+
+    return value;
+  } catch {
+    return null;
+  }
 };
 
 const toErrorMessage = (status: number, payload: ApiErrorPayload | null): string => {
@@ -87,6 +106,11 @@ const buildHeaders = (
 
   if (accessToken) {
     nextHeaders.authorization = `Bearer ${accessToken}`;
+  } else {
+    const guestUserId = readGuestUserId();
+    if (guestUserId && !nextHeaders['x-guest-user-id']) {
+      nextHeaders['x-guest-user-id'] = guestUserId;
+    }
   }
 
   return nextHeaders;

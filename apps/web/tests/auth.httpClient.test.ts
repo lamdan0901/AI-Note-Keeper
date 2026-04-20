@@ -3,9 +3,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createWebApiClient, WebApiError } from '../src/api/httpClient';
 
 describe('web api http client', () => {
+  const previousWindow = (globalThis as { window?: unknown }).window;
+
   afterEach(() => {
     vi.unstubAllEnvs();
     vi.restoreAllMocks();
+    (globalThis as { window?: unknown }).window = previousWindow;
   });
 
   it('attaches bearer access token when available', async () => {
@@ -32,6 +35,38 @@ describe('web api http client', () => {
     expect((requestInit.headers as Record<string, string>).authorization).toBe(
       'Bearer access-token-1',
     );
+    expect((requestInit.headers as Record<string, string>)['x-guest-user-id']).toBeUndefined();
+  });
+
+  it('attaches guest user header when no bearer token is available', async () => {
+    vi.stubEnv('VITE_API_BASE_URL', 'http://localhost:3000');
+
+    (globalThis as { window?: unknown }).window = {
+      localStorage: {
+        getItem: (key: string): string | null =>
+          key === 'web-local-user-id' ? 'web-guest-123e4567-e89b-12d3-a456-426614174000' : null,
+      },
+    };
+
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+
+    const client = createWebApiClient({
+      getAccessToken: () => null,
+      refreshAccessToken: async () => null,
+    });
+
+    await client.requestJson('/api/notes');
+
+    const requestInit = fetchSpy.mock.calls[0]?.[1] as RequestInit;
+    expect((requestInit.headers as Record<string, string>)['x-guest-user-id']).toBe(
+      'web-guest-123e4567-e89b-12d3-a456-426614174000',
+    );
+    expect((requestInit.headers as Record<string, string>).authorization).toBeUndefined();
   });
 
   it('retries exactly once after refresh on 401', async () => {

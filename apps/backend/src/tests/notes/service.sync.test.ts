@@ -3,7 +3,11 @@ import test from 'node:test';
 
 import type { Request } from 'express';
 
-import { requireAccessUser, type AuthenticatedRequest } from '../../auth/access-middleware.js';
+import {
+  requireAccessUser,
+  requireAccessUserOrWebGuest,
+  type AuthenticatedRequest,
+} from '../../auth/access-middleware.js';
 import type { NoteRecord, NoteSyncChange } from '../../notes/contracts.js';
 import { createNoteChangeEventsRepository } from '../../notes/repositories/note-change-events-repository.js';
 import type { NoteChangeEventsRepository } from '../../notes/repositories/note-change-events-repository.js';
@@ -208,6 +212,76 @@ test('requireAccessUser injects authenticated user from access token', async () 
     userId: 'user-1',
     username: 'alice',
   });
+});
+
+test('requireAccessUserOrWebGuest injects guest user context for valid web guest headers', async () => {
+  const middleware = requireAccessUserOrWebGuest({
+    resolveWebGuestUser: async (guestUserId: string) => {
+      return {
+        userId: guestUserId,
+        username: `__web_guest_user__${guestUserId}`,
+      };
+    },
+  });
+
+  const request = {
+    header: (name: string) => {
+      const normalized = name.toLowerCase();
+      if (normalized === 'x-client-platform') {
+        return 'web';
+      }
+
+      if (normalized === 'x-guest-user-id') {
+        return 'web-guest-123e4567-e89b-12d3-a456-426614174000';
+      }
+
+      return undefined;
+    },
+  } as unknown as Request;
+
+  const error = await new Promise<unknown>((resolve) => {
+    middleware(request, {} as never, (nextError) => {
+      resolve(nextError);
+    });
+  });
+
+  assert.equal(error, undefined);
+  const authenticated = request as AuthenticatedRequest;
+  assert.equal(authenticated.authUser.userId, 'web-guest-123e4567-e89b-12d3-a456-426614174000');
+  assert.match(authenticated.authUser.username, /__web_guest_user__/);
+});
+
+test('requireAccessUserOrWebGuest rejects malformed web guest ids', async () => {
+  const middleware = requireAccessUserOrWebGuest({
+    resolveWebGuestUser: async () => {
+      throw new Error('unexpected guest resolver call');
+    },
+  });
+
+  const request = {
+    header: (name: string) => {
+      const normalized = name.toLowerCase();
+      if (normalized === 'x-client-platform') {
+        return 'web';
+      }
+
+      if (normalized === 'x-guest-user-id') {
+        return 'invalid-guest';
+      }
+
+      return undefined;
+    },
+  } as unknown as Request;
+
+  const error = await new Promise<unknown>((resolve) => {
+    middleware(request, {} as never, (nextError) => {
+      resolve(nextError);
+    });
+  });
+
+  assert.equal(typeof error, 'object');
+  assert.equal((error as { code?: string }).code, 'auth');
+  assert.match((error as { message?: string }).message ?? '', /invalid guest user id/i);
 });
 
 test('notes repository ownership predicates scope mutations by note id and user id', async () => {

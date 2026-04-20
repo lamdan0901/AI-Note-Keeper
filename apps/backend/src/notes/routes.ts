@@ -1,7 +1,10 @@
 import { Router } from 'express';
 import { z } from 'zod';
 
-import { requireAccessUser, type AuthenticatedRequest } from '../auth/access-middleware.js';
+import {
+  requireAccessUserOrWebGuest,
+  type AuthenticatedRequest,
+} from '../auth/access-middleware.js';
 import { validateRequest, withErrorBoundary } from '../middleware/validate.js';
 import { createNotesService, type NotesService } from './service.js';
 import type { NoteSyncChange } from './contracts.js';
@@ -59,7 +62,7 @@ export const createNotesRoutes = (service: NotesService = createNotesService()):
 
   router.get(
     '/',
-    requireAccessUser(),
+    requireAccessUserOrWebGuest(),
     withErrorBoundary(async (request, response) => {
       const userId = requireUserId(request as AuthenticatedRequest);
       const notes = await service.listNotes({ userId });
@@ -69,7 +72,7 @@ export const createNotesRoutes = (service: NotesService = createNotesService()):
 
   router.post(
     '/sync',
-    requireAccessUser(),
+    requireAccessUserOrWebGuest(),
     validateRequest({ body: syncBodySchema }),
     withErrorBoundary(async (request, response) => {
       const userId = requireUserId(request as AuthenticatedRequest);
@@ -92,7 +95,7 @@ export const createNotesRoutes = (service: NotesService = createNotesService()):
 
   router.delete(
     '/trash/empty',
-    requireAccessUser(),
+    requireAccessUserOrWebGuest(),
     withErrorBoundary(async (request, response) => {
       const userId = requireUserId(request as AuthenticatedRequest);
       const deleted = await service.emptyTrash({ userId });
@@ -102,7 +105,7 @@ export const createNotesRoutes = (service: NotesService = createNotesService()):
 
   router.post(
     '/:noteId/restore',
-    requireAccessUser(),
+    requireAccessUserOrWebGuest(),
     validateRequest({ params: noteIdParamsSchema }),
     withErrorBoundary(async (request, response) => {
       const userId = requireUserId(request as AuthenticatedRequest);
@@ -114,7 +117,7 @@ export const createNotesRoutes = (service: NotesService = createNotesService()):
 
   router.delete(
     '/:noteId/permanent',
-    requireAccessUser(),
+    requireAccessUserOrWebGuest(),
     validateRequest({ params: noteIdParamsSchema }),
     withErrorBoundary(async (request, response) => {
       const userId = requireUserId(request as AuthenticatedRequest);
@@ -126,7 +129,7 @@ export const createNotesRoutes = (service: NotesService = createNotesService()):
 
   router.delete(
     '/:noteId',
-    requireAccessUser(),
+    requireAccessUserOrWebGuest(),
     validateRequest({ params: noteIdParamsSchema }),
     withErrorBoundary(async (request, response) => {
       const userId = requireUserId(request as AuthenticatedRequest);

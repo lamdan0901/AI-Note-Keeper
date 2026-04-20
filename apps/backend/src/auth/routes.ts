@@ -137,11 +137,17 @@ export const createAuthRoutes = (authService: AuthService = createAuthService())
     registerRateLimit,
     validateRequest({ body: authCredentialsSchema }),
     withErrorBoundary(async (request, response) => {
-      const body = request.body as { username: string; password: string; deviceId?: string };
+      const body = request.body as {
+        username: string;
+        password: string;
+        deviceId?: string;
+        guestUserId?: string;
+      };
       const session = await authService.register({
         username: body.username,
         password: body.password,
         deviceId: toDeviceId(body.deviceId),
+        guestUserId: typeof body.guestUserId === 'string' ? body.guestUserId : undefined,
       });
 
       const transport = writeAuthTransport(request, response, session.tokens);

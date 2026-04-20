@@ -308,3 +308,36 @@ test('upgrade-session rejects tokenless legacy upgrade requests by default', asy
     await server.close();
   }
 });
+
+test('register forwards guestUserId for guest-to-account data sync', async () => {
+  const { authService, calls } = createAuthServiceDouble();
+  const server = await startServer(authService);
+
+  try {
+    const response = await fetch(`${server.baseUrl}/api/auth/register`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-client-platform': 'mobile',
+      },
+      body: JSON.stringify({
+        username: 'alice',
+        password: 'password-123',
+        deviceId: 'device-1',
+        guestUserId: 'web-guest-123e4567-e89b-12d3-a456-426614174000',
+      }),
+    });
+
+    assert.equal(response.status, 201);
+
+    const registerCall = calls.find((entry) => entry.method === 'register');
+    assert.deepStrictEqual(registerCall?.args, {
+      username: 'alice',
+      password: 'password-123',
+      deviceId: 'device-1',
+      guestUserId: 'web-guest-123e4567-e89b-12d3-a456-426614174000',
+    });
+  } finally {
+    await server.close();
+  }
+});
