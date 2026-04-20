@@ -2,6 +2,7 @@ import type { Reminder } from '../../../../packages/shared/types/reminder';
 import { computeScheduleHash } from './scheduleHash';
 import { deleteScheduleState, getScheduleState, upsertScheduleState } from './scheduleLedger';
 import { logScheduleEvent } from './logging';
+import type { DbLike } from './noteScheduleLedger';
 
 export type ReconcileResultStatus = 'unchanged' | 'scheduled' | 'canceled' | 'error';
 
@@ -16,12 +17,6 @@ export type ReconcileResult = {
 export type ScheduleOperations = {
   schedule: (reminder: Reminder, triggerAt: number) => Promise<string[]>;
   cancel: (notificationIds: string[]) => Promise<void>;
-};
-
-type DbLike = {
-  getFirstAsync<T>(sql: string, params?: unknown[]): Promise<T | null>;
-  getAllAsync<T>(sql: string, params?: unknown[]): Promise<T[]>;
-  runAsync(sql: string, params?: unknown[]): Promise<void>;
 };
 
 const resolveTriggerAt = (reminder: Reminder): number =>

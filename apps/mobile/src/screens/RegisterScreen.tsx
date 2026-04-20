@@ -202,7 +202,7 @@ const createStyles = (theme: Theme) =>
       borderColor: theme.colors.border,
       borderRadius: theme.borderRadius.md,
       padding: theme.spacing.md,
-      fontSize: theme.typography.sizes.md,
+      fontSize: theme.typography.sizes.base,
       color: theme.colors.text,
       backgroundColor: theme.colors.surface,
     },
@@ -219,7 +219,7 @@ const createStyles = (theme: Theme) =>
     },
     buttonText: {
       color: '#fff',
-      fontSize: theme.typography.sizes.md,
+      fontSize: theme.typography.sizes.base,
       fontWeight: '600',
     },
     footer: {

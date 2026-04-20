@@ -1,9 +1,18 @@
+import { uuidv4 } from '../../../../packages/shared/utils/uuid';
+
 const WEB_AUTH_SESSION_KEY = 'web-auth-session';
 const WEB_LOCAL_USER_KEY = 'web-local-user-id';
+const WEB_GUEST_USER_ID_PREFIX = 'web-guest-';
 
 export type WebAuthSession = {
   userId: string;
   username: string;
+  accessToken?: string;
+};
+
+export type LegacyWebUpgradeSession = {
+  userId: string;
+  legacySessionToken?: string;
 };
 
 export const getOrCreateWebLocalUserId = (): string => {
@@ -11,7 +20,8 @@ export const getOrCreateWebLocalUserId = (): string => {
   if (existing) {
     return existing;
   }
-  const next = crypto.randomUUID();
+
+  const next = `${WEB_GUEST_USER_ID_PREFIX}${uuidv4()}`;
   window.localStorage.setItem(WEB_LOCAL_USER_KEY, next);
   return next;
 };
@@ -19,14 +29,50 @@ export const getOrCreateWebLocalUserId = (): string => {
 export const loadWebAuthSession = (): WebAuthSession | null => {
   const raw = window.localStorage.getItem(WEB_AUTH_SESSION_KEY);
   if (!raw) return null;
-  const parsed = JSON.parse(raw) as Partial<WebAuthSession>;
-  if (!parsed.userId || !parsed.username) {
+  try {
+    const parsed = JSON.parse(raw) as Partial<WebAuthSession>;
+    if (!parsed.userId || !parsed.username) {
+      return null;
+    }
+
+    return {
+      userId: parsed.userId,
+      username: parsed.username,
+      accessToken: parsed.accessToken,
+    };
+  } catch {
+    window.localStorage.removeItem(WEB_AUTH_SESSION_KEY);
     return null;
   }
-  return {
-    userId: parsed.userId,
-    username: parsed.username,
-  };
+};
+
+export const loadLegacyWebAuthUpgradeSession = (): LegacyWebUpgradeSession | null => {
+  const raw = window.localStorage.getItem(WEB_AUTH_SESSION_KEY);
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as Partial<WebAuthSession>;
+    if (typeof parsed.userId !== 'string' || parsed.userId.length === 0) {
+      return null;
+    }
+
+    if (typeof parsed.username === 'string' && parsed.username.length > 0) {
+      return null;
+    }
+
+    return {
+      userId: parsed.userId,
+      legacySessionToken:
+        typeof parsed.accessToken === 'string' && parsed.accessToken.length > 0
+          ? parsed.accessToken
+          : undefined,
+    };
+  } catch {
+    window.localStorage.removeItem(WEB_AUTH_SESSION_KEY);
+    return null;
+  }
 };
 
 export const saveWebAuthSession = (session: WebAuthSession): void => {

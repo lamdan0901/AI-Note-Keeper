@@ -8,9 +8,7 @@
  * - Transaction safety
  */
 
-import { ConvexHttpClient } from 'convex/browser';
 import { SQLiteDatabase } from 'expo-sqlite/next';
-import { api } from '../../../../convex/_generated/api';
 import { Note } from '../db/notesRepo';
 import { nowMs } from '../../../../packages/shared/utils/time';
 import {
@@ -20,6 +18,9 @@ import {
   NoteOperation,
 } from './noteOutbox';
 import { markNoteSynced } from '../db/syncHelpers';
+import { createDefaultMobileApiClient } from '../api/httpClient';
+import type { MobileApiClient } from '../api/contracts';
+import { getOrCreateDeviceId } from '../auth/session';
 
 // ============================================================================
 // Types
@@ -164,17 +165,23 @@ const mapToApiPayload = (item: OutboxItem) => {
     updatedAt: payload.updatedAt,
     createdAt: payload.createdAt,
     operation: item.operation,
-    deviceId: 'mobile-device-id',
+    deviceId: 'pending-device-id',
+    payloadHash: item.payloadHash,
     version: payload.version,
     baseVersion: payload.serverVersion,
   };
 };
 
+type SyncHttpResponse = Readonly<{
+  notes: ReadonlyArray<Readonly<{ id: string; version: number }>>;
+  syncedAt: number;
+}>;
+
 /**
  * Process a single batch of outbox items
  */
 const processBatch = async (
-  client: ConvexHttpClient,
+  client: MobileApiClient,
   db: SQLiteDatabase,
   items: OutboxItem[],
   userId: string,
@@ -187,33 +194,40 @@ const processBatch = async (
     noteIds: items.map((i) => i.noteId),
   });
 
+  const userScopedItems = items.filter((item) => item.userId === userId);
+
   // Group operations by type for optimal ordering:
   // 1. Creates first (so they exist for potential later operations)
   // 2. Updates second
   // 3. Deletes last
-  const orderedItems = [...items].sort((a, b) => {
+  const orderedItems = [...userScopedItems].sort((a, b) => {
     const order = { create: 1, update: 2, delete: 3 };
     return order[a.operation] - order[b.operation];
   });
 
   // Map to API payloads
   const changes = orderedItems.map(mapToApiPayload);
+  const deviceId = await getOrCreateDeviceId();
 
   try {
     // Send batch to server
     const result = await withTimeout(
-      client.mutation(api.functions.notes.syncNotes, {
-        userId,
-        changes,
-        lastSyncAt: 0,
+      client.requestJson<SyncHttpResponse>('/api/notes/sync', {
+        method: 'POST',
+        body: {
+          lastSyncAt: 0,
+          changes: changes.map((change) => ({
+            ...change,
+            deviceId,
+          })),
+        },
       }),
       timeoutMs,
     );
 
     // Process results - assume all succeeded if we got here
     // Map server responses back to our items
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const serverNotesMap = new Map(result.notes.map((n: any) => [n.id, n]));
+    const serverNotesMap = new Map(result.notes.map((n) => [n.id, n]));
 
     for (const item of orderedItems) {
       const serverNote = serverNotesMap.get(item.noteId);
@@ -277,7 +291,7 @@ const processBatch = async (
   }
 
   return {
-    total: items.length,
+    total: orderedItems.length,
     succeeded: results.filter((r) => r.success).length,
     failed: results.filter((r) => !r.success).length,
     results,
@@ -298,16 +312,24 @@ export const processQueue = async (
 
   log('info', 'Starting queue processing', { config: cfg });
 
-  // Get Convex client
-  const convexUrl = process.env.EXPO_PUBLIC_CONVEX_URL;
-  if (!convexUrl) {
-    log('warn', 'Missing Convex URL, skipping queue push');
+  if (!process.env.EXPO_PUBLIC_API_BASE_URL && !process.env.EXPO_PUBLIC_AUTH_API_URL) {
+    log('warn', 'Missing API base URL, skipping queue push');
     return { total: 0, succeeded: 0, failed: 0, results: [] };
   }
-  const client = new ConvexHttpClient(convexUrl);
+  const client = createDefaultMobileApiClient();
 
   // Get all pending operations ready for retry
-  const pendingItems = (await getPendingOperations(db)) as OutboxItem[];
+  const allPendingItems = (await getPendingOperations(db)) as OutboxItem[];
+  const pendingItems = allPendingItems.filter((item) => item.userId === userId);
+  const skippedItems = allPendingItems.filter((item) => item.userId !== userId);
+
+  if (skippedItems.length > 0) {
+    log('warn', 'Skipping outbox items for non-active user', {
+      activeUserId: userId,
+      skipped: skippedItems.length,
+      skippedNoteIds: skippedItems.map((item) => item.noteId),
+    });
+  }
 
   if (pendingItems.length === 0) {
     log('info', 'No pending items to process');

@@ -16,6 +16,7 @@ export type FcmRemoteMessage = {
   data?: {
     type?: string;
     id?: string;
+    noteId?: string;
     reminderId?: string;
     eventId?: string;
     title?: string;
@@ -78,7 +79,8 @@ export const handleFcmMessage = async (remoteMessage: FcmRemoteMessage): Promise
 
   // Handle Sync Events (Data-Only)
   if (remoteMessage.data?.type === 'sync_reminder') {
-    const reminderId = remoteMessage.data?.reminderId ?? remoteMessage.data?.id;
+    const reminderId =
+      remoteMessage.data?.reminderId ?? remoteMessage.data?.noteId ?? remoteMessage.data?.id;
     if (!reminderId) {
       logSyncEvent('warn', 'fcm_sync_missing_id', { messageId: remoteMessage.messageId });
       return;
@@ -132,7 +134,8 @@ export const handleFcmMessage = async (remoteMessage: FcmRemoteMessage): Promise
   // (The background/killed path is handled by setBackgroundMessageHandler
   //  and the headless task, both of which call this same function.)
 
-  const reminderId = remoteMessage.data?.reminderId ?? remoteMessage.data?.id;
+  const reminderId =
+    remoteMessage.data?.reminderId ?? remoteMessage.data?.noteId ?? remoteMessage.data?.id;
   if (!reminderId) {
     logSyncEvent('info', 'fcm_message_no_data', {
       messageId: remoteMessage.messageId,

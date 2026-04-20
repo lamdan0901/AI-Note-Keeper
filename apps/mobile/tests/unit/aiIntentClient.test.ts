@@ -1,22 +1,18 @@
 import { describe, expect, it, jest } from '@jest/globals';
-import type { ConvexHttpClient } from 'convex/browser';
 import type { RetryPolicy } from '../../src/sync/retryPolicy';
-import { ConvexVoiceIntentClient } from '../../src/voice/aiIntentClient';
+import { MobileVoiceIntentClient } from '../../src/voice/aiIntentClient';
 import type {
   ContinueVoiceClarificationRequest,
   ParseVoiceNoteIntentRequest,
   VoiceIntentResponseDto,
 } from '../../src/voice/types';
 
-jest.mock('../../../../convex/_generated/api', () => ({
-  api: {
-    functions: {
-      aiNoteCapture: {
-        parseVoiceNoteIntent: 'functions/aiNoteCapture:parseVoiceNoteIntent',
-        continueVoiceClarification: 'functions/aiNoteCapture:continueVoiceClarification',
-      },
-    },
-  },
+const requestJsonMock = jest.fn() as jest.MockedFunction<(...args: unknown[]) => Promise<unknown>>;
+
+jest.mock('../../src/api/httpClient', () => ({
+  createDefaultMobileApiClient: () => ({
+    requestJson: requestJsonMock,
+  }),
 }));
 
 const fixedRequest: ParseVoiceNoteIntentRequest = {
@@ -68,23 +64,20 @@ const fastRetryPolicy: RetryPolicy = {
   jitterRatio: 0,
 };
 
-type ActionMethod = Pick<ConvexHttpClient, 'action'>['action'];
-
 describe('ConvexVoiceIntentClient', () => {
   it('returns slow first response without retry when it finishes before timeout', async () => {
     jest.useFakeTimers();
 
     try {
       let callCount = 0;
-      const action: ActionMethod = async () => {
+      requestJsonMock.mockImplementation(async () => {
         callCount += 1;
         return await new Promise<VoiceIntentResponseDto>((resolve) => {
           setTimeout(() => resolve(fixedResponse), 120);
         });
-      };
+      });
 
-      const client = new ConvexVoiceIntentClient({
-        client: { action },
+      const client = new MobileVoiceIntentClient({
         timeoutMs: 300,
         retryPolicy: fastRetryPolicy,
       });
@@ -106,13 +99,12 @@ describe('ConvexVoiceIntentClient', () => {
 
     try {
       let callCount = 0;
-      const action: ActionMethod = async () => {
+      requestJsonMock.mockImplementation(async () => {
         callCount += 1;
         return await new Promise<VoiceIntentResponseDto>(() => {});
-      };
+      });
 
-      const client = new ConvexVoiceIntentClient({
-        client: { action },
+      const client = new MobileVoiceIntentClient({
         timeoutMs: 50,
         retryPolicy: fastRetryPolicy,
       });
@@ -135,16 +127,15 @@ describe('ConvexVoiceIntentClient', () => {
 
     try {
       let callCount = 0;
-      const action: ActionMethod = async () => {
+      requestJsonMock.mockImplementation(async () => {
         callCount += 1;
         if (callCount === 1) {
           throw new Error('Network request failed');
         }
         return fixedResponse;
-      };
+      });
 
-      const client = new ConvexVoiceIntentClient({
-        client: { action },
+      const client = new MobileVoiceIntentClient({
         timeoutMs: 300,
         retryPolicy: fastRetryPolicy,
       });
@@ -165,13 +156,12 @@ describe('ConvexVoiceIntentClient', () => {
 
     try {
       let callCount = 0;
-      const action: ActionMethod = async () => {
+      requestJsonMock.mockImplementation(async () => {
         callCount += 1;
         return await new Promise<VoiceIntentResponseDto>(() => {});
-      };
+      });
 
-      const client = new ConvexVoiceIntentClient({
-        client: { action },
+      const client = new MobileVoiceIntentClient({
         timeoutMs: 50,
         retryPolicy: fastRetryPolicy,
       });

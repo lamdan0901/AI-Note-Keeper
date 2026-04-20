@@ -1,18 +1,51 @@
-import React, { useMemo } from "react";
-import { useQuery } from "convex/react";
-import { api } from "../../../../convex/_generated/api";
-import type { Reminder } from "../../../../packages/shared/types/reminder";
+import React, { useEffect, useMemo, useState } from 'react';
+
+import type { Reminder } from '../../../../packages/shared/types/reminder';
+import { createWebApiClient } from '../api/httpClient';
+import { useWebAuth } from '../auth/AuthContext';
 
 type DedupedReminder = {
   reminder: Reminder;
   count: number;
 };
 
+const toEpochMs = (value: unknown): number | null | undefined => {
+  if (value === null || value === undefined) {
+    return value as null | undefined;
+  }
+
+  if (typeof value === 'number') {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const parsed = Date.parse(value);
+    return Number.isNaN(parsed) ? undefined : parsed;
+  }
+
+  return undefined;
+};
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mapApiReminderToReminder = (input: any): Reminder => {
+  return {
+    ...input,
+    triggerAt: toEpochMs(input.triggerAt) ?? Date.now(),
+    snoozedUntil: toEpochMs(input.snoozedUntil) ?? null,
+    createdAt: toEpochMs(input.createdAt) ?? Date.now(),
+    updatedAt: toEpochMs(input.updatedAt) ?? Date.now(),
+    nextTriggerAt: toEpochMs(input.nextTriggerAt) ?? null,
+    lastFiredAt: toEpochMs(input.lastFiredAt) ?? null,
+    lastAcknowledgedAt: toEpochMs(input.lastAcknowledgedAt) ?? null,
+    title: input.title ?? null,
+  } as Reminder;
+};
+
 const formatTimestamp = (timestampMs: number, timezone: string): string => {
   try {
     return new Intl.DateTimeFormat(undefined, {
-      dateStyle: "medium",
-      timeStyle: "short",
+      dateStyle: 'medium',
+      timeStyle: 'short',
       timeZone: timezone,
     }).format(new Date(timestampMs));
   } catch {
@@ -36,24 +69,58 @@ const dedupeReminders = (reminders: Reminder[]): DedupedReminder[] => {
     }
   }
 
-  return Array.from(byId.values()).sort(
-    (a, b) => b.reminder.updatedAt - a.reminder.updatedAt,
-  );
+  return Array.from(byId.values()).sort((a, b) => b.reminder.updatedAt - a.reminder.updatedAt);
 };
 
 export default function RemindersPage(): JSX.Element {
-  const reminders = useQuery(api.functions.reminders.listReminders, {});
+  const { getAccessToken, refreshAccessToken } = useWebAuth();
+  const [reminders, setReminders] = useState<Reminder[] | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const apiClient = useMemo(
+    () =>
+      createWebApiClient({
+        getAccessToken,
+        refreshAccessToken,
+      }),
+    [getAccessToken, refreshAccessToken],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const load = async (): Promise<void> => {
+      setLoading(true);
+      try {
+        const response =
+          await apiClient.requestJson<Readonly<{ reminders: unknown[] }>>('/api/reminders');
+        if (!cancelled) {
+          setReminders((response.reminders ?? []).map(mapApiReminderToReminder));
+        }
+      } catch {
+        if (!cancelled) {
+          setReminders([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    };
+
+    void load();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [apiClient]);
 
   const deduped = useMemo(() => {
-    if (!reminders) {
+    if (reminders === null) {
       return null;
     }
 
-    const normalizedReminders = reminders.map(r => ({
-      ...r,
-      title: r.title ?? null,
-    })) as Reminder[];
-    const list = dedupeReminders(normalizedReminders);
+    const list = dedupeReminders(reminders);
     return {
       list,
       total: reminders.length,
@@ -62,7 +129,7 @@ export default function RemindersPage(): JSX.Element {
     };
   }, [reminders]);
 
-  if (reminders === undefined) {
+  if (loading) {
     return (
       <section className="panel">
         <h2>Reminders</h2>
@@ -79,19 +146,19 @@ export default function RemindersPage(): JSX.Element {
           Showing {deduped.dedupedCount} of {deduped.total} records
           {deduped.duplicateCount > 0
             ? ` (collapsed ${deduped.duplicateCount} ${
-                deduped.duplicateCount === 1 ? "duplicate" : "duplicates"
+                deduped.duplicateCount === 1 ? 'duplicate' : 'duplicates'
               })`
-            : ""}
+            : ''}
           .
         </p>
       )}
       {deduped && deduped.list.length === 0 ? (
         <p>No reminders yet.</p>
       ) : (
-        <div style={{ marginTop: "16px", overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+        <div style={{ marginTop: '16px', overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
-              <tr style={{ textAlign: "left" }}>
+              <tr style={{ textAlign: 'left' }}>
                 <th>Title</th>
                 <th>Next Trigger</th>
                 <th>Repeat</th>
@@ -103,14 +170,12 @@ export default function RemindersPage(): JSX.Element {
             <tbody>
               {deduped?.list.map(({ reminder, count }) => (
                 <tr key={reminder.id}>
-                  <td>{reminder.title ?? "Untitled"}</td>
+                  <td>{reminder.title ?? 'Untitled'}</td>
                   <td>{formatTimestamp(reminder.triggerAt, reminder.timezone)}</td>
                   <td>{reminder.repeatRule}</td>
-                  <td>
-                    {reminder.active ? reminder.scheduleStatus : "inactive"}
-                  </td>
+                  <td>{reminder.active ? reminder.scheduleStatus : 'inactive'}</td>
                   <td>{formatTimestamp(reminder.updatedAt, reminder.timezone)}</td>
-                  <td>{count > 1 ? `x${count}` : "-"}</td>
+                  <td>{count > 1 ? `x${count}` : '-'}</td>
                 </tr>
               ))}
             </tbody>

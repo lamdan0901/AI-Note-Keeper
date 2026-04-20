@@ -1,0 +1,38 @@
+{
+  "name": "@ai-note-keeper/backend",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "npm run dev:api",
+    "dev:api": "tsx watch src/index.ts",
+    "dev:worker": "tsx watch src/worker/index.ts",
+    "dev:all": "concurrently -k -n api,worker -c magenta,cyan \"npm run dev:api\" \"npm run dev:worker\"",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "start:api": "node dist/index.js",
+    "start:worker": "node dist/worker/index.js",
+    "test": "npm run build && node --test \"dist/tests/**/*.test.js\"",
+    "migrate": "npm run build && node dist/migrate.js",
+    "migration-tools": "npm run build && node dist/migration-tools/index.js",
+    "decommission:finalize-guard": "tsx src/decommission/finalizeGuard.ts"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/node": "^20.11.30",
+    "@types/pg": "^8.20.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.4.0"
+  },
+  "dependencies": {
+    "@node-rs/argon2": "^2.0.2",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "jose": "^6.2.2",
+    "pg": "^8.20.0",
+    "zod": "^4.3.6"
+  }
+}

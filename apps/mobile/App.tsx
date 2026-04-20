@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { Platform, StyleSheet, View, StatusBar } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { getMessaging, onMessage, onTokenRefresh } from '@react-native-firebase/messaging';
-import { ConvexProvider, ConvexReactClient } from 'convex/react';
 import * as NavigationBar from 'expo-navigation-bar';
 
 import * as SplashScreen from 'expo-splash-screen';
@@ -34,10 +33,6 @@ import { Linking } from 'react-native';
 import { rescheduleAllActiveReminders } from './src/reminders/scheduler';
 import { getDb } from './src/db/bootstrap';
 
-const convexUrl = process.env.EXPO_PUBLIC_CONVEX_URL;
-const convexClient = convexUrl ? new ConvexReactClient(convexUrl) : null;
-const hasConvexBackend = Boolean(convexUrl);
-
 export default function App(): JSX.Element | null {
   const [isReady, setIsReady] = useState(false);
   const [rescheduleNoteId, setRescheduleNoteId] = useState<string | null>(null);
@@ -50,9 +45,7 @@ export default function App(): JSX.Element | null {
         if (!permissions.granted) {
           await Notifications.requestPermissionsAsync();
         }
-        if (hasConvexBackend) {
-          await registerDevicePushToken();
-        }
+        await registerDevicePushToken();
 
         const db = await getDb();
         await rescheduleAllActiveReminders(db);
@@ -127,15 +120,13 @@ export default function App(): JSX.Element | null {
     });
 
     // Re-register device token whenever FCM rotates it
-    const unsubscribeTokenRefresh = hasConvexBackend
-      ? onTokenRefresh(messaging, async () => {
-          try {
-            await registerDevicePushToken();
-          } catch (e) {
-            console.error('[TokenRefresh] Failed to re-register token:', e);
-          }
-        })
-      : () => {};
+    const unsubscribeTokenRefresh = onTokenRefresh(messaging, async () => {
+      try {
+        await registerDevicePushToken();
+      } catch (e) {
+        console.error('[TokenRefresh] Failed to re-register token:', e);
+      }
+    });
 
     // Handle notification tap/interaction
     const notificationSubscription = Notifications.addNotificationResponseReceivedListener(
@@ -154,7 +145,7 @@ export default function App(): JSX.Element | null {
     return null;
   }
 
-  const effectiveRescheduleNoteId = convexClient ? rescheduleNoteId : null;
+  const effectiveRescheduleNoteId = rescheduleNoteId;
   const effectiveEditNoteId = editNoteId;
   const content = (
     <AppContent
@@ -162,23 +153,12 @@ export default function App(): JSX.Element | null {
       onRescheduleHandled={() => setRescheduleNoteId(null)}
       editNoteId={effectiveEditNoteId ?? undefined}
       onEditHandled={() => setEditNoteId(null)}
-      hasConvexClient={Boolean(convexClient)}
     />
   );
 
-  if (!convexClient) {
-    return (
-      <ThemeProvider>
-        <AuthProvider>{content}</AuthProvider>
-      </ThemeProvider>
-    );
-  }
-
   return (
     <ThemeProvider>
-      <ConvexProvider client={convexClient}>
-        <AuthProvider>{content}</AuthProvider>
-      </ConvexProvider>
+      <AuthProvider>{content}</AuthProvider>
     </ThemeProvider>
   );
 }
@@ -188,13 +168,11 @@ const AppContent = ({
   onRescheduleHandled,
   editNoteId,
   onEditHandled,
-  hasConvexClient,
 }: {
   rescheduleNoteId?: string;
   onRescheduleHandled: () => void;
   editNoteId?: string;
   onEditHandled: () => void;
-  hasConvexClient: boolean;
 }) => {
   const {
     userId,
@@ -218,10 +196,10 @@ const AppContent = ({
   const [isSelectionMode, setIsSelectionMode] = useState(false);
 
   useEffect(() => {
-    if (!hasConvexClient || !userId) return;
+    if (!userId) return;
 
     void registerDevicePushToken({ userId });
-  }, [hasConvexClient, userId]);
+  }, [userId]);
 
   useEffect(() => {
     if (Platform.OS === 'android') {
@@ -340,13 +318,11 @@ const AppContent = ({
             editNoteId={editNoteId}
             onEditHandled={onEditHandled}
             onNavigateToTrash={() => setCurrentScreen('trash')}
-            onNavigateToSubscriptions={
-              hasConvexClient ? () => setCurrentScreen('subscriptions') : undefined
-            }
-            subscriptionsEnabled={hasConvexClient}
+            onNavigateToSubscriptions={() => setCurrentScreen('subscriptions')}
+            subscriptionsEnabled
             viewMode={viewMode}
             onViewModeChange={setViewMode}
-            onDueSubscriptionsChange={hasConvexClient ? setHasDueSubscriptions : undefined}
+            onDueSubscriptionsChange={setHasDueSubscriptions}
             onSelectionModeChange={setIsSelectionMode}
           />
         </View>
@@ -360,21 +336,17 @@ const AppContent = ({
             viewMode={viewMode}
             onViewModeChange={setViewMode}
             onNavigateToNotes={() => setCurrentScreen('notes')}
-            onNavigateToSubscriptions={
-              hasConvexClient ? () => setCurrentScreen('subscriptions') : undefined
-            }
-            subscriptionsEnabled={hasConvexClient}
+            onNavigateToSubscriptions={() => setCurrentScreen('subscriptions')}
+            subscriptionsEnabled
           />
         </View>
 
-        {hasConvexClient && (
-          <View
-            style={currentScreen === 'subscriptions' ? styles.screenVisible : styles.screenHidden}
-            pointerEvents={currentScreen === 'subscriptions' ? 'auto' : 'none'}
-          >
-            <SubscriptionsScreen onSelectionModeChange={setIsSelectionMode} />
-          </View>
-        )}
+        <View
+          style={currentScreen === 'subscriptions' ? styles.screenVisible : styles.screenHidden}
+          pointerEvents={currentScreen === 'subscriptions' ? 'auto' : 'none'}
+        >
+          <SubscriptionsScreen onSelectionModeChange={setIsSelectionMode} />
+        </View>
 
         <View
           style={currentScreen === 'settings' ? styles.screenVisible : styles.screenHidden}
@@ -383,7 +355,6 @@ const AppContent = ({
           <SettingsScreen
             isAuthenticated={isAuthenticated}
             username={username}
-            hasConvexClient={hasConvexClient}
             onOpenLogin={() => setAuthScreen('login')}
             onOpenRegister={() => setAuthScreen('register')}
             onSignOut={logout}
@@ -429,7 +400,6 @@ const AppContent = ({
         <BottomTabBar
           activeTab={currentScreen}
           onTabPress={setCurrentScreen}
-          hasConvexClient={hasConvexClient}
           showDueSubscriptionsIndicator={hasDueSubscriptions}
         />
       )}

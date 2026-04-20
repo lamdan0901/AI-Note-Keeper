@@ -9,8 +9,11 @@
     "lint": "eslint . --ext .ts,.tsx,.js,.jsx",
     "format": "prettier --write .",
     "test": "jest",
-    "dev": "concurrently -k -n convex,web,mobile -c magenta,green,cyan \"npm run dev:backend\" \"npm run dev:web\" \"npm run dev:mobile\"",
-    "dev:backend": "convex dev",
+    "dev": "concurrently -k -n backend,web,mobile -c magenta,green,cyan \"npm run dev:backend:all\" \"npm run dev:web\" \"npm run dev:mobile\"",
+    "dev:backend": "npm run dev:backend:api",
+    "dev:backend:api": "npm --workspace apps/backend run dev:api",
+    "dev:backend:worker": "npm --workspace apps/backend run dev:worker",
+    "dev:backend:all": "npm --workspace apps/backend run dev:all",
     "dev:web": "npm --workspace apps/web run dev",
     "build:web": "npm --workspace apps/web run build",
     "build:mobile": "npm --workspace apps/mobile run build",
@@ -18,7 +21,6 @@
     "dev:clients": "concurrently -k -n web,mobile -c green,cyan \"npm run dev:web\" \"npm run dev:mobile\""
   },
   "dependencies": {
-    "convex": "^1.33.1",
     "expo": "~50.0.0",
     "js-sha256": "^0.10.1",
     "openai": "^6.33.0",
@@ -31,6 +33,7 @@
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",
+    "@types/react": "^18.2.79",
     "@typescript-eslint/eslint-plugin": "^7.0.0",
     "@typescript-eslint/parser": "^7.0.0",
     "concurrently": "^9.2.1",

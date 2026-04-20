@@ -46,7 +46,7 @@ import { VoiceCaptureOverlay } from '../voice/ui/VoiceCaptureOverlay';
 import { VoiceClarificationSheet } from '../voice/ui/VoiceClarificationSheet';
 import { useVoiceCaptureSession } from '../voice/useVoiceCaptureSession';
 import { AndroidSpeechRecognizer } from '../voice/androidSpeechRecognizer';
-import { ConvexVoiceIntentClient } from '../voice/aiIntentClient';
+import { MobileVoiceIntentClient } from '../voice/aiIntentClient';
 import {
   type VoiceDraftMappingResult,
   type VoiceIntentClient,
@@ -240,7 +240,7 @@ const NotesScreenContent = ({
     if (!voiceCaptureEnabled) {
       return NOOP_INTENT_CLIENT;
     }
-    return new ConvexVoiceIntentClient();
+    return new MobileVoiceIntentClient();
   }, [voiceCaptureEnabled]);
 
   // Get sync state and action helpers

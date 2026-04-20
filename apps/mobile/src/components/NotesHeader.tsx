@@ -14,7 +14,7 @@ type NotesHeaderProps = {
 
 export const NotesHeader: React.FC<NotesHeaderProps> = ({
   viewMode,
-  selectionMode,
+  selectionMode: _selectionMode,
   onViewModeToggle,
   searchQuery,
   onSearchQueryChange,

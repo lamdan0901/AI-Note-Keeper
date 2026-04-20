@@ -5,6 +5,8 @@ import {
   useSyncNotes,
   usePermanentlyDeleteNote,
   useEmptyTrash,
+  NOTES_POLL_INTERVAL_MS,
+  requestNotesRefresh,
   createNote,
   updateNote,
   deleteNote,
@@ -12,6 +14,7 @@ import {
   getResolvedTimezone,
 } from '../services/notes';
 import { useDebouncedValue } from '../../../../packages/shared/hooks/useDebouncedValue';
+import { uuidv4 } from '../../../../packages/shared/utils/uuid';
 import type { NoteEditorDraft, NotesViewMode, WebNote } from '../services/notesTypes';
 import {
   emptyDraft,
@@ -44,7 +47,7 @@ export default function NotesPage({
   onSaveStatusChange,
   onTrashCountChange,
 }: NotesPageProps): JSX.Element {
-  const { userId } = useWebAuth();
+  const { userId, isAuthenticated } = useWebAuth();
   const allNotes = useNotes();
   const sync = useSyncNotes();
   const permanentlyDeleteNoteMutation = usePermanentlyDeleteNote();
@@ -99,6 +102,27 @@ export default function NotesPage({
   }, [trashNotes.length, onTrashCountChange]);
 
   useEffect(() => {
+    if (!isAuthenticated) {
+      return;
+    }
+
+    const handleFocus = () => {
+      requestNotesRefresh();
+    };
+
+    requestNotesRefresh();
+    window.addEventListener('focus', handleFocus);
+    const intervalId = window.setInterval(() => {
+      requestNotesRefresh();
+    }, NOTES_POLL_INTERVAL_MS);
+
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      window.clearInterval(intervalId);
+    };
+  }, [isAuthenticated]);
+
+  useEffect(() => {
     onSaveStatusChange(saveStatus);
   }, [onSaveStatusChange, saveStatus]);
 
@@ -136,7 +160,7 @@ export default function NotesPage({
       );
 
       if (isNew) {
-        const newId = crypto.randomUUID();
+        const newId = uuidv4();
         const now = Date.now();
         const optimisticNote: WebNote = {
           id: newId,

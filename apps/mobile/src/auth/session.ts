@@ -11,6 +11,13 @@ const LEGACY_MIGRATION_DONE_KEY = 'LEGACY_MIGRATION_DONE';
 export type AuthSession = {
   userId: string;
   username: string;
+  accessToken?: string;
+  refreshToken?: string;
+};
+
+export type LegacyMobileUpgradeSession = {
+  userId: string;
+  legacySessionToken?: string;
 };
 
 export const getOrCreateDeviceId = async (): Promise<string> => {
@@ -45,11 +52,42 @@ export const loadAuthSession = async (): Promise<AuthSession | null> => {
     return {
       userId: parsed.userId,
       username: parsed.username,
+      accessToken: parsed.accessToken,
+      refreshToken: parsed.refreshToken,
     };
   } catch {
     return null;
   }
 };
+
+export const loadLegacySessionUpgradePayload =
+  async (): Promise<LegacyMobileUpgradeSession | null> => {
+    try {
+      const raw = await SecureStore.getItemAsync(AUTH_SESSION_KEY);
+      if (!raw) {
+        return null;
+      }
+
+      const parsed = JSON.parse(raw) as Partial<AuthSession>;
+      if (!parsed.userId || typeof parsed.userId !== 'string') {
+        return null;
+      }
+
+      if (parsed.username && parsed.username.trim().length > 0) {
+        return null;
+      }
+
+      return {
+        userId: parsed.userId,
+        legacySessionToken:
+          typeof parsed.accessToken === 'string' && parsed.accessToken.trim().length > 0
+            ? parsed.accessToken
+            : undefined,
+      };
+    } catch {
+      return null;
+    }
+  };
 
 export const saveAuthSession = async (session: AuthSession): Promise<void> => {
   await SecureStore.setItemAsync(AUTH_SESSION_KEY, JSON.stringify(session));

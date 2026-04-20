@@ -1,7 +1,6 @@
-import { ConvexHttpClient } from 'convex/browser';
-import { api } from '../../../../convex/_generated/api';
 import { type Note } from '../db/notesRepo';
 import { coerceRepeatRule } from '../../../../packages/shared/utils/repeatCodec';
+import { createDefaultMobileApiClient } from '../api/httpClient';
 
 export type FetchNotesResult =
   | { status: 'ok'; notes: Note[]; syncedAt: number }
@@ -22,24 +21,51 @@ const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number): Promise<T
   }
 };
 
+const toNumberOrUndefined = (value: unknown): number | undefined => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const parsedFromIso = Date.parse(value);
+    if (Number.isFinite(parsedFromIso)) {
+      return parsedFromIso;
+    }
+
+    const parsedNumber = Number(value);
+    if (Number.isFinite(parsedNumber)) {
+      return parsedNumber;
+    }
+  }
+
+  return undefined;
+};
+
+const toNullableString = (value: unknown): string | null => {
+  return typeof value === 'string' ? value : null;
+};
+
+const toBoolean = (value: unknown, fallback: boolean): boolean => {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  if (typeof value === 'number') {
+    return value !== 0;
+  }
+
+  return fallback;
+};
+
 export const fetchNotes = async (userId: string): Promise<FetchNotesResult> => {
   try {
-    const convexUrl = process.env.EXPO_PUBLIC_CONVEX_URL;
-    if (!convexUrl) throw new Error('Missing Convex URL');
-
-    const client = new ConvexHttpClient(convexUrl);
-
-    // For MVP, we are just fetching all notes. In real world we would delta sync.
-    // However, the `syncNotes` mutation defined earlier returns all notes,
-    // but here we might want just a query if we were doing pure pull.
-    // Instead, let's use the query.
-
-    const notes = (await withTimeout(
-      client.query(api.functions.notes.getNotes, { userId }),
+    const client = createDefaultMobileApiClient();
+    const response = await withTimeout(
+      client.requestJson<Readonly<{ notes: ReadonlyArray<unknown> }>>('/api/notes'),
       15000,
-    )) as Note[];
+    );
+    const notes = response.notes as ReadonlyArray<Record<string, unknown>>;
 
-    // Map Convex result to local Note type if needed (mostly same)
     const mappedNotes: Note[] = notes.flatMap((n) => {
       const payloadUserId = typeof n.userId === 'string' ? n.userId : undefined;
       if (payloadUserId && payloadUserId !== userId) {
@@ -52,45 +78,67 @@ export const fetchNotes = async (userId: string): Promise<FetchNotesResult> => {
       }
 
       const normalizedUserId = payloadUserId ?? userId;
+      const noteId = typeof n.id === 'string' && n.id.length > 0 ? n.id : null;
+      const createdAt = toNumberOrUndefined(n.createdAt);
+      const updatedAt = toNumberOrUndefined(n.updatedAt);
+
+      if (!noteId || createdAt === undefined || updatedAt === undefined) {
+        console.warn('[Sync] Ignoring malformed note payload', {
+          payloadId: n.id,
+          hasCreatedAt: createdAt !== undefined,
+          hasUpdatedAt: updatedAt !== undefined,
+        });
+        return [];
+      }
+
+      const repeatRuleRaw = n.repeatRule;
+      const repeatRuleValue: string | null | undefined =
+        typeof repeatRuleRaw === 'string'
+          ? repeatRuleRaw
+          : repeatRuleRaw === null
+            ? null
+            : undefined;
 
       // Derive canonical repeat: prefer stored `repeat`, fall back to legacy fields
       const repeat = coerceRepeatRule({
-        repeat: n.repeat,
-        repeatRule: n.repeatRule,
-        repeatConfig: n.repeatConfig,
-        triggerAt: n.triggerAt,
+        repeat: (n.repeat as Record<string, unknown> | null | undefined) ?? undefined,
+        repeatRule: repeatRuleValue,
+        repeatConfig:
+          n.repeatConfig && typeof n.repeatConfig === 'object'
+            ? (n.repeatConfig as Record<string, unknown>)
+            : undefined,
+        triggerAt: toNumberOrUndefined(n.triggerAt),
       });
 
       return {
-        id: n.id,
+        id: noteId,
         userId: normalizedUserId,
-        title: n.title ?? null,
-        content: n.content ?? null,
-        contentType:
-          ((n as Record<string, unknown>).contentType as Note['contentType']) || undefined,
-        color: n.color ?? null,
-        active: n.active,
-        done: n.done ?? false,
+        title: toNullableString(n.title),
+        content: toNullableString(n.content),
+        contentType: (n.contentType as Note['contentType']) || undefined,
+        color: toNullableString(n.color),
+        active: toBoolean(n.active, true),
+        done: toBoolean(n.done, false),
 
-        isPinned: n.isPinned ?? false,
-        triggerAt: n.triggerAt,
-        repeatRule: n.repeatRule,
-        repeatConfig: n.repeatConfig,
+        isPinned: toBoolean(n.isPinned, false),
+        triggerAt: toNumberOrUndefined(n.triggerAt),
+        repeatRule: (n.repeatRule as Note['repeatRule']) || undefined,
+        repeatConfig: (n.repeatConfig as Note['repeatConfig']) ?? undefined,
         // Always populate canonical repeat (derived if not stored)
         repeat,
-        snoozedUntil: n.snoozedUntil,
-        scheduleStatus: n.scheduleStatus,
-        timezone: n.timezone,
-        baseAtLocal: n.baseAtLocal ?? null,
-        startAt: n.startAt ?? null,
-        nextTriggerAt: n.nextTriggerAt ?? null,
-        lastFiredAt: n.lastFiredAt ?? null,
-        lastAcknowledgedAt: n.lastAcknowledgedAt ?? null,
-        version: n.version,
-        deletedAt: n.deletedAt ?? undefined,
+        snoozedUntil: toNumberOrUndefined(n.snoozedUntil),
+        scheduleStatus: (n.scheduleStatus as Note['scheduleStatus']) ?? undefined,
+        timezone: typeof n.timezone === 'string' ? n.timezone : undefined,
+        baseAtLocal: typeof n.baseAtLocal === 'string' ? n.baseAtLocal : null,
+        startAt: toNumberOrUndefined(n.startAt) ?? null,
+        nextTriggerAt: toNumberOrUndefined(n.nextTriggerAt) ?? null,
+        lastFiredAt: toNumberOrUndefined(n.lastFiredAt) ?? null,
+        lastAcknowledgedAt: toNumberOrUndefined(n.lastAcknowledgedAt) ?? null,
+        version: toNumberOrUndefined(n.version) ?? 0,
+        deletedAt: toNumberOrUndefined(n.deletedAt),
 
-        updatedAt: n.updatedAt,
-        createdAt: n.createdAt,
+        updatedAt,
+        createdAt,
       };
     });
 
