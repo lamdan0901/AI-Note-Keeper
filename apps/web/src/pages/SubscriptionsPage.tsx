@@ -6,7 +6,6 @@ import type {
   SubscriptionUpdate,
 } from '../../../../packages/shared/types/subscription';
 import {
-  useSubscriptions,
   useDeletedSubscriptions,
   useCreateSubscription,
   useUpdateSubscription,
@@ -27,6 +26,7 @@ import { SubscriptionEditorModal } from '../components/subscriptions/Subscriptio
 import { useWebAuth } from '../auth/AuthContext';
 
 interface SubscriptionsPageProps {
+  subscriptions: Subscription[] | undefined;
   viewMode: 'grid' | 'list';
   viewingTrash: boolean;
   searchQuery: string;
@@ -35,6 +35,7 @@ interface SubscriptionsPageProps {
 }
 
 export default function SubscriptionsPage({
+  subscriptions,
   viewMode,
   viewingTrash,
   searchQuery,
@@ -42,7 +43,6 @@ export default function SubscriptionsPage({
   onTrashCountChange,
 }: SubscriptionsPageProps): JSX.Element {
   const { userId } = useWebAuth();
-  const subscriptions = useSubscriptions();
   const deletedSubscriptions = useDeletedSubscriptions();
   const createMutate = useCreateSubscription();
   const updateMutate = useUpdateSubscription();

@@ -8,16 +8,15 @@ import type {
 
 const WEB_LOCAL_USER_KEY = 'web-local-user-id';
 
-const readApiBaseUrl = (): string | undefined => {
-  return (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? process.env.VITE_API_BASE_URL;
-};
+const inFlightGetRequests = new Map<string, Promise<unknown>>();
 
 const normalizeBaseUrl = (baseUrl: string): string => {
   return baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
 };
 
+const baseUrl = normalizeBaseUrl(import.meta.env.VITE_API_BASE_URL ?? '');
+
 const toApiUrl = (path: string): string => {
-  const baseUrl = normalizeBaseUrl(readApiBaseUrl() ?? '');
   if (!baseUrl) {
     throw new Error('VITE_API_BASE_URL is required for web API transport');
   }
@@ -116,7 +115,7 @@ const buildHeaders = (
   return nextHeaders;
 };
 
-const executeRequest = async <T>(
+const executeRequestInternal = async <T>(
   input: Readonly<{
     path: string;
     options: HttpRequestOptions;
@@ -141,7 +140,7 @@ const executeRequest = async <T>(
     try {
       const refreshedAccessToken = await input.refreshAccessToken();
       if (refreshedAccessToken) {
-        return await executeRequest<T>({
+        return await executeRequestInternal<T>({
           ...input,
           hasRetried: true,
         });
@@ -175,6 +174,52 @@ const executeRequest = async <T>(
   }
 
   return payload as T;
+};
+
+const shouldCoalesceGetRequest = (method: string, hasBody: boolean): boolean => {
+  return method.toUpperCase() === 'GET' && !hasBody;
+};
+
+const toRequestDedupeKey = (
+  path: string,
+  method: string,
+  accessToken: string | null | undefined,
+): string => {
+  const guestUserId = readGuestUserId();
+  const principal = accessToken ?? `guest:${guestUserId ?? 'none'}`;
+  return `${method.toUpperCase()}::${toApiUrl(path)}::${principal}`;
+};
+
+const executeRequest = async <T>(
+  input: Readonly<{
+    path: string;
+    options: HttpRequestOptions;
+    getAccessToken: TokenProvider;
+    refreshAccessToken: RefreshAccessToken;
+    onUnauthorized?: () => void;
+    hasRetried: boolean;
+  }>,
+): Promise<T> => {
+  const method = input.options.method ?? 'GET';
+  const hasBody = input.options.body !== undefined;
+
+  if (!shouldCoalesceGetRequest(method, hasBody)) {
+    return await executeRequestInternal<T>(input);
+  }
+
+  const dedupeKey = toRequestDedupeKey(input.path, method, input.getAccessToken());
+  const inFlightRequest = inFlightGetRequests.get(dedupeKey);
+
+  if (inFlightRequest) {
+    return (await inFlightRequest) as T;
+  }
+
+  const requestPromise = executeRequestInternal<T>(input).finally(() => {
+    inFlightGetRequests.delete(dedupeKey);
+  });
+
+  inFlightGetRequests.set(dedupeKey, requestPromise as Promise<unknown>);
+  return await requestPromise;
 };
 
 export const createWebApiClient = (input: ClientInput): WebApiClient => {

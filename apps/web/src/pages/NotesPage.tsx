@@ -110,7 +110,6 @@ export default function NotesPage({
       requestNotesRefresh();
     };
 
-    requestNotesRefresh();
     window.addEventListener('focus', handleFocus);
     const intervalId = window.setInterval(() => {
       requestNotesRefresh();

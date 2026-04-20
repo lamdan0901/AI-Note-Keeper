@@ -1,5 +1,5 @@
 import { sha256 } from 'js-sha256';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { uuidv4 } from '../../../../packages/shared/utils/uuid';
 import type { NoteEditorDraft, WebNote } from './notesTypes';
 import { buildReminderSyncFields } from './reminderUtils';
@@ -187,6 +187,7 @@ export function useNotes(): WebNote[] | undefined {
   const { getAccessToken, refreshAccessToken } = useWebAuth();
   const [notes, setNotes] = useState<WebNote[] | undefined>(undefined);
   const refreshSignal = useNotesRefreshSignal();
+  const previousClientRef = useRef<ReturnType<typeof createWebApiClient> | null>(null);
 
   const apiClient = useMemo(
     () =>
@@ -198,8 +199,15 @@ export function useNotes(): WebNote[] | undefined {
   );
 
   useEffect(() => {
+    const hasClientChanged = previousClientRef.current !== apiClient;
+    if (hasClientChanged) {
+      previousClientRef.current = apiClient;
+      setNotes(undefined);
+    }
+  }, [apiClient]);
+
+  useEffect(() => {
     let cancelled = false;
-    setNotes(undefined);
 
     const load = async () => {
       try {

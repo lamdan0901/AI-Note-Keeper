@@ -473,7 +473,7 @@ export default function App(): JSX.Element {
         </div>
       )}
 
-      <div style={{ display: activeTab === 'notes' ? undefined : 'none' }}>
+      {activeTab === 'notes' && (
         <NotesPage
           viewMode={notesViewMode}
           viewingTrash={notesViewingTrash}
@@ -482,16 +482,17 @@ export default function App(): JSX.Element {
           onSaveStatusChange={setNotesSaveStatus}
           onTrashCountChange={setNotesTrashCount}
         />
-      </div>
-      <div style={{ display: activeTab === 'subscriptions' ? undefined : 'none' }}>
+      )}
+      {activeTab === 'subscriptions' && (
         <SubscriptionsPage
+          subscriptions={subscriptions}
           viewMode={subsViewMode}
           viewingTrash={subsViewingTrash}
           searchQuery={subsSearchQuery}
           newSubTrigger={newSubTrigger}
           onTrashCountChange={setSubsTrashCount}
         />
-      </div>
+      )}
 
       {authDialog && (
         <AuthDialog
