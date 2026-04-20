@@ -16,6 +16,7 @@
     "test": "npm run build && node --test \"dist/tests/**/*.test.js\"",
     "migrate": "npm run build && node dist/migrate.js",
     "migration-tools": "npm run build && node dist/migration-tools/index.js",
+    "migration-seed-convex-folder": "npm run build && node dist/migration-tools/seed-convex-folder.js",
     "decommission:finalize-guard": "tsx src/decommission/finalizeGuard.ts"
   },
   "devDependencies": {

@@ -40,8 +40,35 @@ const toStringValue = (value: unknown, fallback = ''): string => {
   return typeof value === 'string' ? value : fallback;
 };
 
+const toNullableString = (value: unknown): string | null => {
+  return typeof value === 'string' ? value : null;
+};
+
 const toBoolean = (value: unknown, fallback = false): boolean => {
   return typeof value === 'boolean' ? value : fallback;
+};
+
+const toNullableBoolean = (value: unknown): boolean | null => {
+  return typeof value === 'boolean' ? value : null;
+};
+
+const toInteger = (value: unknown): number | null => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return Math.trunc(value);
+  }
+
+  if (typeof value === 'string') {
+    const parsed = Number.parseInt(value, 10);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return null;
+};
+
+const toJsonValue = (value: unknown): unknown | null => {
+  return value === undefined ? null : value;
 };
 
 const toDate = (value: unknown): Date | null => {
@@ -83,21 +110,110 @@ const applyUser = async (db: DbClient, record: ExportRecord): Promise<void> => {
 
 const applyNote = async (db: DbClient, record: ExportRecord): Promise<void> => {
   await db.query(
-    `INSERT INTO notes (id, user_id, title, content, active, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, COALESCE($6, CURRENT_TIMESTAMP), COALESCE($7, CURRENT_TIMESTAMP))
+    `INSERT INTO notes (
+       id,
+       user_id,
+       title,
+       content,
+       content_type,
+       color,
+       active,
+       done,
+       is_pinned,
+       trigger_at,
+       repeat_rule,
+       repeat_config,
+       repeat,
+       snoozed_until,
+       schedule_status,
+       timezone,
+       base_at_local,
+       start_at,
+       next_trigger_at,
+       last_fired_at,
+       last_acknowledged_at,
+       version,
+       deleted_at,
+       created_at,
+       updated_at
+     )
+     VALUES (
+       $1,
+       $2,
+       $3,
+       $4,
+       $5,
+       $6,
+       $7,
+       $8,
+       $9,
+       $10,
+       $11,
+       $12,
+       $13,
+       $14,
+       $15,
+       $16,
+       $17,
+       $18,
+       $19,
+       $20,
+       $21,
+       COALESCE($22, 1),
+       $23,
+       COALESCE($24, CURRENT_TIMESTAMP),
+       COALESCE($25, CURRENT_TIMESTAMP)
+     )
      ON CONFLICT (id) DO UPDATE
-     SET title = EXCLUDED.title,
+     SET user_id = EXCLUDED.user_id,
+       title = EXCLUDED.title,
          content = EXCLUDED.content,
+         content_type = EXCLUDED.content_type,
+         color = EXCLUDED.color,
          active = EXCLUDED.active,
+         done = EXCLUDED.done,
+         is_pinned = EXCLUDED.is_pinned,
+         trigger_at = EXCLUDED.trigger_at,
+         repeat_rule = EXCLUDED.repeat_rule,
+         repeat_config = EXCLUDED.repeat_config,
+         repeat = EXCLUDED.repeat,
+         snoozed_until = EXCLUDED.snoozed_until,
+         schedule_status = EXCLUDED.schedule_status,
+         timezone = EXCLUDED.timezone,
+         base_at_local = EXCLUDED.base_at_local,
+         start_at = EXCLUDED.start_at,
+         next_trigger_at = EXCLUDED.next_trigger_at,
+         last_fired_at = EXCLUDED.last_fired_at,
+         last_acknowledged_at = EXCLUDED.last_acknowledged_at,
+         version = EXCLUDED.version,
+         deleted_at = EXCLUDED.deleted_at,
          updated_at = EXCLUDED.updated_at`,
     [
       toStringValue(record.id),
-      toStringValue(record.userId || record.user_id),
-      toStringValue(record.title, ''),
-      toStringValue(record.content, ''),
+      toStringValue(record.userId ?? record.user_id),
+      toNullableString(record.title),
+      toNullableString(record.content),
+      toNullableString(record.contentType ?? record.content_type),
+      toNullableString(record.color),
       toBoolean(record.active, true),
-      toDate(record.createdAt || record.created_at),
-      toDate(record.updatedAt || record.updated_at),
+      toNullableBoolean(record.done),
+      toNullableBoolean(record.isPinned ?? record.is_pinned),
+      toDate(record.triggerAt ?? record.trigger_at),
+      toNullableString(record.repeatRule ?? record.repeat_rule),
+      toJsonValue(record.repeatConfig ?? record.repeat_config),
+      toJsonValue(record.repeat),
+      toDate(record.snoozedUntil ?? record.snoozed_until),
+      toNullableString(record.scheduleStatus ?? record.schedule_status),
+      toNullableString(record.timezone),
+      toNullableString(record.baseAtLocal ?? record.base_at_local),
+      toDate(record.startAt ?? record.start_at),
+      toDate(record.nextTriggerAt ?? record.next_trigger_at),
+      toDate(record.lastFiredAt ?? record.last_fired_at),
+      toDate(record.lastAcknowledgedAt ?? record.last_acknowledged_at),
+      toInteger(record.version),
+      toDate(record.deletedAt ?? record.deleted_at),
+      toDate(record.createdAt ?? record.created_at),
+      toDate(record.updatedAt ?? record.updated_at),
     ],
   );
 };
