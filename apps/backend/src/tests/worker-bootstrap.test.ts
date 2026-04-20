@@ -532,3 +532,117 @@ test('API and worker runtime scaffolds can be initialized independently', async 
   assert.equal(worker.adapterName, 'pg-boss-adapter');
   await worker.shutdown();
 });
+
+test('api server emits cors headers only for allowed origins', async () => {
+  const originalNodeEnv = process.env.NODE_ENV;
+  const originalAllowedOrigins = process.env.CORS_ALLOWED_ORIGINS;
+
+  process.env.NODE_ENV = 'production';
+  process.env.CORS_ALLOWED_ORIGINS = 'https://app.example.com';
+
+  const api = createApiServer({
+    isDependencyDegraded: () => false,
+    readinessProbe: async () => ({
+      ok: true,
+      service: 'backend',
+      checks: {
+        database: 'up',
+        migrations: 'up',
+      },
+    }),
+  });
+
+  const server = api.listen(0);
+
+  try {
+    const address = server.address();
+    assert.ok(address && typeof address === 'object');
+
+    const baseUrl = `http://127.0.0.1:${address.port}`;
+    const allowedResponse = await fetch(`${baseUrl}/api/sample`, {
+      headers: {
+        Origin: 'https://app.example.com',
+      },
+    });
+
+    assert.equal(allowedResponse.status, 200);
+    assert.equal(
+      allowedResponse.headers.get('access-control-allow-origin'),
+      'https://app.example.com',
+    );
+    assert.equal(allowedResponse.headers.get('access-control-allow-credentials'), 'true');
+
+    const disallowedResponse = await fetch(`${baseUrl}/api/sample`, {
+      headers: {
+        Origin: 'https://evil.example.com',
+      },
+    });
+
+    assert.equal(disallowedResponse.status, 200);
+    assert.equal(disallowedResponse.headers.get('access-control-allow-origin'), null);
+
+    const preflightResponse = await fetch(`${baseUrl}/api/sample`, {
+      method: 'OPTIONS',
+      headers: {
+        Origin: 'https://app.example.com',
+        'Access-Control-Request-Method': 'GET',
+        'Access-Control-Request-Headers': 'authorization,content-type',
+      },
+    });
+
+    assert.equal(preflightResponse.status, 204);
+    assert.equal(
+      preflightResponse.headers.get('access-control-allow-origin'),
+      'https://app.example.com',
+    );
+    assert.equal(
+      preflightResponse.headers.get('access-control-allow-methods'),
+      'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
+    );
+    assert.equal(
+      preflightResponse.headers.get('access-control-allow-headers'),
+      'authorization,content-type',
+    );
+    assert.equal(preflightResponse.headers.get('access-control-allow-credentials'), 'true');
+
+    const disallowedPreflightResponse = await fetch(`${baseUrl}/api/sample`, {
+      method: 'OPTIONS',
+      headers: {
+        Origin: 'https://evil.example.com',
+        'Access-Control-Request-Method': 'GET',
+      },
+    });
+
+    assert.equal(disallowedPreflightResponse.status, 204);
+    assert.equal(disallowedPreflightResponse.headers.get('access-control-allow-origin'), null);
+
+    const plainOptionsResponse = await fetch(`${baseUrl}/api/sample`, {
+      method: 'OPTIONS',
+    });
+
+    assert.equal(plainOptionsResponse.status, 404);
+  } finally {
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+
+        resolve();
+      });
+    });
+
+    if (originalNodeEnv === undefined) {
+      delete process.env.NODE_ENV;
+    } else {
+      process.env.NODE_ENV = originalNodeEnv;
+    }
+
+    if (originalAllowedOrigins === undefined) {
+      delete process.env.CORS_ALLOWED_ORIGINS;
+    } else {
+      process.env.CORS_ALLOWED_ORIGINS = originalAllowedOrigins;
+    }
+  }
+});

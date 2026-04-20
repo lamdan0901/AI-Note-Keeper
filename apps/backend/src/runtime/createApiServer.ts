@@ -1,4 +1,3 @@
-import cors from 'cors';
 import express from 'express';
 
 import { createAuthRoutes } from '../auth/routes.js';
@@ -56,6 +55,56 @@ const parseTrustProxySetting = (): boolean | number | string => {
   return raw;
 };
 
+const CORS_METHODS = 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS';
+const CORS_MAX_AGE_SECONDS = '86400';
+
+const createCorsMiddleware = (
+  isAllowedOrigin: (origin: string) => boolean,
+): express.RequestHandler => {
+  return (request, response, next) => {
+    const origin = request.headers.origin;
+    const requestedMethod = request.headers['access-control-request-method'];
+    const isPreflight =
+      request.method === 'OPTIONS' &&
+      typeof origin === 'string' &&
+      typeof requestedMethod === 'string';
+
+    if (!origin) {
+      next();
+      return;
+    }
+
+    if (!isAllowedOrigin(origin)) {
+      if (!isPreflight) {
+        next();
+      } else {
+        response.sendStatus(204);
+      }
+
+      return;
+    }
+
+    response.setHeader('Access-Control-Allow-Origin', origin);
+    response.setHeader('Access-Control-Allow-Credentials', 'true');
+    response.setHeader('Vary', 'Origin');
+
+    if (isPreflight) {
+      response.setHeader('Access-Control-Allow-Methods', CORS_METHODS);
+
+      const requestedHeaders = request.headers['access-control-request-headers'];
+      if (typeof requestedHeaders === 'string' && requestedHeaders.length > 0) {
+        response.setHeader('Access-Control-Allow-Headers', requestedHeaders);
+      }
+
+      response.setHeader('Access-Control-Max-Age', CORS_MAX_AGE_SECONDS);
+      response.sendStatus(204);
+      return;
+    }
+
+    next();
+  };
+};
+
 export const createApiServer = (options: ApiServerFactoryOptions = {}): express.Express => {
   const app = express();
   const isDependencyDegraded = options.isDependencyDegraded ?? (() => false);
@@ -84,19 +133,7 @@ export const createApiServer = (options: ApiServerFactoryOptions = {}): express.
     return effectiveAllowedOrigins.includes(origin);
   };
 
-  app.use(
-    cors({
-      credentials: true,
-      origin: (origin, callback) => {
-        if (!origin) {
-          callback(null, true);
-          return;
-        }
-
-        callback(null, isAllowedOrigin(origin));
-      },
-    }),
-  );
+  app.use(createCorsMiddleware(isAllowedOrigin));
   app.use(express.json());
 
   app.get('/health/live', (_request, response) => {
