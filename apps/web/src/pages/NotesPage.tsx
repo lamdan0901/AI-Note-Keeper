@@ -14,6 +14,7 @@ import {
   getResolvedTimezone,
 } from '../services/notes';
 import { useDebouncedValue } from '../../../../packages/shared/hooks/useDebouncedValue';
+import { uuidv4 } from '../../../../packages/shared/utils/uuid';
 import type { NoteEditorDraft, NotesViewMode, WebNote } from '../services/notesTypes';
 import {
   emptyDraft,
@@ -159,7 +160,7 @@ export default function NotesPage({
       );
 
       if (isNew) {
-        const newId = crypto.randomUUID();
+        const newId = uuidv4();
         const now = Date.now();
         const optimisticNote: WebNote = {
           id: newId,

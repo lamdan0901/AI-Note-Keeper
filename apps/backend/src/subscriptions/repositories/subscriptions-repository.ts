@@ -101,7 +101,7 @@ const toPatchColumns = (
   if (Object.hasOwn(patch, 'trialEndDate')) add('trial_end_date', patch.trialEndDate ?? null);
   if (Object.hasOwn(patch, 'status')) add('status', patch.status ?? null);
   if (Object.hasOwn(patch, 'reminderDaysBefore'))
-    add('reminder_days_before', patch.reminderDaysBefore ?? []);
+    add('reminder_days_before', JSON.stringify(patch.reminderDaysBefore ?? []));
   if (Object.hasOwn(patch, 'nextReminderAt')) add('next_reminder_at', patch.nextReminderAt ?? null);
   if (Object.hasOwn(patch, 'nextTrialReminderAt'))
     add('next_trial_reminder_at', patch.nextTrialReminderAt ?? null);
@@ -202,7 +202,7 @@ export const createSubscriptionsRepository = (
             $9,
             $10,
             $11,
-            $12,
+            $12::jsonb,
             true,
             NOW(),
             NOW()
@@ -221,7 +221,7 @@ export const createSubscriptionsRepository = (
           input.notes,
           input.trialEndDate,
           input.status,
-          input.reminderDaysBefore,
+          JSON.stringify(input.reminderDaysBefore),
         ],
       );
 
@@ -234,7 +234,15 @@ export const createSubscriptionsRepository = (
         return await findByIdForUser({ subscriptionId, userId });
       }
 
-      const setClause = columns.map((entry, index) => `${entry.column} = $${index + 1}`).join(', ');
+      const setClause = columns
+        .map((entry, index) => {
+          if (entry.column === 'reminder_days_before') {
+            return `${entry.column} = $${index + 1}::jsonb`;
+          }
+
+          return `${entry.column} = $${index + 1}`;
+        })
+        .join(', ');
       const values = columns.map((entry) => entry.value);
       values.push(subscriptionId, userId);
 

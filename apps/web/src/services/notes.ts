@@ -1,5 +1,6 @@
 import { sha256 } from 'js-sha256';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { uuidv4 } from '../../../../packages/shared/utils/uuid';
 import type { NoteEditorDraft, WebNote } from './notesTypes';
 import { buildReminderSyncFields } from './reminderUtils';
 import { useWebAuth } from '../auth/AuthContext';
@@ -287,7 +288,7 @@ function toLegacySyncChange(change: SyncChange): SyncChange {
  */
 export async function createNote(sync: SyncFn, userId: string, draft: NoteEditorDraft) {
   const now = Date.now();
-  const id = draft.id ?? crypto.randomUUID();
+  const id = draft.id ?? uuidv4();
   const reminderFields = buildReminderSyncFields(
     draft.done
       ? { reminder: null, repeat: null }

@@ -1,3 +1,5 @@
+import { uuidv4 } from '../../../../packages/shared/utils/uuid';
+
 const WEB_AUTH_SESSION_KEY = 'web-auth-session';
 const WEB_LOCAL_USER_KEY = 'web-local-user-id';
 
@@ -17,7 +19,7 @@ export const getOrCreateWebLocalUserId = (): string => {
   if (existing) {
     return existing;
   }
-  const next = crypto.randomUUID();
+  const next = uuidv4();
   window.localStorage.setItem(WEB_LOCAL_USER_KEY, next);
   return next;
 };

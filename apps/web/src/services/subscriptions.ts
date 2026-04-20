@@ -32,6 +32,28 @@ const toEpochMs = (value: unknown): number | null => {
   return null;
 };
 
+const toClientSubscriptionStatus = (value: unknown): Subscription['status'] => {
+  if (value === 'paused') {
+    return 'paused';
+  }
+
+  if (value === 'canceled' || value === 'cancelled') {
+    return 'cancelled';
+  }
+
+  return 'active';
+};
+
+const toApiSubscriptionStatus = (
+  value: Subscription['status'],
+): 'active' | 'paused' | 'canceled' => {
+  if (value === 'cancelled') {
+    return 'canceled';
+  }
+
+  return value;
+};
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function mapDocToWebSubscription(doc: any): Subscription {
   return {
@@ -46,7 +68,7 @@ export function mapDocToWebSubscription(doc: any): Subscription {
     nextBillingDate: toEpochMs(doc.nextBillingDate) ?? Date.now(),
     notes: doc.notes,
     trialEndDate: toEpochMs(doc.trialEndDate) ?? undefined,
-    status: doc.status,
+    status: toClientSubscriptionStatus(doc.status),
     reminderDaysBefore: doc.reminderDaysBefore as number[],
     nextReminderAt: toEpochMs(doc.nextReminderAt) ?? undefined,
     lastNotifiedBillingDate: toEpochMs(doc.lastNotifiedBillingDate) ?? undefined,
@@ -209,7 +231,7 @@ export function useCreateSubscription() {
             nextBillingDate: input.nextBillingDate,
             notes: input.notes,
             trialEndDate: input.trialEndDate,
-            status: input.status,
+            status: toApiSubscriptionStatus(input.status),
             reminderDaysBefore: input.reminderDaysBefore,
           },
         },
@@ -234,11 +256,21 @@ export function useUpdateSubscription() {
 
   return useCallback(
     async (input: Readonly<{ id: string; patch: SubscriptionUpdate }>): Promise<unknown> => {
+      const patchBody = Object.hasOwn(input.patch, 'status')
+        ? {
+            ...input.patch,
+            status:
+              input.patch.status === undefined
+                ? undefined
+                : toApiSubscriptionStatus(input.patch.status),
+          }
+        : input.patch;
+
       const response = await apiClient.requestJson<Readonly<{ subscription: unknown }>>(
         `/api/subscriptions/${input.id}`,
         {
           method: 'PATCH',
-          body: input.patch,
+          body: patchBody,
         },
       );
       notifySubscriptionsRefresh();
