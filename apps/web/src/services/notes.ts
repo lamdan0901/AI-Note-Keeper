@@ -16,6 +16,14 @@ export function getResolvedTimezone(): string {
 
 export const NOTES_POLL_INTERVAL_MS = 30_000;
 
+export const getNotesPrincipalKey = (
+  isAuthenticated: boolean,
+  userId: string | null | undefined,
+): string => {
+  const normalizedUserId = userId && userId.length > 0 ? userId : 'unknown';
+  return isAuthenticated ? `auth:${normalizedUserId}` : `guest:${normalizedUserId}`;
+};
+
 // ---------------------------------------------------------------------------
 // Raw API note document -> WebNote mapper
 // ---------------------------------------------------------------------------
@@ -184,10 +192,12 @@ const useNotesRefreshSignal = (): number => {
  * user, or `undefined` while the query is loading.
  */
 export function useNotes(): WebNote[] | undefined {
-  const { getAccessToken, refreshAccessToken } = useWebAuth();
+  const { userId, isAuthenticated, getAccessToken, refreshAccessToken } = useWebAuth();
   const [notes, setNotes] = useState<WebNote[] | undefined>(undefined);
   const refreshSignal = useNotesRefreshSignal();
-  const previousClientRef = useRef<ReturnType<typeof createWebApiClient> | null>(null);
+  const previousPrincipalRef = useRef<string | null>(null);
+
+  const principalKey = getNotesPrincipalKey(isAuthenticated, userId);
 
   const apiClient = useMemo(
     () =>
@@ -199,12 +209,13 @@ export function useNotes(): WebNote[] | undefined {
   );
 
   useEffect(() => {
-    const hasClientChanged = previousClientRef.current !== apiClient;
-    if (hasClientChanged) {
-      previousClientRef.current = apiClient;
-      setNotes(undefined);
+    if (previousPrincipalRef.current === principalKey) {
+      return;
     }
-  }, [apiClient]);
+
+    previousPrincipalRef.current = principalKey;
+    setNotes(undefined);
+  }, [principalKey]);
 
   useEffect(() => {
     let cancelled = false;
@@ -228,7 +239,7 @@ export function useNotes(): WebNote[] | undefined {
     return () => {
       cancelled = true;
     };
-  }, [apiClient, refreshSignal]);
+  }, [apiClient, principalKey, refreshSignal]);
 
   return notes;
 }

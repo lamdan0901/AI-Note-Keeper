@@ -108,10 +108,14 @@ const isSecureCookieRequest = (request: Request): boolean => {
   return request.secure;
 };
 
+const resolveRefreshCookieSameSite = (): 'lax' | 'none' => {
+  return process.env.NODE_ENV === 'production' ? 'none' : 'lax';
+};
+
 const buildCookieOptions = (request: Request, expiresAt: number) => {
   return {
     httpOnly: true,
-    sameSite: 'lax' as const,
+    sameSite: resolveRefreshCookieSameSite(),
     secure: isSecureCookieRequest(request),
     path: '/',
     expires: new Date(expiresAt),
@@ -138,7 +142,7 @@ export const writeAuthTransport = (
 export const clearAuthTransport = (request: Request, response: Response): void => {
   response.clearCookie(REFRESH_COOKIE_NAME, {
     httpOnly: true,
-    sameSite: 'lax',
+    sameSite: resolveRefreshCookieSameSite(),
     secure: isSecureCookieRequest(request),
     path: '/',
   });

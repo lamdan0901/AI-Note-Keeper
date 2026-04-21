@@ -16,7 +16,7 @@
     "premigration-tools": "node ./scripts/ensure-runtime-deps.mjs",
     "premigration-seed-convex-folder": "node ./scripts/ensure-runtime-deps.mjs",
     "build": "tsc -p tsconfig.json",
-    "start": "node dist/index.js",
+    "start": "concurrently -k -n api,worker -c magenta,cyan \"npm run start:api\" \"npm run start:worker\"",
     "start:api": "node dist/index.js",
     "start:worker": "node dist/worker/index.js",
     "test": "npm run build && node --test \"dist/tests/**/*.test.js\"",
@@ -29,6 +29,7 @@
     "@types/express": "^5.0.6",
     "@types/node": "^20.11.30",
     "@types/pg": "^8.20.0",
+    "concurrently": "^9.2.1",
     "tsx": "^4.21.0",
     "typescript": "^5.4.0"
   },

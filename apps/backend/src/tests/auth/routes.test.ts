@@ -138,7 +138,39 @@ test('web transport sets httpOnly cookie session artifacts on auth success', asy
     assert.equal('refreshToken' in payload, false);
     assert.match(cookie, /ank_refresh_token=refresh-login/);
     assert.match(cookie, /HttpOnly/i);
+    assert.match(cookie, /SameSite=Lax/i);
   } finally {
+    await server.close();
+  }
+});
+
+test('production web transport sets SameSite=None secure refresh cookie', async () => {
+  const previousNodeEnv = process.env.NODE_ENV;
+  process.env.NODE_ENV = 'production';
+
+  const { authService } = createAuthServiceDouble();
+  const server = await startServer(authService);
+
+  try {
+    const response = await fetch(`${server.baseUrl}/api/auth/login`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        origin: 'https://app.example.com',
+        'x-forwarded-proto': 'https',
+      },
+      body: JSON.stringify({ username: 'alice', password: 'password-123' }),
+    });
+
+    const payload = (await response.json()) as Record<string, unknown>;
+    const cookie = response.headers.get('set-cookie') ?? '';
+
+    assert.equal(response.status, 200);
+    assert.equal(payload.transport, 'cookie');
+    assert.match(cookie, /SameSite=None/i);
+    assert.match(cookie, /Secure/i);
+  } finally {
+    process.env.NODE_ENV = previousNodeEnv;
     await server.close();
   }
 });
