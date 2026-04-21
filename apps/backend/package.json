@@ -29,13 +29,13 @@
     "@types/express": "^5.0.6",
     "@types/node": "^20.11.30",
     "@types/pg": "^8.20.0",
-    "concurrently": "^9.2.1",
     "tsx": "^4.21.0",
     "typescript": "^5.4.0"
   },
   "dependencies": {
     "@node-rs/argon2": "^2.0.2",
     "dotenv": "^17.4.2",
+    "concurrently": "^9.2.1",
     "express": "^5.2.1",
     "jose": "^6.2.2",
     "js-sha256": "^0.10.1",
