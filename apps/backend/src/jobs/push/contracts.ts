@@ -23,6 +23,11 @@ export type PushJobPayload = Readonly<{
   isTrigger?: boolean;
   attempt: number;
   tokens: ReadonlyArray<PushDeliveryToken>;
+  // Rendered notification text used to populate the FCM data payload so
+  // the mobile client displays the real note content. Optional: absent when
+  // the dispatch source (e.g. a legacy retry) does not carry note fields.
+  title?: string;
+  body?: string;
 }>;
 
 export type PushRetryJobPayload = Readonly<{
@@ -32,6 +37,8 @@ export type PushRetryJobPayload = Readonly<{
   isTrigger?: boolean;
   attempt: number;
   token: PushDeliveryToken;
+  title?: string;
+  body?: string;
 }>;
 
 export type PushDeliveryRequest = Readonly<{
@@ -41,6 +48,8 @@ export type PushDeliveryRequest = Readonly<{
   isTrigger?: boolean;
   attempt: number;
   token: PushDeliveryToken;
+  title?: string;
+  body?: string;
 }>;
 
 export type PushDeliveryClassification =
@@ -126,6 +135,8 @@ export const toPushRetryJobPayload = (request: PushDeliveryRequest): PushRetryJo
     isTrigger: request.isTrigger,
     attempt: request.attempt,
     token: request.token,
+    title: request.title,
+    body: request.body,
   };
 };
 

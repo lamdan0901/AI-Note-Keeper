@@ -59,31 +59,46 @@ class ReminderModule(reactContext: ReactApplicationContext) : ReactContextBaseJa
         )
 
         try {
-            // schedule exact alarm
             val triggerMs = triggerAt.toLong()
             val nowMs = System.currentTimeMillis()
             Log.d(TAG, "Scheduling alarm: triggerMs=$triggerMs, now=$nowMs, diff=${(triggerMs - nowMs) / 1000}s")
-            
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarmManager.canScheduleExactAlarms()) {
+
+            val canUseExact =
+                Build.VERSION.SDK_INT < Build.VERSION_CODES.S || alarmManager.canScheduleExactAlarms()
+
+            if (canUseExact) {
+                // setAlarmClock is exempt from Doze mode restrictions and per-app
+                // firing quotas that would otherwise batch or delay multiple
+                // setExactAndAllowWhileIdle alarms queued close together while the
+                // screen is off. It is the platform-sanctioned API for
+                // user-visible, time-critical reminders.
+                val showIntent = Intent(context, MainActivity::class.java).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                    putExtra("editNoteId", id)
+                }
+                val showPendingIntent = PendingIntent.getActivity(
+                    context,
+                    pendingIntentId,
+                    showIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+                val alarmInfo = AlarmManager.AlarmClockInfo(triggerMs, showPendingIntent)
+                alarmManager.setAlarmClock(alarmInfo, pendingIntent)
+                Log.d(TAG, "Alarm (AlarmClock) scheduled for id=$id at $triggerMs")
+            } else {
                 // Fallback: inexact but still fires close to the requested time.
-                // Better than silently dropping the alarm.
+                // Better than silently dropping the alarm when SCHEDULE_EXACT_ALARM
+                // is not granted (Android 12+ with denied permission).
                 alarmManager.setAndAllowWhileIdle(
                     AlarmManager.RTC_WAKEUP,
                     triggerMs,
                     pendingIntent
                 )
                 Log.w(TAG, "Scheduled INEXACT alarm for id=$id at $triggerMs (no SCHEDULE_EXACT_ALARM)")
-            } else {
-                alarmManager.setExactAndAllowWhileIdle(
-                    AlarmManager.RTC_WAKEUP,
-                    triggerMs,
-                    pendingIntent
-                )
-                Log.d(TAG, "Alarm scheduled successfully for id=$id at $triggerMs")
             }
         } catch (e: SecurityException) {
             // Last resort: try inexact alarm when SecurityException still occurs
-            Log.e(TAG, "SecurityException scheduling exact alarm, trying inexact: ${e.message}", e)
+            Log.e(TAG, "SecurityException scheduling alarm, trying inexact: ${e.message}", e)
             try {
                 val triggerMs = triggerAt.toLong()
                 alarmManager.setAndAllowWhileIdle(

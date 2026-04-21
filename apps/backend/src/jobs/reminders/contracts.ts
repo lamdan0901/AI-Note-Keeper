@@ -7,12 +7,19 @@ export type ReminderDueCandidate = Readonly<{
   triggerAt: Date | null;
   nextTriggerAt: Date | null;
   snoozedUntil: Date | null;
+  title?: string | null;
+  content?: string | null;
+  contentType?: string | null;
 }>;
 
 export type ReminderDueOccurrence = Readonly<{
   noteId: string;
   userId: string;
   triggerTime: Date;
+  // Rendered notification text. Optional for backwards compatibility with
+  // existing scanner mocks; production scanner populates both.
+  title?: string;
+  body?: string;
 }>;
 
 export type ReminderScanInput = Readonly<{
@@ -41,6 +48,12 @@ export type ReminderDispatchQueueJob = Readonly<{
   triggerTime: Date;
   eventId: string;
   jobKey: string;
+  // Rendered notification text carried so the push provider can populate
+  // FCM `data.title` / `data.body` with the real note contents instead of
+  // a placeholder. Optional so callers that don't know the note (legacy
+  // tests, retry paths that only have identifiers) can omit.
+  title?: string;
+  body?: string;
 }>;
 
 export type ReminderQueueEnqueueResult = Readonly<{

@@ -15,7 +15,7 @@ type NotificationTextOverride = {
 
 const trimOrEmpty = (value: unknown): string => (typeof value === 'string' ? value.trim() : '');
 
-const buildNotificationText = (
+export const buildNotificationText = (
   reminder: Reminder,
   override?: NotificationTextOverride,
 ): { title: string; body: string } => {

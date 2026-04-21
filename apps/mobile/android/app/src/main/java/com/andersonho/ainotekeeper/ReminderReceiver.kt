@@ -40,7 +40,17 @@ class ReminderReceiver : BroadcastReceiver() {
             }
         }
 
-        // Record notification delivery in ledger
+        // Display the notification FIRST, then write to the ledger.
+        //
+        // Order matters on OEMs (notably MIUI/HyperOS) that may kill this
+        // receiver's process mid-flow. If we recorded before displaying and
+        // got killed, the ledger would be poisoned with an entry for a
+        // notification that never appeared, and the FCM fallback (which
+        // checks this same ledger) would suppress itself. Flipping the
+        // order makes a partial kill fail open: no ledger write -> FCM
+        // wins -> user still gets the reminder.
+        NotificationHelper.show(context, id, title, body, eventId)
+
         if (eventId.isNotEmpty()) {
             try {
                 NotificationLedgerHelper.recordLocalNotification(context, id, eventId)
@@ -49,9 +59,5 @@ class ReminderReceiver : BroadcastReceiver() {
                 Log.e(TAG, "Failed to record in ledger: ${e.message}", e)
             }
         }
-
-        // Delegate to shared helper so the notification looks identical
-        // regardless of whether it came from a local alarm or FCM.
-        NotificationHelper.show(context, id, title, body, eventId)
     }
 }

@@ -274,6 +274,8 @@ export const createPgBossAdapter = (options: PgBossAdapterOptions = {}): WorkerA
             deviceId: token.deviceId,
             fcmToken: token.fcmToken,
           })),
+          title: job.title,
+          body: job.body,
         });
 
         logger.info(
@@ -333,6 +335,8 @@ export const createPgBossAdapter = (options: PgBossAdapterOptions = {}): WorkerA
                 isTrigger: job.isTrigger,
                 attempt: job.attempt,
                 tokens: [job.token],
+                title: job.title,
+                body: job.body,
               });
             } catch (error) {
               logger.error(`[worker] push retry execution failed for job=${jobKey}`, error);

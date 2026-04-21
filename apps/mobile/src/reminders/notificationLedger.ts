@@ -107,6 +107,28 @@ export const hasNotificationSent = async (
 };
 
 /**
+ * Check if any notification (local or FCM) was sent for a specific event
+ * within the last `withinMs` milliseconds. Older entries are treated as
+ * stale so FCM can still cover cases where the local alarm silently
+ * failed to display (e.g. OEM battery-saver suppression on MIUI/HyperOS).
+ */
+export const hasNotificationSentWithin = async (
+  db: DbLike,
+  reminderId: string,
+  eventId: string,
+  withinMs: number,
+): Promise<boolean> => {
+  const cutoffTime = Date.now() - withinMs;
+  const result = await db.getFirstAsync<{ count: number }>(
+    `SELECT COUNT(*) as count FROM notification_ledger 
+     WHERE reminderId = ? AND eventId = ? AND sentAt >= ?`,
+    [reminderId, eventId, cutoffTime],
+  );
+
+  return (result?.count ?? 0) > 0;
+};
+
+/**
  * Mark a notification as dismissed
  */
 export const markNotificationDismissed = async (

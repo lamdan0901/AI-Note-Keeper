@@ -262,8 +262,14 @@ const resolveAccessToken = async (
 };
 
 const buildPayload = (request: PushDeliveryRequest): Readonly<Record<string, unknown>> => {
-  const title = 'Reminder';
-  const body = 'You have a reminder';
+  // Prefer the rendered note text threaded from the scanner. Fall back to
+  // the historical placeholder only when the caller did not supply text
+  // (e.g. a retry path that predates this field). FCM data values must be
+  // strings, so coerce nullish values.
+  const title = typeof request.title === 'string' && request.title.length > 0
+    ? request.title
+    : 'Reminder';
+  const body = typeof request.body === 'string' ? request.body : 'You have a reminder';
 
   return {
     message: {

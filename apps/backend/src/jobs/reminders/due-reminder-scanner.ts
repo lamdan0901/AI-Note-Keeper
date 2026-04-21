@@ -15,6 +15,9 @@ type DueReminderRow = Readonly<{
   trigger_at: Date | null;
   next_trigger_at: Date | null;
   snoozed_until: Date | null;
+  title: string | null;
+  content: string | null;
+  content_type: string | null;
 }>;
 
 const toDateOrNull = (value: Date | string | number | null): Date | null => {
@@ -33,7 +36,59 @@ const toCandidate = (row: DueReminderRow): ReminderDueCandidate => {
     triggerAt: toDateOrNull(row.trigger_at),
     nextTriggerAt: toDateOrNull(row.next_trigger_at),
     snoozedUntil: toDateOrNull(row.snoozed_until),
+    title: row.title,
+    content: row.content,
+    contentType: row.content_type,
   };
+};
+
+// Mirrors the mobile scheduler's buildNotificationText fallback order so a
+// push that wins the race against the local alarm displays the same text the
+// local alarm would have. Keeps the rendering local to the scanner so all
+// downstream components just pass strings around.
+const renderNotificationText = (
+  candidate: ReminderDueCandidate,
+): Readonly<{ title: string; body: string }> => {
+  const titleText = (candidate.title ?? '').trim();
+
+  let contentText = '';
+  const rawContent = candidate.content ?? '';
+
+  if (candidate.contentType === 'checklist' && rawContent.length > 0) {
+    try {
+      const parsed = JSON.parse(rawContent);
+      if (Array.isArray(parsed)) {
+        contentText = parsed
+          .filter(
+            (item): item is Readonly<{ text: string; checked: boolean }> =>
+              typeof item === 'object' &&
+              item !== null &&
+              typeof (item as { text?: unknown }).text === 'string' &&
+              typeof (item as { checked?: unknown }).checked === 'boolean',
+          )
+          .map((item) => `${item.checked ? '✓' : '☐'} ${item.text}`)
+          .join('\n');
+      }
+    } catch {
+      contentText = '';
+    }
+  } else {
+    contentText = rawContent.trim();
+  }
+
+  if (titleText && contentText) {
+    return { title: titleText, body: contentText };
+  }
+
+  if (titleText) {
+    return { title: titleText, body: '' };
+  }
+
+  if (contentText) {
+    return { title: contentText, body: '' };
+  }
+
+  return { title: 'Reminder', body: 'You have a reminder' };
 };
 
 export const resolveScanSince = (input: ReminderScanInput): Date => {
@@ -61,7 +116,10 @@ export const createDueReminderScanner = (
             user_id,
             trigger_at,
             next_trigger_at,
-            snoozed_until
+            snoozed_until,
+            title,
+            content,
+            content_type
           FROM notes
           WHERE active = true
             AND deleted_at IS NULL
@@ -77,20 +135,33 @@ export const createDueReminderScanner = (
         .map(toCandidate)
         .map((candidate) => {
           const triggerTime = resolveReminderTriggerTime(candidate);
+          const text = renderNotificationText(candidate);
           return {
             noteId: candidate.noteId,
             userId: candidate.userId,
             triggerTime,
+            title: text.title,
+            body: text.body,
           };
         })
-        .filter((item): item is Readonly<{ noteId: string; userId: string; triggerTime: Date }> => {
-          if (item.triggerTime === null) {
-            return false;
-          }
+        .filter(
+          (
+            item,
+          ): item is Readonly<{
+            noteId: string;
+            userId: string;
+            triggerTime: Date;
+            title: string;
+            body: string;
+          }> => {
+            if (item.triggerTime === null) {
+              return false;
+            }
 
-          const timestamp = item.triggerTime.getTime();
-          return timestamp >= since.getTime() && timestamp <= now.getTime();
-        });
+            const timestamp = item.triggerTime.getTime();
+            return timestamp >= since.getTime() && timestamp <= now.getTime();
+          },
+        );
 
       return {
         since,

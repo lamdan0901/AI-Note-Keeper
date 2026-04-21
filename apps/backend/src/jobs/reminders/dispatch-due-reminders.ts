@@ -51,6 +51,8 @@ export const createReminderDispatchJob = (deps: ReminderDispatchJobDeps): Remind
           triggerTime: reminder.triggerTime,
           eventId,
           jobKey: eventId,
+          title: reminder.title,
+          body: reminder.body,
         });
 
         if (result.status === 'duplicate') {

@@ -77,6 +77,8 @@ export const createPushJobHandler = (deps: PushJobHandlerDeps): PushJobHandler =
           isTrigger: job.isTrigger,
           attempt: baseAttempt,
           token,
+          title: job.title,
+          body: job.body,
         };
 
         try {

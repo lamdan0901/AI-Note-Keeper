@@ -2,14 +2,61 @@ import * as Notifications from 'expo-notifications';
 import { NativeModules, Platform } from 'react-native';
 import { logSyncEvent } from '../reminders/logging';
 import { getDb } from '../db/bootstrap';
-import { upsertNote, deleteNote } from '../db/notesRepo';
+import { upsertNote, deleteNote, getNoteById } from '../db/notesRepo';
 import { fetchReminder } from './fetchReminder';
 import { Note } from '../db/notesRepo';
+import { buildNotificationText } from '../reminders/scheduler';
+import type { Reminder } from '../../../../packages/shared/types/reminder';
 import {
-  hasNotificationSent,
+  hasNotificationSentWithin,
   recordNotificationSent,
   cleanOldRecords,
 } from '../reminders/notificationLedger';
+
+// Ledger dedup window for trigger FCM messages.
+// Entries older than this are treated as stale so FCM can still display
+// when the local alarm poisoned the ledger but failed to actually show
+// a notification (e.g. MIUI/HyperOS silent suppression).
+const TRIGGER_DEDUP_WINDOW_MS = 30_000;
+
+// Legacy backend placeholder. When the FCM data payload contains this exact
+// text we ignore it and render the notification from the local note instead,
+// so older push senders can't override a freshly-synced note's real content.
+const LEGACY_PLACEHOLDER_TITLE = 'Reminder';
+const LEGACY_PLACEHOLDER_BODY = 'You have a reminder';
+
+const isLegacyPlaceholder = (title: string, body: string): boolean => {
+  return title === LEGACY_PLACEHOLDER_TITLE && body === LEGACY_PLACEHOLDER_BODY;
+};
+
+const resolveNotificationTextFromNote = async (
+  reminderId: string,
+  fallbackTitle: string,
+  fallbackBody: string,
+): Promise<{ title: string; body: string }> => {
+  try {
+    const db = await getDb();
+    const note = await getNoteById(db, reminderId);
+    if (note) {
+      const text = buildNotificationText(note as unknown as Reminder);
+      // buildNotificationText returns the same "Reminder"/"You have a reminder"
+      // sentinel only when the note is truly empty; in that case the FCM
+      // payload's title/body is no worse, so return whichever is non-empty.
+      if (text.title && text.title !== LEGACY_PLACEHOLDER_TITLE) {
+        return text;
+      }
+      if (text.body && text.body !== LEGACY_PLACEHOLDER_BODY) {
+        return text;
+      }
+    }
+  } catch (error) {
+    logSyncEvent('warn', 'fcm_local_note_lookup_failed', {
+      reminderId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+  return { title: fallbackTitle, body: fallbackBody };
+};
 
 export type FcmRemoteMessage = {
   messageId?: string;
@@ -149,9 +196,18 @@ export const handleFcmMessage = async (remoteMessage: FcmRemoteMessage): Promise
   const titleText = rawTitle.trim();
   const bodyText = rawBody.trim();
 
-  const title = titleText || bodyText || 'Reminder';
-  const body =
+  let title = titleText || bodyText || 'Reminder';
+  let body =
     titleText && bodyText ? bodyText : titleText || bodyText ? '' : 'You have a reminder';
+
+  // Defensive fallback: if the server sent the legacy placeholder, look up the
+  // note locally and render real text. Covers older backend builds and any
+  // future case where the push payload is missing the note fields.
+  if (isLegacyPlaceholder(title, body) || (!titleText && !bodyText)) {
+    const resolved = await resolveNotificationTextFromNote(reminderId, title, body);
+    title = resolved.title;
+    body = resolved.body;
+  }
 
   if (remoteMessage.data?.type === 'trigger_reminder') {
     // Deduplicate using the notification ledger.
@@ -161,13 +217,19 @@ export const handleFcmMessage = async (remoteMessage: FcmRemoteMessage): Promise
     if (eventId) {
       try {
         const db = await getDb();
-        const alreadySent = await hasNotificationSent(db, reminderId, eventId);
+        const alreadySent = await hasNotificationSentWithin(
+          db,
+          reminderId,
+          eventId,
+          TRIGGER_DEDUP_WINDOW_MS,
+        );
 
         if (alreadySent) {
           logSyncEvent('info', 'fcm_trigger_suppressed_duplicate', {
             reminderId,
             eventId,
             reason: 'local_notification_already_sent',
+            windowMs: TRIGGER_DEDUP_WINDOW_MS,
           });
           return;
         }
