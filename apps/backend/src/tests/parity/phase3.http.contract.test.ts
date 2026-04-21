@@ -175,15 +175,9 @@ const createPhase3Doubles = () => {
       platform: 'android';
     }) => {
       const existing = deviceTokens.get(input.deviceId);
-      if (existing && existing.userId !== input.userId) {
-        throw new AppError({
-          code: 'forbidden',
-          message: 'Device token does not belong to authenticated user',
-        });
-      }
 
       const token = {
-        id: `${input.userId}:${input.deviceId}`,
+        id: existing?.token.id ?? `${input.userId}:${input.deviceId}`,
         userId: input.userId,
         deviceId: input.deviceId,
         fcmToken: input.fcmToken,
@@ -507,6 +501,86 @@ test('subscriptions and device-token mutations reject cross-user ownership viola
     assert.deepEqual(Object.keys(devicePayload).sort(), ['code', 'message', 'status']);
     assert.equal(devicePayload.code, 'forbidden');
     assert.equal(devicePayload.status, 403);
+  } finally {
+    await server.close();
+  }
+});
+
+test('device-token upsert allows same-device claim transfer while delete remains ownership protected', async () => {
+  const server = await startServer();
+  const firstUserToken = await createAccessToken('first-user');
+  const secondUserToken = await createAccessToken('second-user');
+
+  try {
+    const firstUpsert = await fetch(`${server.baseUrl}/api/device-tokens`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${firstUserToken}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        deviceId: 'claim-device',
+        fcmToken: 'first-token',
+        platform: 'android',
+      }),
+    });
+
+    assert.equal(firstUpsert.status, 200);
+    const firstPayload = (await firstUpsert.json()) as {
+      token: { id: string; userId: string; deviceId: string; fcmToken: string };
+    };
+    assert.equal(firstPayload.token.userId, 'first-user');
+    assert.equal(firstPayload.token.deviceId, 'claim-device');
+    assert.equal(firstPayload.token.fcmToken, 'first-token');
+
+    const claimedUpsert = await fetch(`${server.baseUrl}/api/device-tokens`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${secondUserToken}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        deviceId: 'claim-device',
+        fcmToken: 'second-token',
+        platform: 'android',
+      }),
+    });
+
+    assert.equal(claimedUpsert.status, 200);
+    const claimedPayload = (await claimedUpsert.json()) as {
+      token: { id: string; userId: string; deviceId: string; fcmToken: string };
+    };
+    assert.equal(claimedPayload.token.id, firstPayload.token.id);
+    assert.equal(claimedPayload.token.userId, 'second-user');
+    assert.equal(claimedPayload.token.deviceId, 'claim-device');
+    assert.equal(claimedPayload.token.fcmToken, 'second-token');
+
+    const staleOwnerDelete = await fetch(`${server.baseUrl}/api/device-tokens/claim-device`, {
+      method: 'DELETE',
+      headers: {
+        authorization: `Bearer ${firstUserToken}`,
+      },
+    });
+
+    assert.equal(staleOwnerDelete.status, 403);
+    const staleOwnerPayload = (await staleOwnerDelete.json()) as {
+      code: string;
+      message: string;
+      status: number;
+    };
+    assert.deepEqual(Object.keys(staleOwnerPayload).sort(), ['code', 'message', 'status']);
+    assert.equal(staleOwnerPayload.code, 'forbidden');
+    assert.equal(staleOwnerPayload.status, 403);
+
+    const currentOwnerDelete = await fetch(`${server.baseUrl}/api/device-tokens/claim-device`, {
+      method: 'DELETE',
+      headers: {
+        authorization: `Bearer ${secondUserToken}`,
+      },
+    });
+
+    assert.equal(currentOwnerDelete.status, 200);
+    assert.deepEqual(await currentOwnerDelete.json(), { deleted: true });
   } finally {
     await server.close();
   }

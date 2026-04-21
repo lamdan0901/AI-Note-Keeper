@@ -45,7 +45,6 @@ export default function App(): JSX.Element | null {
         if (!permissions.granted) {
           await Notifications.requestPermissionsAsync();
         }
-        await registerDevicePushToken();
 
         const db = await getDb();
         await rescheduleAllActiveReminders(db);
@@ -196,10 +195,10 @@ const AppContent = ({
   const [isSelectionMode, setIsSelectionMode] = useState(false);
 
   useEffect(() => {
-    if (!userId) return;
+    if (!isAuthenticated || !userId) return;
 
     void registerDevicePushToken({ userId });
-  }, [userId]);
+  }, [isAuthenticated, userId]);
 
   useEffect(() => {
     if (Platform.OS === 'android') {

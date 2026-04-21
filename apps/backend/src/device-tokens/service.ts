@@ -39,21 +39,7 @@ export const createDeviceTokensService = (
         throw toValidationError('Only android platform is supported for device tokens');
       }
 
-      const existing = await repository.findByDeviceId(deviceId);
-      if (!existing) {
-        return await repository.insert({ userId, deviceId, fcmToken, platform });
-      }
-
-      if (existing.userId !== userId) {
-        throw toForbiddenError();
-      }
-
-      const updated = await repository.updateByDeviceId({ userId, deviceId, fcmToken, platform });
-      if (!updated) {
-        throw new Error('Expected token row update for existing device');
-      }
-
-      return updated;
+      return await repository.upsertByDeviceId({ userId, deviceId, fcmToken, platform });
     },
 
     deleteByDeviceId: async ({ userId, deviceId }) => {

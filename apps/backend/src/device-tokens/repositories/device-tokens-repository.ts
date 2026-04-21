@@ -17,12 +17,9 @@ type DeviceTokenRow = Readonly<{
 export type DeviceTokensRepository = Readonly<{
   listByUserId: (userId: string) => Promise<ReadonlyArray<DeviceTokenRecord>>;
   findByDeviceId: (deviceId: string) => Promise<DeviceTokenRecord | null>;
-  insert: (
+  upsertByDeviceId: (
     input: Readonly<{ userId: string; deviceId: string; fcmToken: string; platform: 'android' }>,
   ) => Promise<DeviceTokenRecord>;
-  updateByDeviceId: (
-    input: Readonly<{ userId: string; deviceId: string; fcmToken: string; platform: 'android' }>,
-  ) => Promise<DeviceTokenRecord | null>;
   deleteByDeviceIdForUser: (
     input: Readonly<{ userId: string; deviceId: string }>,
   ) => Promise<boolean>;
@@ -78,7 +75,7 @@ export const createDeviceTokensRepository = (
       return toDomain(result.rows[0]);
     },
 
-    insert: async ({ userId, deviceId, fcmToken, platform }) => {
+    upsertByDeviceId: async ({ userId, deviceId, fcmToken, platform }) => {
       const result = await db.query<DeviceTokenRow>(
         `
           INSERT INTO device_push_tokens (
@@ -91,31 +88,16 @@ export const createDeviceTokensRepository = (
             created_at
           )
           VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+          ON CONFLICT (device_id)
+          DO UPDATE
+          SET user_id = EXCLUDED.user_id,
+              fcm_token = EXCLUDED.fcm_token,
+              platform = EXCLUDED.platform,
+              updated_at = NOW()
           RETURNING *
         `,
         [randomUUID(), userId, deviceId, fcmToken, platform],
       );
-
-      return toDomain(result.rows[0]);
-    },
-
-    updateByDeviceId: async ({ userId, deviceId, fcmToken, platform }) => {
-      const result = await db.query<DeviceTokenRow>(
-        `
-          UPDATE device_push_tokens
-          SET fcm_token = $1,
-              platform = $2,
-              updated_at = NOW()
-          WHERE device_id = $3
-            AND user_id = $4
-          RETURNING *
-        `,
-        [fcmToken, platform, deviceId, userId],
-      );
-
-      if (result.rows.length === 0) {
-        return null;
-      }
 
       return toDomain(result.rows[0]);
     },

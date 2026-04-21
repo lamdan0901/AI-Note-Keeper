@@ -23,12 +23,6 @@ const createServiceDouble = (): DeviceTokensService &
       }
 
       const existing = tokens.get(deviceId);
-      if (existing && existing.userId !== userId) {
-        const error = new Error('Device token does not belong to authenticated user');
-        (error as unknown as { code: string }).code = 'forbidden';
-        (error as unknown as { status: number }).status = 403;
-        throw error;
-      }
 
       const now = new Date();
       const record: DeviceTokenRecord = {
@@ -109,7 +103,7 @@ const createAccessToken = async (userId: string): Promise<string> => {
   return pair.accessToken;
 };
 
-test('device token route upsert is idempotent and delete missing token is no-op', async () => {
+test('device token route upsert is idempotent, allows same-device reassignment, and delete missing token is no-op', async () => {
   const service = createServiceDouble();
   const server = await startServer(service);
   const token = await createAccessToken('user-1');
@@ -147,6 +141,26 @@ test('device token route upsert is idempotent and delete missing token is no-op'
     assert.equal(second.status, 200);
     assert.equal(service.tokens.size, 1);
     assert.equal(service.tokens.get('device-1')?.fcmToken, 'fcm-2');
+    assert.equal(service.tokens.get('device-1')?.userId, 'user-1');
+
+    const otherUserToken = await createAccessToken('user-2');
+    const reassigned = await fetch(`${server.baseUrl}/api/device-tokens`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${otherUserToken}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        deviceId: 'device-1',
+        fcmToken: 'fcm-3',
+        platform: 'android',
+      }),
+    });
+
+    assert.equal(reassigned.status, 200);
+    assert.equal(service.tokens.size, 1);
+    assert.equal(service.tokens.get('device-1')?.fcmToken, 'fcm-3');
+    assert.equal(service.tokens.get('device-1')?.userId, 'user-2');
 
     const deletedMissing = await fetch(`${server.baseUrl}/api/device-tokens/missing-device`, {
       method: 'DELETE',
