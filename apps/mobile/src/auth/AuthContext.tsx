@@ -31,6 +31,7 @@ import {
   migrateLocalUserData as migrateLocalUserDataInDb,
 } from './localUserData';
 import { clearMobileWelcomeCompleted, hasCompletedMobileWelcome } from './localMode';
+import { resolveLocalDataAction } from './authFlowPolicy';
 import { MergeStrategy, MergeSummary } from '../../../../packages/shared/auth/userDataMerge';
 
 type AuthTransitionState =
@@ -338,7 +339,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }: {
       fromUserId: string;
       session: AuthSession;
-      strategy: MergeStrategy | 'cloud';
+      strategy?: MergeStrategy | 'cloud';
       authHttpSucceededAt?: number;
       flowLabel: 'login' | 'register' | 'merge';
     }) => {
@@ -358,10 +359,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         };
       }
 
+      const localDataAction = resolveLocalDataAction({ flowLabel, strategy });
       if (fromUserId && fromUserId !== session.userId) {
-        if (strategy === 'cloud') {
+        if (localDataAction === 'clear') {
           await clearLocalUserData(fromUserId);
-        } else {
+        } else if (localDataAction === 'migrate') {
           await migrateLocalUserData(fromUserId, session.userId);
         }
       }
@@ -460,7 +462,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           accessToken,
           refreshToken,
         },
-        strategy: 'local',
+        strategy: flowLabel === 'register' ? 'local' : undefined,
         authHttpSucceededAt,
         flowLabel,
       });
