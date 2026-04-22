@@ -203,10 +203,10 @@ const AppContent = ({
   const [isSelectionMode, setIsSelectionMode] = useState(false);
 
   useEffect(() => {
-    if (!isAuthenticated || !userId) return;
+    if (!userId) return;
 
     void registerDevicePushToken({ userId });
-  }, [isAuthenticated, userId]);
+  }, [userId]);
 
   useEffect(() => {
     if (Platform.OS === 'android') {

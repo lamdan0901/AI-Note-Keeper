@@ -176,7 +176,7 @@ const extractBearerToken = (request: Request): string => {
 
 const extractWebGuestUserId = (request: Request): string => {
   const platform = request.header('x-client-platform')?.toLowerCase() ?? '';
-  if (platform !== 'web') {
+  if (platform !== 'web' && platform !== 'mobile') {
     throw toAuthError('Access token is required');
   }
 

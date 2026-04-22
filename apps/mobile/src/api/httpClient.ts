@@ -6,7 +6,12 @@ import type {
   TokenProvider,
 } from './contracts';
 import { createMobileAuthHttpClient } from '../auth/httpClient';
-import { getOrCreateDeviceId, loadAuthSession, saveAuthSession } from '../auth/session';
+import {
+  getOrCreateDeviceId,
+  loadAuthSession,
+  resolveCurrentUserId,
+  saveAuthSession,
+} from '../auth/session';
 
 const readApiBaseUrl = (): string | undefined => {
   return process.env.EXPO_PUBLIC_API_BASE_URL ?? process.env.EXPO_PUBLIC_AUTH_API_URL;
@@ -70,12 +75,14 @@ export class MobileApiError extends Error {
 type ClientInput = Readonly<{
   getAccessToken: TokenProvider;
   refreshAccessToken: RefreshAccessToken;
+  getGuestUserId?: () => Promise<string | null>;
   onUnauthorized?: () => void;
 }>;
 
 const buildHeaders = (
   headers: Readonly<Record<string, string>>,
   accessToken: string | null | undefined,
+  guestUserId: string | null | undefined,
   hasBody: boolean,
 ): Record<string, string> => {
   const nextHeaders: Record<string, string> = {
@@ -91,6 +98,10 @@ const buildHeaders = (
     nextHeaders.authorization = `Bearer ${accessToken}`;
   }
 
+  if (!accessToken && guestUserId) {
+    nextHeaders['x-guest-user-id'] = guestUserId;
+  }
+
   return nextHeaders;
 };
 
@@ -100,6 +111,7 @@ const executeRequest = async <T>(
     options: HttpRequestOptions;
     getAccessToken: TokenProvider;
     refreshAccessToken: RefreshAccessToken;
+    getGuestUserId?: () => Promise<string | null>;
     onUnauthorized?: () => void;
     hasRetried: boolean;
   }>,
@@ -107,10 +119,12 @@ const executeRequest = async <T>(
   const method = input.options.method ?? 'GET';
   const hasBody = input.options.body !== undefined;
   const accessToken = await input.getAccessToken();
+  const guestUserId =
+    accessToken || !input.getGuestUserId ? null : await input.getGuestUserId();
 
   const response = await fetch(toApiUrl(input.path), {
     method,
-    headers: buildHeaders(input.options.headers ?? {}, accessToken, hasBody),
+    headers: buildHeaders(input.options.headers ?? {}, accessToken, guestUserId, hasBody),
     body: hasBody ? JSON.stringify(input.options.body) : undefined,
   });
 
@@ -162,6 +176,7 @@ export const createMobileApiClient = (input: ClientInput): MobileApiClient => {
         options,
         getAccessToken: input.getAccessToken,
         refreshAccessToken: input.refreshAccessToken,
+        getGuestUserId: input.getGuestUserId,
         onUnauthorized: input.onUnauthorized,
         hasRetried: false,
       });
@@ -176,6 +191,14 @@ export const createDefaultMobileApiClient = (): MobileApiClient => {
     getAccessToken: async () => {
       const session = await loadAuthSession();
       return session?.accessToken ?? null;
+    },
+    getGuestUserId: async () => {
+      const session = await loadAuthSession();
+      if (session) {
+        return null;
+      }
+
+      return await resolveCurrentUserId();
     },
     refreshAccessToken: async () => {
       if (!authClient) {

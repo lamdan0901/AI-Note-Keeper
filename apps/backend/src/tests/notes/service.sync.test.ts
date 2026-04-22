@@ -251,6 +251,43 @@ test('requireAccessUserOrWebGuest injects guest user context for valid web guest
   assert.match(authenticated.authUser.username, /__web_guest_user__/);
 });
 
+test('requireAccessUserOrWebGuest injects guest user context for valid mobile guest headers', async () => {
+  const middleware = requireAccessUserOrWebGuest({
+    resolveWebGuestUser: async (guestUserId: string) => {
+      return {
+        userId: guestUserId,
+        username: `__web_guest_user__${guestUserId}`,
+      };
+    },
+  });
+
+  const request = {
+    header: (name: string) => {
+      const normalized = name.toLowerCase();
+      if (normalized === 'x-client-platform') {
+        return 'mobile';
+      }
+
+      if (normalized === 'x-guest-user-id') {
+        return '123e4567-e89b-12d3-a456-426614174000';
+      }
+
+      return undefined;
+    },
+  } as unknown as Request;
+
+  const error = await new Promise<unknown>((resolve) => {
+    middleware(request, {} as never, (nextError) => {
+      resolve(nextError);
+    });
+  });
+
+  assert.equal(error, undefined);
+  const authenticated = request as AuthenticatedRequest;
+  assert.equal(authenticated.authUser.userId, '123e4567-e89b-12d3-a456-426614174000');
+  assert.match(authenticated.authUser.username, /__web_guest_user__/);
+});
+
 test('requireAccessUserOrWebGuest rejects malformed web guest ids', async () => {
   const middleware = requireAccessUserOrWebGuest({
     resolveWebGuestUser: async () => {

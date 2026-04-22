@@ -1,7 +1,10 @@
-import { Router } from 'express';
+import { Router, type RequestHandler } from 'express';
 import { z } from 'zod';
 
-import { requireAccessUser, type AuthenticatedRequest } from '../auth/access-middleware.js';
+import {
+  requireAccessUserOrWebGuest,
+  type AuthenticatedRequest,
+} from '../auth/access-middleware.js';
 import { validateRequest, withErrorBoundary } from '../middleware/validate.js';
 import { createDeviceTokensService, type DeviceTokensService } from './service.js';
 
@@ -21,12 +24,13 @@ const getUserId = (request: AuthenticatedRequest): string => {
 
 export const createDeviceTokensRoutes = (
   service: DeviceTokensService = createDeviceTokensService(),
+  authMiddleware: RequestHandler = requireAccessUserOrWebGuest(),
 ): Router => {
   const router = Router();
 
   router.post(
     '/',
-    requireAccessUser(),
+    authMiddleware,
     validateRequest({ body: upsertBodySchema }),
     withErrorBoundary(async (request, response) => {
       const userId = getUserId(request as AuthenticatedRequest);
@@ -49,7 +53,7 @@ export const createDeviceTokensRoutes = (
 
   router.delete(
     '/:deviceId',
-    requireAccessUser(),
+    authMiddleware,
     validateRequest({ params: deviceIdParamsSchema }),
     withErrorBoundary(async (request, response) => {
       const userId = getUserId(request as AuthenticatedRequest);

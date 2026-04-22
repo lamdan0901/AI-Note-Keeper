@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import type { Server } from 'node:net';
 import test from 'node:test';
 
-import express from 'express';
+import express, { type RequestHandler } from 'express';
 
 import { createTokenFactory } from '../../auth/tokens.js';
 import type { DeviceTokenRecord } from '../../device-tokens/contracts.js';
@@ -59,10 +59,11 @@ const createServiceDouble = (): DeviceTokensService &
 
 const startServer = async (
   service: DeviceTokensService,
+  authMiddleware?: RequestHandler,
 ): Promise<Readonly<{ baseUrl: string; close: () => Promise<void> }>> => {
   const app = express();
   app.use(express.json());
-  app.use('/api/device-tokens', createDeviceTokensRoutes(service));
+  app.use('/api/device-tokens', createDeviceTokensRoutes(service, authMiddleware));
   app.use(notFoundMiddleware);
   app.use(errorMiddleware);
 
@@ -171,6 +172,46 @@ test('device token route upsert is idempotent, allows same-device reassignment, 
 
     assert.equal(deletedMissing.status, 200);
     assert.deepEqual(await deletedMissing.json(), { deleted: false });
+  } finally {
+    await server.close();
+  }
+});
+
+test('device token route accepts guest-authenticated mobile requests', async () => {
+  const service = createServiceDouble();
+  const authMiddleware: RequestHandler = (request, _response, next) => {
+    const guestUserId = request.header('x-guest-user-id');
+    if (!guestUserId) {
+      next(new Error('Missing guest user id'));
+      return;
+    }
+
+    (request as unknown as { authUser: { userId: string; username: string } }).authUser = {
+      userId: guestUserId,
+      username: `__web_guest_user__${guestUserId}`,
+    };
+    next();
+  };
+
+  const server = await startServer(service, authMiddleware);
+
+  try {
+    const response = await fetch(`${server.baseUrl}/api/device-tokens`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-client-platform': 'mobile',
+        'x-guest-user-id': '123e4567-e89b-12d3-a456-426614174000',
+      },
+      body: JSON.stringify({
+        deviceId: 'device-guest',
+        fcmToken: 'fcm-guest',
+        platform: 'android',
+      }),
+    });
+
+    assert.equal(response.status, 200);
+    assert.equal(service.tokens.get('device-guest')?.userId, '123e4567-e89b-12d3-a456-426614174000');
   } finally {
     await server.close();
   }

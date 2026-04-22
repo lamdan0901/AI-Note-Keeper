@@ -5,7 +5,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import uuid from 'react-native-uuid';
 
 import { logSyncEvent } from '../reminders/logging';
-import { loadAuthSession, resolveCurrentUserId } from '../auth/session';
+import { resolveCurrentUserId } from '../auth/session';
 import { createDefaultMobileApiClient } from '../api/httpClient';
 
 const DEVICE_ID_KEY = 'DEVICE_UNIQUE_ID';
@@ -81,13 +81,6 @@ export const registerDevicePushToken = async (
   if (!process.env.EXPO_PUBLIC_API_BASE_URL && !process.env.EXPO_PUBLIC_AUTH_API_URL) {
     console.warn('[PushToken] ABORT: Missing API base URL');
     logSyncEvent('warn', 'push_token_missing_api_base_url');
-    return;
-  }
-
-  const session = await loadAuthSession();
-  if (!session) {
-    console.log('[PushToken] SKIP: No authenticated session');
-    logSyncEvent('info', 'push_token_skip_unauthenticated');
     return;
   }
 
