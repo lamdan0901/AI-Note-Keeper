@@ -6,7 +6,12 @@ import {
   isLandingDismissedInSession,
   shouldShowLanding,
 } from '../src/services/landingSession';
-import { loadLegacyWebAuthUpgradeSession } from '../src/auth/session';
+import {
+  clearWebAuthSession,
+  loadLegacyWebAuthUpgradeSession,
+  loadWebAuthSession,
+  saveWebAuthSession,
+} from '../src/auth/session';
 
 describe('landingSession', () => {
   it('shows landing only when auth is not loading, user is unauthenticated, and landing is not dismissed', () => {
@@ -115,6 +120,51 @@ describe('landingSession', () => {
         userId: 'legacy-user',
         legacySessionToken: undefined,
       });
+    } finally {
+      (globalThis as { window?: unknown }).window = previousWindow;
+    }
+  });
+
+  it('persists and restores refresh token in web auth session', () => {
+    const storage = new Map<string, string>();
+
+    const localStorage = {
+      getItem: (key: string): string | null => storage.get(key) ?? null,
+      setItem: (key: string, value: string): void => {
+        storage.set(key, value);
+      },
+      removeItem: (key: string): void => {
+        storage.delete(key);
+      },
+      clear: (): void => {
+        storage.clear();
+      },
+      key: (_index: number): string | null => null,
+      get length(): number {
+        return storage.size;
+      },
+    };
+
+    const previousWindow = (globalThis as { window?: unknown }).window;
+    (globalThis as { window?: unknown }).window = { localStorage };
+
+    try {
+      saveWebAuthSession({
+        userId: 'user-1',
+        username: 'alice',
+        accessToken: 'access-1',
+        refreshToken: 'refresh-1',
+      });
+
+      expect(loadWebAuthSession()).toEqual({
+        userId: 'user-1',
+        username: 'alice',
+        accessToken: 'access-1',
+        refreshToken: 'refresh-1',
+      });
+
+      clearWebAuthSession();
+      expect(loadWebAuthSession()).toBeNull();
     } finally {
       (globalThis as { window?: unknown }).window = previousWindow;
     }

@@ -27,6 +27,11 @@ import { buildReminderSyncFields } from '../services/reminderUtils';
 import { NotesList } from '../components/NotesList';
 import { NoteEditorModal } from '../components/NoteEditorModal';
 import { useWebAuth } from '../auth/AuthContext';
+import {
+  mergeOptimisticNotes,
+  reconcileOptimisticNotes,
+  type OptimisticUpsertsById,
+} from './notesOptimistic';
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
@@ -58,36 +63,64 @@ export default function NotesPage({
   const [modalOpen, setModalOpen] = useState(false);
   const [draft, setDraft] = useState<NoteEditorDraft>(emptyDraft());
   const [editingNote, setEditingNote] = useState<WebNote | null>(null);
-  const [optimisticNotes, setOptimisticNotes] = useState<WebNote[] | null>(null);
+  const [optimisticUpsertsById, setOptimisticUpsertsById] = useState<OptimisticUpsertsById>({});
+  const [optimisticDeletedIds, setOptimisticDeletedIds] = useState<Set<string>>(new Set());
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
   const debouncedSearchQuery = useDebouncedValue(searchQuery, 250);
 
-  // Active notes (for main view)
-  const serverNotes = useMemo<WebNote[] | undefined>(() => {
-    if (allNotes === undefined) return undefined;
-    return sortNotes(filterActive(allNotes));
-  }, [allNotes]);
+  const mergedNotes = useMemo<WebNote[]>(
+    () => mergeOptimisticNotes(allNotes, optimisticUpsertsById, optimisticDeletedIds),
+    [allNotes, optimisticDeletedIds, optimisticUpsertsById],
+  );
 
-  // Trash notes
+  const activeNotes = useMemo<WebNote[]>(() => {
+    return sortNotes(filterActive(mergedNotes));
+  }, [mergedNotes]);
+
   const trashNotes = useMemo<WebNote[]>(() => {
-    if (allNotes === undefined) return [];
-    return allNotes
+    return mergedNotes
       .filter((n) => n.active === false)
       .sort((a, b) => (b.deletedAt ?? b.updatedAt) - (a.deletedAt ?? a.updatedAt));
-  }, [allNotes]);
+  }, [mergedNotes]);
 
-  const displayNotes = useMemo<WebNote[]>(
-    () => optimisticNotes ?? serverNotes ?? [],
-    [optimisticNotes, serverNotes],
-  );
   const filteredNotes = useMemo(
-    () => filterBySearchQuery(displayNotes, debouncedSearchQuery),
-    [displayNotes, debouncedSearchQuery],
+    () => filterBySearchQuery(activeNotes, debouncedSearchQuery),
+    [activeNotes, debouncedSearchQuery],
   );
   const filteredTrashNotes = useMemo(
     () => filterBySearchQuery(trashNotes, debouncedSearchQuery),
     [trashNotes, debouncedSearchQuery],
   );
+
+  useEffect(() => {
+    if (allNotes === undefined) {
+      return;
+    }
+
+    const reconciled = reconcileOptimisticNotes(allNotes, optimisticUpsertsById, optimisticDeletedIds);
+
+    setOptimisticUpsertsById((previous) => {
+      const previousIds = Object.keys(previous);
+      const nextIds = Object.keys(reconciled.optimisticUpsertsById);
+      if (
+        previousIds.length === nextIds.length &&
+        previousIds.every((id) => previous[id] === reconciled.optimisticUpsertsById[id])
+      ) {
+        return previous;
+      }
+      return reconciled.optimisticUpsertsById;
+    });
+
+    setOptimisticDeletedIds((previous) => {
+      if (
+        previous.size === reconciled.optimisticDeletedIds.size &&
+        Array.from(previous).every((id) => reconciled.optimisticDeletedIds.has(id))
+      ) {
+        return previous;
+      }
+      return reconciled.optimisticDeletedIds;
+    });
+  }, [allNotes, optimisticDeletedIds, optimisticUpsertsById]);
 
   useEffect(() => {
     if (newNoteTrigger > 0) {
@@ -145,8 +178,6 @@ export default function NotesPage({
         return;
       }
 
-      // Capture rollback snapshot before any optimistic mutation
-      const snapshot: WebNote[] = optimisticNotes ?? serverNotes ?? [];
       let draftForMutation = effectiveDraft;
       const nowDate = new Date();
       const reminderFields = buildReminderSyncFields(
@@ -166,6 +197,7 @@ export default function NotesPage({
           userId,
           title: effectiveDraft.title || null,
           content: effectiveDraft.content || null,
+          contentType: effectiveDraft.contentType,
           color: effectiveDraft.color,
           active: true,
           done: effectiveDraft.done,
@@ -184,13 +216,25 @@ export default function NotesPage({
           createdAt: now,
         };
         draftForMutation = { ...effectiveDraft, id: newId };
-        setOptimisticNotes(sortNotes([optimisticNote, ...snapshot]));
+        setOptimisticDeletedIds((previous) => {
+          if (!previous.has(newId)) {
+            return previous;
+          }
+          const next = new Set(previous);
+          next.delete(newId);
+          return next;
+        });
+        setOptimisticUpsertsById((previous) => ({
+          ...previous,
+          [newId]: optimisticNote,
+        }));
       } else if (editingNote) {
         const now = Date.now();
         const updated: WebNote = {
           ...editingNote,
           title: effectiveDraft.title || null,
           content: effectiveDraft.content || null,
+          contentType: effectiveDraft.contentType,
           color: effectiveDraft.color,
           done: effectiveDraft.done,
           isPinned: effectiveDraft.isPinned,
@@ -206,7 +250,18 @@ export default function NotesPage({
           timezone: reminderFields.timezone,
           updatedAt: now,
         };
-        setOptimisticNotes(sortNotes(snapshot.map((n) => (n.id === editingNote.id ? updated : n))));
+        setOptimisticDeletedIds((previous) => {
+          if (!previous.has(editingNote.id)) {
+            return previous;
+          }
+          const next = new Set(previous);
+          next.delete(editingNote.id);
+          return next;
+        });
+        setOptimisticUpsertsById((previous) => ({
+          ...previous,
+          [editingNote.id]: updated,
+        }));
       }
 
       setModalOpen(false);
@@ -218,65 +273,96 @@ export default function NotesPage({
         } else {
           await updateNote(sync, userId, effectiveDraft, editingNote!);
         }
-        setOptimisticNotes(null);
         setSaveStatus('saved');
         setTimeout(() => setSaveStatus('idle'), 2000);
       } catch {
-        setOptimisticNotes(snapshot);
+        if (isNew) {
+          const optimisticId = draftForMutation.id;
+          if (!optimisticId) {
+            throw new Error('Optimistic create note ID is missing');
+          }
+          setOptimisticUpsertsById((previous) => {
+            const next = { ...previous };
+            delete next[optimisticId];
+            return next;
+          });
+        } else if (editingNote) {
+          setOptimisticUpsertsById((previous) => {
+            const next = { ...previous };
+            delete next[editingNote.id];
+            return next;
+          });
+        }
         setSaveStatus('error');
         setTimeout(() => setSaveStatus('idle'), 3000);
       }
     },
-    [draft, editingNote, optimisticNotes, serverNotes, sync, userId],
+    [draft, editingNote, sync, userId],
   );
 
   const handleDelete = useCallback(async () => {
     if (!editingNote) return;
-    const snapshot: WebNote[] = optimisticNotes ?? serverNotes ?? [];
-    setOptimisticNotes(snapshot.filter((n) => n.id !== editingNote.id));
+    const now = Date.now();
+    const deletedNote: WebNote = {
+      ...editingNote,
+      active: false,
+      deletedAt: now,
+      updatedAt: now,
+    };
+    setOptimisticUpsertsById((previous) => ({
+      ...previous,
+      [editingNote.id]: deletedNote,
+    }));
     setModalOpen(false);
     setSaveStatus('saving');
 
     try {
       await deleteNote(sync, userId, editingNote.id);
-      setOptimisticNotes(null);
       setSaveStatus('saved');
       setTimeout(() => setSaveStatus('idle'), 2000);
     } catch {
-      setOptimisticNotes(snapshot);
+      setOptimisticUpsertsById((previous) => {
+        const next = { ...previous };
+        delete next[editingNote.id];
+        return next;
+      });
       setSaveStatus('error');
       setTimeout(() => setSaveStatus('idle'), 3000);
     }
-  }, [editingNote, optimisticNotes, serverNotes, sync, userId]);
+  }, [editingNote, sync, userId]);
 
   const handleToggleDone = useCallback(
     async (note: WebNote) => {
-      const snapshot: WebNote[] = optimisticNotes ?? serverNotes ?? [];
       const now = Date.now();
       const toggledDone = !note.done;
+      const optimisticNote: WebNote = {
+        ...note,
+        done: toggledDone,
+        contentType: note.contentType,
+        triggerAt: toggledDone ? undefined : note.triggerAt,
+        repeatRule: toggledDone ? 'none' : note.repeatRule,
+        repeatConfig: toggledDone ? null : note.repeatConfig,
+        repeat: toggledDone ? null : note.repeat,
+        startAt: toggledDone ? null : note.startAt,
+        baseAtLocal: toggledDone ? null : note.baseAtLocal,
+        nextTriggerAt: toggledDone ? null : note.nextTriggerAt,
+        snoozedUntil: toggledDone ? undefined : note.snoozedUntil,
+        scheduleStatus: toggledDone ? undefined : note.scheduleStatus,
+        updatedAt: now,
+      };
 
-      setOptimisticNotes(
-        sortNotes(
-          snapshot.map((n) =>
-            n.id === note.id
-              ? {
-                  ...n,
-                  done: toggledDone,
-                  triggerAt: toggledDone ? undefined : n.triggerAt,
-                  repeatRule: toggledDone ? 'none' : n.repeatRule,
-                  repeatConfig: toggledDone ? null : n.repeatConfig,
-                  repeat: toggledDone ? null : n.repeat,
-                  startAt: toggledDone ? null : n.startAt,
-                  baseAtLocal: toggledDone ? null : n.baseAtLocal,
-                  nextTriggerAt: toggledDone ? null : n.nextTriggerAt,
-                  snoozedUntil: toggledDone ? undefined : n.snoozedUntil,
-                  scheduleStatus: toggledDone ? undefined : n.scheduleStatus,
-                  updatedAt: now,
-                }
-              : n,
-          ),
-        ),
-      );
+      setOptimisticDeletedIds((previous) => {
+        if (!previous.has(note.id)) {
+          return previous;
+        }
+        const next = new Set(previous);
+        next.delete(note.id);
+        return next;
+      });
+      setOptimisticUpsertsById((previous) => ({
+        ...previous,
+        [note.id]: optimisticNote,
+      }));
       setSaveStatus('saving');
 
       const baseDraft = draftFromNote(note);
@@ -289,37 +375,44 @@ export default function NotesPage({
 
       try {
         await updateNote(sync, userId, toggleDraft, note);
-        setOptimisticNotes(null);
         setSaveStatus('saved');
         setTimeout(() => setSaveStatus('idle'), 2000);
       } catch {
-        setOptimisticNotes(snapshot);
+        setOptimisticUpsertsById((previous) => {
+          const next = { ...previous };
+          delete next[note.id];
+          return next;
+        });
         setSaveStatus('error');
         setTimeout(() => setSaveStatus('idle'), 3000);
       }
     },
-    [optimisticNotes, serverNotes, sync, userId],
+    [sync, userId],
   );
 
   const handleTogglePin = useCallback(
     async (note: WebNote) => {
-      const snapshot: WebNote[] = optimisticNotes ?? serverNotes ?? [];
       const now = Date.now();
       const toggledPin = !note.isPinned;
+      const optimisticNote: WebNote = {
+        ...note,
+        isPinned: toggledPin,
+        contentType: note.contentType,
+        updatedAt: now,
+      };
 
-      setOptimisticNotes(
-        sortNotes(
-          snapshot.map((n) =>
-            n.id === note.id
-              ? {
-                  ...n,
-                  isPinned: toggledPin,
-                  updatedAt: now,
-                }
-              : n,
-          ),
-        ),
-      );
+      setOptimisticDeletedIds((previous) => {
+        if (!previous.has(note.id)) {
+          return previous;
+        }
+        const next = new Set(previous);
+        next.delete(note.id);
+        return next;
+      });
+      setOptimisticUpsertsById((previous) => ({
+        ...previous,
+        [note.id]: optimisticNote,
+      }));
       setSaveStatus('saving');
 
       const toggleDraft = {
@@ -329,36 +422,51 @@ export default function NotesPage({
 
       try {
         await updateNote(sync, userId, toggleDraft, note);
-        setOptimisticNotes(null);
         setSaveStatus('saved');
         setTimeout(() => setSaveStatus('idle'), 2000);
       } catch {
-        setOptimisticNotes(snapshot);
+        setOptimisticUpsertsById((previous) => {
+          const next = { ...previous };
+          delete next[note.id];
+          return next;
+        });
         setSaveStatus('error');
         setTimeout(() => setSaveStatus('idle'), 3000);
       }
     },
-    [optimisticNotes, serverNotes, sync, userId],
+    [sync, userId],
   );
 
   const handleDeleteFromCard = useCallback(
     async (note: WebNote) => {
-      const snapshot: WebNote[] = optimisticNotes ?? serverNotes ?? [];
-      setOptimisticNotes(snapshot.filter((n) => n.id !== note.id));
+      const now = Date.now();
+      const deletedNote: WebNote = {
+        ...note,
+        active: false,
+        deletedAt: now,
+        updatedAt: now,
+      };
+      setOptimisticUpsertsById((previous) => ({
+        ...previous,
+        [note.id]: deletedNote,
+      }));
       setSaveStatus('saving');
 
       try {
         await deleteNote(sync, userId, note.id);
-        setOptimisticNotes(null);
         setSaveStatus('saved');
         setTimeout(() => setSaveStatus('idle'), 2000);
       } catch {
-        setOptimisticNotes(snapshot);
+        setOptimisticUpsertsById((previous) => {
+          const next = { ...previous };
+          delete next[note.id];
+          return next;
+        });
         setSaveStatus('error');
         setTimeout(() => setSaveStatus('idle'), 3000);
       }
     },
-    [optimisticNotes, serverNotes, sync, userId],
+    [sync, userId],
   );
 
   useEffect(() => {
@@ -382,12 +490,37 @@ export default function NotesPage({
 
   const handleRestoreNote = useCallback(
     async (note: WebNote) => {
+      const now = Date.now();
+      const restoredNote: WebNote = {
+        ...note,
+        active: true,
+        deletedAt: undefined,
+        contentType: note.contentType,
+        updatedAt: now,
+      };
+      setOptimisticDeletedIds((previous) => {
+        if (!previous.has(note.id)) {
+          return previous;
+        }
+        const next = new Set(previous);
+        next.delete(note.id);
+        return next;
+      });
+      setOptimisticUpsertsById((previous) => ({
+        ...previous,
+        [note.id]: restoredNote,
+      }));
       setSaveStatus('saving');
       try {
         await restoreNote(sync, userId, note);
         setSaveStatus('saved');
         setTimeout(() => setSaveStatus('idle'), 2000);
       } catch {
+        setOptimisticUpsertsById((previous) => {
+          const next = { ...previous };
+          delete next[note.id];
+          return next;
+        });
         setSaveStatus('error');
         setTimeout(() => setSaveStatus('idle'), 3000);
       }
@@ -397,12 +530,36 @@ export default function NotesPage({
 
   const handlePermanentDelete = useCallback(
     async (note: WebNote) => {
+      setOptimisticDeletedIds((previous) => {
+        if (previous.has(note.id)) {
+          return previous;
+        }
+        const next = new Set(previous);
+        next.add(note.id);
+        return next;
+      });
+      setOptimisticUpsertsById((previous) => {
+        if (!Object.prototype.hasOwnProperty.call(previous, note.id)) {
+          return previous;
+        }
+        const next = { ...previous };
+        delete next[note.id];
+        return next;
+      });
       setSaveStatus('saving');
       try {
         await permanentlyDeleteNoteMutation({ userId, noteId: note.id });
         setSaveStatus('saved');
         setTimeout(() => setSaveStatus('idle'), 2000);
       } catch {
+        setOptimisticDeletedIds((previous) => {
+          if (!previous.has(note.id)) {
+            return previous;
+          }
+          const next = new Set(previous);
+          next.delete(note.id);
+          return next;
+        });
         setSaveStatus('error');
         setTimeout(() => setSaveStatus('idle'), 3000);
       }
@@ -438,7 +595,7 @@ export default function NotesPage({
         />
       ) : (
         <>
-          {serverNotes === undefined ? (
+          {allNotes === undefined ? (
             <p className="notes-page__loading">Loading…</p>
           ) : (
             <NotesList

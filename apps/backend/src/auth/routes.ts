@@ -108,23 +108,14 @@ const buildAuthResponse = (
     username: string;
     accessToken: string;
     transport: 'cookie' | 'json';
-    refreshToken?: string;
+    refreshToken: string;
   }>,
 ): Record<string, unknown> => {
-  if (input.transport === 'json') {
-    return {
-      userId: input.userId,
-      username: input.username,
-      accessToken: input.accessToken,
-      refreshToken: input.refreshToken,
-      transport: input.transport,
-    };
-  }
-
   return {
     userId: input.userId,
     username: input.username,
     accessToken: input.accessToken,
+    refreshToken: input.refreshToken,
     transport: input.transport,
   };
 };
@@ -157,7 +148,7 @@ export const createAuthRoutes = (authService: AuthService = createAuthService())
           userId: session.userId,
           username: session.username,
           accessToken: session.tokens.accessToken,
-          refreshToken: transport.transport === 'json' ? session.tokens.refreshToken : undefined,
+          refreshToken: session.tokens.refreshToken,
           transport: transport.transport,
         }),
       );
@@ -183,7 +174,7 @@ export const createAuthRoutes = (authService: AuthService = createAuthService())
           userId: session.userId,
           username: session.username,
           accessToken: session.tokens.accessToken,
-          refreshToken: transport.transport === 'json' ? session.tokens.refreshToken : undefined,
+          refreshToken: session.tokens.refreshToken,
           transport: transport.transport,
         }),
       );
@@ -214,7 +205,7 @@ export const createAuthRoutes = (authService: AuthService = createAuthService())
           userId: session.userId,
           username: session.username,
           accessToken: session.tokens.accessToken,
-          refreshToken: transport.transport === 'json' ? session.tokens.refreshToken : undefined,
+          refreshToken: session.tokens.refreshToken,
           transport: transport.transport,
         }),
       );
@@ -262,7 +253,7 @@ export const createAuthRoutes = (authService: AuthService = createAuthService())
           userId: session.userId,
           username: session.username,
           accessToken: session.tokens.accessToken,
-          refreshToken: transport.transport === 'json' ? session.tokens.refreshToken : undefined,
+          refreshToken: session.tokens.refreshToken,
           transport: transport.transport,
         }),
       );

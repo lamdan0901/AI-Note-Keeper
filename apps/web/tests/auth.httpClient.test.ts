@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createWebApiClient, WebApiError } from '../src/api/httpClient';
+import { createWebAuthHttpClient } from '../src/auth/httpClient';
 
 describe('web api http client', () => {
   const previousWindow = (globalThis as { window?: unknown }).window;
@@ -141,5 +142,61 @@ describe('web api http client', () => {
 
     expect(refreshSpy).toHaveBeenCalledTimes(1);
     expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('web auth http client', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+  });
+
+  it('sends explicit refresh token when provided', async () => {
+    vi.stubEnv('VITE_AUTH_API_BASE_URL', 'http://localhost:3000');
+
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          userId: 'user-1',
+          username: 'alice',
+          accessToken: 'access-2',
+          refreshToken: 'refresh-2',
+        }),
+        {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        },
+      ),
+    );
+
+    const client = createWebAuthHttpClient();
+    expect(client).not.toBeNull();
+
+    await client?.refresh({ refreshToken: 'refresh-1' });
+
+    const requestInit = fetchSpy.mock.calls[0]?.[1] as RequestInit;
+    expect(requestInit.credentials).toBe('include');
+    expect(requestInit.method).toBe('POST');
+    expect(requestInit.body).toBe(JSON.stringify({ refreshToken: 'refresh-1' }));
+  });
+
+  it('sends explicit refresh token on logout when provided', async () => {
+    vi.stubEnv('VITE_AUTH_API_BASE_URL', 'http://localhost:3000');
+
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(null, {
+        status: 204,
+      }),
+    );
+
+    const client = createWebAuthHttpClient();
+    expect(client).not.toBeNull();
+
+    await client?.logout('refresh-1');
+
+    const requestInit = fetchSpy.mock.calls[0]?.[1] as RequestInit;
+    expect(requestInit.credentials).toBe('include');
+    expect(requestInit.method).toBe('POST');
+    expect(requestInit.body).toBe(JSON.stringify({ refreshToken: 'refresh-1' }));
   });
 });

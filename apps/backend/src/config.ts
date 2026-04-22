@@ -30,7 +30,7 @@ const authDefaults: AuthConfig = {
   JWT_ACCESS_SECRET: 'dev-access-secret-that-is-at-least-32-chars',
   JWT_REFRESH_SECRET: 'dev-refresh-secret-that-is-at-least-32-chars',
   LEGACY_UPGRADE_SECRET: 'dev-legacy-upgrade-secret-at-least-32',
-  JWT_ACCESS_TTL_SECONDS: 900,
+  JWT_ACCESS_TTL_SECONDS: 3_600,
   JWT_REFRESH_TTL_SECONDS: 2_592_000,
 };
 

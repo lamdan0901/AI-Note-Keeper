@@ -135,7 +135,7 @@ test('web transport sets httpOnly cookie session artifacts on auth success', asy
 
     assert.equal(response.status, 200);
     assert.equal(payload.transport, 'cookie');
-    assert.equal('refreshToken' in payload, false);
+    assert.equal(payload.refreshToken, 'refresh-login');
     assert.match(cookie, /ank_refresh_token=refresh-login/);
     assert.match(cookie, /HttpOnly/i);
     assert.match(cookie, /SameSite=Lax/i);
@@ -167,6 +167,7 @@ test('production web transport sets SameSite=None secure refresh cookie', async 
 
     assert.equal(response.status, 200);
     assert.equal(payload.transport, 'cookie');
+    assert.equal(payload.refreshToken, 'refresh-login');
     assert.match(cookie, /SameSite=None/i);
     assert.match(cookie, /Secure/i);
   } finally {
@@ -239,6 +240,32 @@ test('logout and refresh failures produce stable auth error contract payloads', 
       message: 'Refresh token is required',
       status: 401,
     });
+  } finally {
+    await server.close();
+  }
+});
+
+test('web refresh returns rotated refresh token in response body and cookie transport', async () => {
+  const { authService } = createAuthServiceDouble();
+  const server = await startServer(authService);
+
+  try {
+    const response = await fetch(`${server.baseUrl}/api/auth/refresh`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        origin: 'http://localhost:5173',
+      },
+      body: JSON.stringify({ refreshToken: 'refresh-current' }),
+    });
+
+    const payload = (await response.json()) as Record<string, unknown>;
+    const cookie = response.headers.get('set-cookie') ?? '';
+
+    assert.equal(response.status, 200);
+    assert.equal(payload.transport, 'cookie');
+    assert.equal(payload.refreshToken, 'refresh-refresh');
+    assert.match(cookie, /ank_refresh_token=refresh-refresh/);
   } finally {
     await server.close();
   }

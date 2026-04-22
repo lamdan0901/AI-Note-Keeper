@@ -8,6 +8,7 @@ export type WebAuthSession = {
   userId: string;
   username: string;
   accessToken?: string;
+  refreshToken?: string;
 };
 
 export type LegacyWebUpgradeSession = {
@@ -39,6 +40,7 @@ export const loadWebAuthSession = (): WebAuthSession | null => {
       userId: parsed.userId,
       username: parsed.username,
       accessToken: parsed.accessToken,
+      refreshToken: parsed.refreshToken,
     };
   } catch {
     window.localStorage.removeItem(WEB_AUTH_SESSION_KEY);

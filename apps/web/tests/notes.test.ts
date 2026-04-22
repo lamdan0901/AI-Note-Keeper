@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createNote, getResolvedTimezone, updateNote, USER_ID } from '../src/services/notes';
+import { createNote, getResolvedTimezone, updateNote } from '../src/services/notes';
 import type { NoteEditorDraft, WebNote } from '../src/services/notesTypes';
+
+const USER_ID = 'user-1';
 
 function makeDraft(overrides: Partial<NoteEditorDraft> = {}): NoteEditorDraft {
   return {
@@ -47,7 +49,7 @@ describe('notes service payload shaping', () => {
       repeat: { kind: 'daily', interval: 2 },
     });
 
-    await createNote(sync, draft);
+    await createNote(sync, USER_ID, draft);
 
     const arg = sync.mock.calls[0]?.[0];
     expect(arg.userId).toBe(USER_ID);
@@ -75,7 +77,7 @@ describe('notes service payload shaping', () => {
     const draft = makeDraft({ id: 'note-1', reminder: null, repeat: null });
     const existing = makeNote();
 
-    await updateNote(sync, draft, existing);
+    await updateNote(sync, USER_ID, draft, existing);
 
     const change = sync.mock.calls[0]?.[0]?.changes?.[0];
     expect(change).toMatchObject({
@@ -100,7 +102,7 @@ describe('notes service payload shaping', () => {
       repeat: { kind: 'daily', interval: 1 },
     });
 
-    await createNote(sync, draft);
+    await createNote(sync, USER_ID, draft);
 
     const change = sync.mock.calls[0]?.[0]?.changes?.[0];
     expect(change).toMatchObject({
@@ -123,7 +125,7 @@ describe('notes service payload shaping', () => {
     });
     const existing = makeNote();
 
-    await updateNote(sync, draft, existing);
+    await updateNote(sync, USER_ID, draft, existing);
 
     const change = sync.mock.calls[0]?.[0]?.changes?.[0];
     expect(change).toMatchObject({

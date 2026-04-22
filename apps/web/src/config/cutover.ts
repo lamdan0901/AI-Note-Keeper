@@ -58,7 +58,10 @@ const parseBooleanFlag = (name: string, value: string | undefined): boolean => {
 };
 
 export const readWebCutoverConfig = (
-  env: Readonly<Record<string, string | undefined>> = process.env,
+  env: Readonly<Record<string, string | undefined>> = import.meta.env as Record<
+    string,
+    string | undefined
+  >,
 ): CutoverConfig => {
   return {
     cohort: parseCutoverCohort(env.VITE_CUTOVER_COHORT),

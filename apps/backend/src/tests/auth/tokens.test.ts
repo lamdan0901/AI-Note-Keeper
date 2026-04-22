@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import type { AuthConfig } from '../../config.js';
+import { readAuthConfig } from '../../config.js';
 import { createTokenFactory } from '../../auth/tokens.js';
 
 const baseConfig: AuthConfig = {
@@ -52,4 +53,26 @@ test('access and refresh token verification reject invalid signature, issuer, an
   });
 
   await assert.rejects(() => expiredFactory.verifyAccessToken(expiredPair.accessToken));
+});
+
+test('default auth config uses one hour access token lifetime and preserves refresh lifetime', () => {
+  const config = readAuthConfig({
+    PORT: '3000',
+    DATABASE_URL: 'https://example.com/db',
+    NODE_ENV: 'development',
+  } as NodeJS.ProcessEnv);
+
+  assert.equal(config.JWT_ACCESS_TTL_SECONDS, 3_600);
+  assert.equal(config.JWT_REFRESH_TTL_SECONDS, 2_592_000);
+});
+
+test('auth config env overrides default access token lifetime', () => {
+  const config = readAuthConfig({
+    PORT: '3000',
+    DATABASE_URL: 'https://example.com/db',
+    NODE_ENV: 'development',
+    JWT_ACCESS_TTL_SECONDS: '120',
+  } as NodeJS.ProcessEnv);
+
+  assert.equal(config.JWT_ACCESS_TTL_SECONDS, 120);
 });

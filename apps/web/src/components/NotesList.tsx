@@ -14,6 +14,10 @@ interface NotesListProps {
   searchQuery?: string;
 }
 
+interface NoteGroupProps extends NotesListProps {
+  className?: string;
+}
+
 function NoteGroup({
   notes,
   viewMode,
@@ -21,9 +25,14 @@ function NoteGroup({
   onToggleDone,
   onTogglePin,
   onDelete,
-}: NotesListProps) {
+  className = '',
+}: NoteGroupProps) {
+  const classes = [`notes-list__group`, `notes-list__group--${viewMode}`, className]
+    .filter(Boolean)
+    .join(' ');
+
   return (
-    <div className={`notes-list__group notes-list__group--${viewMode}`}>
+    <div className={classes}>
       {notes.map((note) => (
         <div key={note.id} className="note-card-slot">
           <NoteCard
@@ -77,7 +86,11 @@ export function NotesList({
             <Pin size={13} />
             Pinned
           </h2>
-          <NoteGroup notes={pinnedNotes} {...groupProps} />
+          <NoteGroup
+            notes={pinnedNotes}
+            className={viewMode === 'grid' ? 'notes-list__group--pinned-grid' : undefined}
+            {...groupProps}
+          />
         </section>
       )}
       {hasBothSections && <div className="notes-list__divider" />}

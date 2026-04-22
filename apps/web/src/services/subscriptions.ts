@@ -256,7 +256,7 @@ export function useUpdateSubscription() {
 
   return useCallback(
     async (input: Readonly<{ id: string; patch: SubscriptionUpdate }>): Promise<unknown> => {
-      const patchBody = Object.hasOwn(input.patch, 'status')
+      const patchBody = Object.prototype.hasOwnProperty.call(input.patch, 'status')
         ? {
             ...input.patch,
             status:

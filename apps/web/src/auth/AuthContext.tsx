@@ -30,6 +30,11 @@ type PendingMerge = {
   accessToken?: string;
 };
 
+type SessionTokens = Readonly<{
+  accessToken: string | null;
+  refreshToken: string | null;
+}>;
+
 type AuthResult = {
   success: boolean;
   error?: string;
@@ -61,7 +66,10 @@ export const WebAuthProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [isLoading, setIsLoading] = useState(() => initialSession === null);
   const [transitionState, setTransitionState] = useState<TransitionState>('idle');
   const [pendingMerge, setPendingMerge] = useState<PendingMerge | null>(null);
-  const currentAccessTokenRef = useRef<string | null>(initialSession?.accessToken ?? null);
+  const currentTokensRef = useRef<SessionTokens>({
+    accessToken: initialSession?.accessToken ?? null,
+    refreshToken: initialSession?.refreshToken ?? null,
+  });
   const webAuthClient = useMemo(() => createWebAuthHttpClient(), []);
 
   useEffect(() => {
@@ -71,7 +79,10 @@ export const WebAuthProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const existing = initialSession;
       if (existing) {
         if (!cancelled) {
-          currentAccessTokenRef.current = existing.accessToken ?? null;
+          currentTokensRef.current = {
+            accessToken: existing.accessToken ?? null,
+            refreshToken: existing.refreshToken ?? null,
+          };
           setSession(existing);
           setIsLoading(false);
         }
@@ -97,8 +108,12 @@ export const WebAuthProvider: React.FC<{ children: React.ReactNode }> = ({ child
             userId: upgraded.userId,
             username: upgraded.username,
             accessToken: upgraded.accessToken,
+            refreshToken: upgraded.refreshToken,
           };
-          currentAccessTokenRef.current = upgraded.accessToken;
+          currentTokensRef.current = {
+            accessToken: upgraded.accessToken,
+            refreshToken: upgraded.refreshToken ?? null,
+          };
           saveWebAuthSession(nextSession);
           setSession(nextSession);
         }
@@ -118,10 +133,13 @@ export const WebAuthProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return () => {
       cancelled = true;
     };
-  }, [webAuthClient]);
+  }, [initialSession, webAuthClient]);
 
   const finalizeSession = useCallback((nextSession: WebAuthSession) => {
-    currentAccessTokenRef.current = nextSession.accessToken ?? null;
+    currentTokensRef.current = {
+      accessToken: nextSession.accessToken ?? null,
+      refreshToken: nextSession.refreshToken ?? null,
+    };
     saveWebAuthSession(nextSession);
     setSession(nextSession);
     setTransitionState('idle');
@@ -136,7 +154,8 @@ export const WebAuthProvider: React.FC<{ children: React.ReactNode }> = ({ child
         finalizeSession({
           userId: merge.targetUserId,
           username: merge.accountUsername,
-          accessToken: merge.accessToken ?? currentAccessTokenRef.current ?? undefined,
+          accessToken: merge.accessToken ?? currentTokensRef.current.accessToken ?? undefined,
+          refreshToken: currentTokensRef.current.refreshToken ?? undefined,
         });
         return { success: true };
       } catch (error) {
@@ -155,18 +174,24 @@ export const WebAuthProvider: React.FC<{ children: React.ReactNode }> = ({ child
       accountUserId,
       accountUsername,
       accessToken,
+      refreshToken,
     }: {
       accountUserId: string;
       accountUsername: string;
       accessToken?: string;
+      refreshToken?: string;
     }): Promise<AuthResult> => {
-      currentAccessTokenRef.current = accessToken ?? null;
+      currentTokensRef.current = {
+        accessToken: accessToken ?? null,
+        refreshToken: refreshToken ?? null,
+      };
 
       if (localUserId === accountUserId) {
         finalizeSession({
           userId: accountUserId,
           username: accountUsername,
           accessToken: accessToken ?? undefined,
+          refreshToken: refreshToken ?? undefined,
         });
         return { success: true };
       }
@@ -176,6 +201,7 @@ export const WebAuthProvider: React.FC<{ children: React.ReactNode }> = ({ child
         userId: accountUserId,
         username: accountUsername,
         accessToken: accessToken ?? undefined,
+        refreshToken: refreshToken ?? undefined,
       });
       return { success: true };
     },
@@ -198,6 +224,7 @@ export const WebAuthProvider: React.FC<{ children: React.ReactNode }> = ({ child
           accountUserId: result.userId,
           accountUsername: result.username,
           accessToken: result.accessToken,
+          refreshToken: result.refreshToken,
         });
       } catch (error) {
         setTransitionState('idle');
@@ -211,36 +238,48 @@ export const WebAuthProvider: React.FC<{ children: React.ReactNode }> = ({ child
   );
 
   const getAccessToken = useCallback((): string | null => {
-    return currentAccessTokenRef.current;
+    return currentTokensRef.current.accessToken;
   }, []);
 
   const refreshAccessToken = useCallback(async (): Promise<string | null> => {
     if (!webAuthClient) {
-      currentAccessTokenRef.current = null;
+      currentTokensRef.current = {
+        accessToken: null,
+        refreshToken: null,
+      };
       return null;
     }
 
     try {
-      const refreshed = await webAuthClient.refresh();
+      const refreshed = await webAuthClient.refresh({
+        refreshToken: currentTokensRef.current.refreshToken ?? undefined,
+      });
       const nextSession: WebAuthSession = {
         userId: refreshed.userId,
         username: refreshed.username,
         accessToken: refreshed.accessToken,
+        refreshToken: refreshed.refreshToken,
       };
-      currentAccessTokenRef.current = refreshed.accessToken;
+      currentTokensRef.current = {
+        accessToken: refreshed.accessToken,
+        refreshToken: refreshed.refreshToken ?? null,
+      };
       saveWebAuthSession(nextSession);
       setSession(nextSession);
       return refreshed.accessToken;
     } catch (error) {
       if (error instanceof WebAuthHttpError && error.status === 401) {
         clearWebAuthSession();
-        currentAccessTokenRef.current = null;
+        currentTokensRef.current = {
+          accessToken: null,
+          refreshToken: null,
+        };
         setSession(null);
       }
 
       return null;
     }
-  }, [initialSession, webAuthClient]);
+  }, [webAuthClient]);
 
   const register = useCallback(
     async (username: string, password: string): Promise<AuthResult> => {
@@ -262,6 +301,7 @@ export const WebAuthProvider: React.FC<{ children: React.ReactNode }> = ({ child
           accountUserId: result.userId,
           accountUsername: result.username,
           accessToken: result.accessToken,
+          refreshToken: result.refreshToken,
         });
       } catch (error) {
         setTransitionState('idle');
@@ -294,14 +334,17 @@ export const WebAuthProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     if (webAuthClient) {
       try {
-        await webAuthClient.logout();
+        await webAuthClient.logout(currentTokensRef.current.refreshToken ?? undefined);
       } catch {
         // Keep logout fail-safe for offline and partial backend outages.
       }
     }
 
     clearWebAuthSession();
-    currentAccessTokenRef.current = null;
+    currentTokensRef.current = {
+      accessToken: null,
+      refreshToken: null,
+    };
     setSession(null);
     setPendingMerge(null);
     setTransitionState('idle');

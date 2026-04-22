@@ -45,13 +45,6 @@ const THEME_OPTIONS: Array<{ mode: ThemeMode; icon: React.ReactNode; label: stri
 type ActiveTab = 'notes' | 'subscriptions';
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
-const SAVE_STATUS_LABELS: Record<SaveStatus, string | null> = {
-  idle: null,
-  saving: 'Saving…',
-  saved: 'Saved',
-  error: 'Error saving',
-};
-
 export default function App(): JSX.Element {
   const {
     username,
@@ -167,7 +160,7 @@ export default function App(): JSX.Element {
         ? 'Search deleted subscriptions'
         : 'Search subscriptions';
   const hasSearch = activeSearchQuery.trim().length > 0;
-  const notesStatusLabel = SAVE_STATUS_LABELS[notesSaveStatus];
+  const notesStatusLabel = notesSaveStatus === 'error' ? 'Error saving' : null;
   const authBusy =
     authLoading ||
     transitionState === 'preflight' ||

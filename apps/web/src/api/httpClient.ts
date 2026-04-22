@@ -14,9 +14,12 @@ const normalizeBaseUrl = (baseUrl: string): string => {
   return baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
 };
 
-const baseUrl = normalizeBaseUrl(import.meta.env.VITE_API_BASE_URL ?? '');
+const getBaseUrl = (): string => {
+  return normalizeBaseUrl(import.meta.env.VITE_API_BASE_URL ?? '');
+};
 
 const toApiUrl = (path: string): string => {
+  const baseUrl = getBaseUrl();
   if (!baseUrl) {
     throw new Error('VITE_API_BASE_URL is required for web API transport');
   }
