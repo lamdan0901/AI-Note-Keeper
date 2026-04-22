@@ -20,7 +20,8 @@ import {
 import { markNoteSynced } from '../db/syncHelpers';
 import { createDefaultMobileApiClient } from '../api/httpClient';
 import type { MobileApiClient } from '../api/contracts';
-import { getOrCreateDeviceId } from '../auth/session';
+import { getOrCreateDeviceId, resolveCurrentUserId } from '../auth/session';
+import { isLogoutTransitionActive } from '../auth/logoutState';
 
 // ============================================================================
 // Types
@@ -38,6 +39,7 @@ export type BatchResult = {
   succeeded: number;
   failed: number;
   results: SyncOperationResult[];
+  stale?: boolean;
 };
 
 export type QueueProcessorConfig = {
@@ -124,6 +126,28 @@ const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number): Promise<T
   } finally {
     if (timeoutId) clearTimeout(timeoutId);
   }
+};
+
+const ensureActiveUser = async (userId: string, phase: string): Promise<boolean> => {
+  if (isLogoutTransitionActive()) {
+    log('warn', 'Aborting queue processing during logout transition', {
+      expectedUserId: userId,
+      phase,
+    });
+    return false;
+  }
+
+  const activeUserId = await resolveCurrentUserId();
+  if (activeUserId !== userId) {
+    log('warn', 'Aborting queue processing for stale user', {
+      expectedUserId: userId,
+      activeUserId,
+      phase,
+    });
+    return false;
+  }
+
+  return true;
 };
 
 // ============================================================================
@@ -312,6 +336,14 @@ export const processQueue = async (
 
   log('info', 'Starting queue processing', { config: cfg });
 
+  if (isLogoutTransitionActive()) {
+    return { total: 0, succeeded: 0, failed: 0, results: [], stale: true };
+  }
+
+  if (!(await ensureActiveUser(userId, 'start'))) {
+    return { total: 0, succeeded: 0, failed: 0, results: [], stale: true };
+  }
+
   if (!process.env.EXPO_PUBLIC_API_BASE_URL && !process.env.EXPO_PUBLIC_AUTH_API_URL) {
     log('warn', 'Missing API base URL, skipping queue push');
     return { total: 0, succeeded: 0, failed: 0, results: [] };
@@ -341,6 +373,16 @@ export const processQueue = async (
   // Process in batches
   let batchNumber = 0;
   for (let i = 0; i < pendingItems.length; i += cfg.batchSize) {
+    if (!(await ensureActiveUser(userId, 'batch'))) {
+      return {
+        total: allResults.length,
+        succeeded: allResults.filter((r) => r.success).length,
+        failed: allResults.filter((r) => !r.success).length,
+        results: allResults,
+        stale: true,
+      };
+    }
+
     batchNumber++;
     const batch = pendingItems.slice(i, i + cfg.batchSize);
 

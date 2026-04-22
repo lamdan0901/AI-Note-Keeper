@@ -5,6 +5,8 @@ import { resolveNoteConflict } from './conflictResolution';
 import { fetchNotes } from './fetchNotes';
 import { enqueueNoteOperation, getAllOutboxEntries } from './noteOutbox';
 import { processQueue, getQueueStats } from './syncQueueProcessor';
+import { resolveCurrentUserId } from '../auth/session';
+import { isLogoutTransitionActive } from '../auth/logoutState';
 
 // ============================================================================
 // Structured Logging
@@ -29,6 +31,37 @@ const log = (level: LogLevel, message: string, context?: Record<string, unknown>
   }
 };
 
+const createStaleSyncResult = (phase: string, pullCount: number = 0): SyncResult => ({
+  success: false,
+  pullCount,
+  pushResult: { total: 0, succeeded: 0, failed: 0 },
+  conflictCount: 0,
+  mergeCount: 0,
+  error: `Sync aborted because the active user changed during ${phase}`,
+});
+
+const ensureActiveUser = async (userId: string, phase: string): Promise<boolean> => {
+  if (isLogoutTransitionActive()) {
+    log('warn', 'Aborting sync during logout transition', {
+      expectedUserId: userId,
+      phase,
+    });
+    return false;
+  }
+
+  const activeUserId = await resolveCurrentUserId();
+  if (activeUserId !== userId) {
+    log('warn', 'Aborting sync for stale user', {
+      expectedUserId: userId,
+      activeUserId,
+      phase,
+    });
+    return false;
+  }
+
+  return true;
+};
+
 // ============================================================================
 // Sync Result Types
 // ============================================================================
@@ -51,12 +84,20 @@ export type SyncResult = {
 // ============================================================================
 
 export const syncNotes = async (db: SQLiteDatabase, userId: string): Promise<SyncResult> => {
+  if (isLogoutTransitionActive()) {
+    return createStaleSyncResult('logout');
+  }
+
   const startTime = Date.now();
   let pullCount = 0;
   let conflictCount = 0;
   let mergeCount = 0;
 
   log('info', 'Starting smart sync', { userId });
+
+  if (!(await ensureActiveUser(userId, 'start'))) {
+    return createStaleSyncResult('start');
+  }
 
   // Log queue stats before sync
   const preStats = await getQueueStats(db);
@@ -83,6 +124,10 @@ export const syncNotes = async (db: SQLiteDatabase, userId: string): Promise<Syn
   pullCount = serverNotes.length;
   log('info', `Pulled ${pullCount} notes from server`);
 
+  if (!(await ensureActiveUser(userId, 'post-pull'))) {
+    return createStaleSyncResult('post-pull', pullCount);
+  }
+
   // -------------------------------------------------------------------------
   // 2. RECONCILE: Check for conflicts between Server and Outbox
   // -------------------------------------------------------------------------
@@ -95,6 +140,10 @@ export const syncNotes = async (db: SQLiteDatabase, userId: string): Promise<Syn
   });
 
   for (const serverNote of serverNotes) {
+    if (!(await ensureActiveUser(userId, 'reconcile'))) {
+      return createStaleSyncResult('reconcile', pullCount);
+    }
+
     const outboxEntry = outboxMap.get(serverNote.id);
 
     if (outboxEntry) {
@@ -157,7 +206,14 @@ export const syncNotes = async (db: SQLiteDatabase, userId: string): Promise<Syn
   // -------------------------------------------------------------------------
   // 3. PUSH: Process outbox queue with batching and partial failure handling
   // -------------------------------------------------------------------------
+  if (!(await ensureActiveUser(userId, 'push'))) {
+    return createStaleSyncResult('push', pullCount);
+  }
+
   const pushResult = await processQueue(db, userId);
+  if (pushResult.stale) {
+    return createStaleSyncResult('push', pullCount);
+  }
 
   // -------------------------------------------------------------------------
   // 4. Summary

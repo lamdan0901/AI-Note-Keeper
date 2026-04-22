@@ -12,6 +12,7 @@ import {
   resolveCurrentUserId,
   saveAuthSession,
 } from '../auth/session';
+import { isLogoutTransitionActive } from '../auth/logoutState';
 
 const readApiBaseUrl = (): string | undefined => {
   return process.env.EXPO_PUBLIC_API_BASE_URL ?? process.env.EXPO_PUBLIC_AUTH_API_URL;
@@ -78,6 +79,29 @@ type ClientInput = Readonly<{
   getGuestUserId?: () => Promise<string | null>;
   onUnauthorized?: () => void;
 }>;
+
+type AuthSessionSnapshot = Readonly<{
+  userId: string;
+  username: string;
+  accessToken?: string;
+  refreshToken?: string;
+}>;
+
+const matchesAuthSessionSnapshot = (
+  currentSession: AuthSessionSnapshot | null,
+  snapshot: AuthSessionSnapshot,
+): boolean => {
+  if (!currentSession) {
+    return false;
+  }
+
+  return (
+    currentSession.userId === snapshot.userId &&
+    currentSession.username === snapshot.username &&
+    currentSession.accessToken === snapshot.accessToken &&
+    currentSession.refreshToken === snapshot.refreshToken
+  );
+};
 
 const buildHeaders = (
   headers: Readonly<Record<string, string>>,
@@ -205,6 +229,10 @@ export const createDefaultMobileApiClient = (): MobileApiClient => {
         return null;
       }
 
+      if (isLogoutTransitionActive()) {
+        return null;
+      }
+
       const currentSession = await loadAuthSession();
       if (!currentSession?.refreshToken) {
         return null;
@@ -215,6 +243,15 @@ export const createDefaultMobileApiClient = (): MobileApiClient => {
           refreshToken: currentSession.refreshToken,
           deviceId: await getOrCreateDeviceId(),
         });
+
+        if (isLogoutTransitionActive()) {
+          return null;
+        }
+
+        const latestSession = await loadAuthSession();
+        if (!matchesAuthSessionSnapshot(latestSession, currentSession)) {
+          return null;
+        }
 
         await saveAuthSession({
           userId: refreshed.userId,

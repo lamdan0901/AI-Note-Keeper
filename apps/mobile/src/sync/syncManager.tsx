@@ -5,6 +5,7 @@ import { getDb } from '../db/bootstrap';
 import { isReminderDeviceOnline, syncReminderDeliveryOwnership } from '../reminders/scheduler';
 import { syncNotes, SyncResult } from './noteSync';
 import { getPendingCount } from './noteOutbox';
+import { isLogoutTransitionActive } from '../auth/logoutState';
 
 export type ActionResult = {
   status: 'pending' | 'success' | 'error';
@@ -103,6 +104,11 @@ export const SyncProvider: React.FC<SyncProviderProps> = ({ children, userId }) 
 
   // Perform sync operation
   const performSync = useCallback(async () => {
+    if (isLogoutTransitionActive()) {
+      pendingSyncRef.current = false;
+      return;
+    }
+
     // Prevent concurrent syncs
     if (syncInProgressRef.current) {
       pendingSyncRef.current = true;
@@ -154,8 +160,11 @@ export const SyncProvider: React.FC<SyncProviderProps> = ({ children, userId }) 
     } finally {
       syncInProgressRef.current = false;
 
-      // If another sync was requested while we were syncing, perform it now
-      if (pendingSyncRef.current) {
+      if (isLogoutTransitionActive()) {
+        pendingSyncRef.current = false;
+        setSyncState((prev) => ({ ...prev, isSyncing: false }));
+      } else if (pendingSyncRef.current) {
+        // If another sync was requested while we were syncing, perform it now
         pendingSyncRef.current = false;
         setTimeout(() => performSync(), 500);
       }
@@ -164,6 +173,10 @@ export const SyncProvider: React.FC<SyncProviderProps> = ({ children, userId }) 
 
   // Debounced sync - prevents rapid-fire sync requests
   const debouncedSync = useCallback(() => {
+    if (isLogoutTransitionActive()) {
+      return;
+    }
+
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
     }
@@ -210,6 +223,9 @@ export const SyncProvider: React.FC<SyncProviderProps> = ({ children, userId }) 
       // If we just came online, trigger sync.
       if (isOnline && !wasOnline) {
         console.log('[SyncManager] Coming online - triggering sync');
+        if (isLogoutTransitionActive()) {
+          return;
+        }
         queueReminderOwnershipSync(true, 'network_online');
         debouncedSync();
       }
@@ -225,6 +241,10 @@ export const SyncProvider: React.FC<SyncProviderProps> = ({ children, userId }) 
   // Handle app state changes (foreground/background)
   const handleAppStateChange = useCallback(
     (nextAppState: AppStateStatus) => {
+      if (isLogoutTransitionActive()) {
+        return;
+      }
+
       if (nextAppState === 'active' && syncState.isOnline) {
         console.log('[SyncManager] App became active - triggering sync');
         debouncedSync();

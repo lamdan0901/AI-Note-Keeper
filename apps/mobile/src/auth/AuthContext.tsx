@@ -22,6 +22,8 @@ import {
   saveAuthSession,
 } from './session';
 import { createMobileAuthHttpClient } from './httpClient';
+import { clearAuthenticatedMobileUserData } from './logoutCleanup';
+import { beginLogoutTransition, endLogoutTransition, isLogoutTransitionActive } from './logoutState';
 import {
   backfillMissingLocalUserId as backfillUserIdInDb,
   clearAllLocalData as clearAllLocalDataInDb,
@@ -203,12 +205,27 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                 }
               : null;
 
-          if (authHttpClient && session.refreshToken) {
+          if (authHttpClient && session.refreshToken && !isLogoutTransitionActive()) {
             try {
               const refreshed = await authHttpClient.refresh({
                 refreshToken: session.refreshToken,
                 deviceId,
               });
+
+              if (isLogoutTransitionActive()) {
+                return;
+              }
+
+              const latestSession = await loadAuthSession();
+              if (
+                !latestSession ||
+                latestSession.userId !== session.userId ||
+                latestSession.username !== session.username ||
+                latestSession.accessToken !== session.accessToken ||
+                latestSession.refreshToken !== session.refreshToken
+              ) {
+                return;
+              }
 
               const refreshedSession: AuthSession = {
                 userId: refreshed.userId,
@@ -514,49 +531,40 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const logout = useCallback(async () => {
     const deviceId = await getOrCreateDeviceId();
     const previousUserId = state.userId;
-    const previousUsername = state.username;
-    const currentSecret = currentSecretRef.current;
     const refreshToken = currentTokensRef.current?.refreshToken;
 
-    setState((prev) => ({ ...prev, transitionState: 'logout-snapshot' }));
+    beginLogoutTransition();
 
-    if (authHttpClient) {
-      try {
-        await authHttpClient.logout(refreshToken);
-      } catch {
-        // Keep local logout resilient when auth API is unavailable.
+    try {
+      setState((prev) => ({ ...prev, transitionState: 'logout-snapshot' }));
+
+      if (authHttpClient) {
+        try {
+          await authHttpClient.logout(refreshToken);
+        } catch {
+          // Keep local logout resilient when auth API is unavailable.
+        }
       }
+
+      await clearAuthenticatedMobileUserData(previousUserId, deviceId);
+
+      await clearAuthSession();
+      currentSecretRef.current = null;
+      currentTokensRef.current = null;
+
+      setState({
+        isLoading: false,
+        isAuthenticated: false,
+        userId: deviceId,
+        username: null,
+        deviceId,
+        transitionState: 'idle',
+        pendingMerge: null,
+      });
+    } finally {
+      endLogoutTransition();
     }
-
-    if (
-      state.isAuthenticated &&
-      previousUsername &&
-      currentSecret?.password &&
-      previousUserId !== deviceId
-    ) {
-      // Stage-A decommission removes Convex runtime merge calls.
-    }
-
-    if (previousUserId && previousUserId !== deviceId) {
-      await clearLocalUserData(deviceId);
-      await migrateLocalUserData(previousUserId, deviceId);
-    }
-
-    await clearAuthSession();
-    currentSecretRef.current = null;
-    currentTokensRef.current = null;
-    await backfillMissingLocalUserId(deviceId);
-
-    setState({
-      isLoading: false,
-      isAuthenticated: false,
-      userId: deviceId,
-      username: null,
-      deviceId,
-      transitionState: 'idle',
-      pendingMerge: null,
-    });
-  }, [authHttpClient, state.isAuthenticated, state.userId, state.username]);
+  }, [authHttpClient, state.userId]);
 
   const value = useMemo(
     () => ({
