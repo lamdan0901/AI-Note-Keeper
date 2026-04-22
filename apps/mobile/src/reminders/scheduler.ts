@@ -1,4 +1,5 @@
 import * as Notifications from 'expo-notifications';
+import type { NetInfoState } from '@react-native-community/netinfo';
 import { NativeModules, Platform } from 'react-native';
 import type { Reminder } from '../../../../packages/shared/types/reminder';
 import { parseChecklist, checklistToPlainText } from '../../../../packages/shared/utils/checklist';
@@ -13,7 +14,52 @@ type NotificationTextOverride = {
   body?: string | null;
 };
 
+export type ReminderDeliveryOwner = 'local' | 'fcm';
+
+type ReminderDeliverySyncResult = {
+  owner: ReminderDeliveryOwner;
+  previousOwner: ReminderDeliveryOwner | null;
+  changed: boolean;
+  count: number;
+  source: string;
+};
+
+let cachedReminderDeliveryOwner: ReminderDeliveryOwner | null = null;
+
 const trimOrEmpty = (value: unknown): string => (typeof value === 'string' ? value.trim() : '');
+
+const toReminderDeliveryOwner = (isOnline: boolean): ReminderDeliveryOwner => {
+  return isOnline ? 'fcm' : 'local';
+};
+
+export const isReminderDeviceOnline = (
+  state: Pick<NetInfoState, 'isConnected' | 'isInternetReachable'>,
+): boolean => {
+  return state.isConnected === true && state.isInternetReachable === true;
+};
+
+export const resolveReminderDeliveryOwner = async (): Promise<ReminderDeliveryOwner> => {
+  if (cachedReminderDeliveryOwner) {
+    return cachedReminderDeliveryOwner;
+  }
+
+  const netInfoModule = await import('@react-native-community/netinfo');
+  const state = await netInfoModule.default.fetch();
+  const owner = toReminderDeliveryOwner(isReminderDeviceOnline(state));
+  cachedReminderDeliveryOwner = owner;
+
+  logScheduleEvent('info', 'reminder_delivery_owner_resolved', {
+    owner,
+    isConnected: state.isConnected,
+    isInternetReachable: state.isInternetReachable,
+  });
+
+  return owner;
+};
+
+export const setReminderDeliveryOwnerForTests = (owner: ReminderDeliveryOwner | null): void => {
+  cachedReminderDeliveryOwner = owner;
+};
 
 export const buildNotificationText = (
   reminder: Reminder,
@@ -184,6 +230,51 @@ export const rescheduleReminderWithLedger = async (
     repeatConfig: reminder.repeatConfig,
   });
   const existing = await getScheduleState(db, reminder.id);
+  const owner = await resolveReminderDeliveryOwner();
+
+  if (owner === 'fcm') {
+    if (existing?.notificationIds?.length) {
+      try {
+        await cancelReminderNotifications(existing.notificationIds);
+        logScheduleEvent('info', 'scheduler_cancel_existing', {
+          reminderId: reminder.id,
+          notificationIds: existing.notificationIds,
+          reason: 'online_fcm_owner',
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        await upsertScheduleState(db, {
+          reminderId: reminder.id,
+          notificationIds: existing.notificationIds,
+          lastScheduledHash: desiredHash,
+          status: 'error',
+          lastScheduledAt: now,
+          lastError: message,
+        });
+        logScheduleEvent('error', 'scheduler_cancel_failed', {
+          reminderId: reminder.id,
+          error: message,
+        });
+        throw error;
+      }
+    }
+
+    await upsertScheduleState(db, {
+      reminderId: reminder.id,
+      notificationIds: [],
+      lastScheduledHash: desiredHash,
+      status: 'canceled',
+      lastScheduledAt: now,
+      lastError: null,
+    });
+
+    logScheduleEvent('info', 'scheduler_skip_local_alarm_online', {
+      reminderId: reminder.id,
+      owner,
+    });
+
+    return [];
+  }
 
   if (existing?.notificationIds?.length) {
     try {
@@ -260,6 +351,51 @@ export const rescheduleNoteWithLedger = async (
     repeatConfig: reminder.repeatConfig,
   });
   const existing = await getNoteScheduleState(db, reminder.id);
+  const owner = await resolveReminderDeliveryOwner();
+
+  if (owner === 'fcm') {
+    if (existing?.notificationIds?.length) {
+      try {
+        await cancelReminderNotifications(existing.notificationIds);
+        logScheduleEvent('info', 'scheduler_cancel_existing', {
+          reminderId: reminder.id,
+          notificationIds: existing.notificationIds,
+          reason: 'online_fcm_owner',
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        await upsertNoteScheduleState(db, {
+          noteId: reminder.id,
+          notificationIds: existing.notificationIds,
+          lastScheduledHash: desiredHash,
+          status: 'error',
+          lastScheduledAt: now,
+          lastError: message,
+        });
+        logScheduleEvent('error', 'scheduler_cancel_failed', {
+          reminderId: reminder.id,
+          error: message,
+        });
+        throw error;
+      }
+    }
+
+    await upsertNoteScheduleState(db, {
+      noteId: reminder.id,
+      notificationIds: [],
+      lastScheduledHash: desiredHash,
+      status: 'canceled',
+      lastScheduledAt: now,
+      lastError: null,
+    });
+
+    logScheduleEvent('info', 'scheduler_skip_local_alarm_online', {
+      reminderId: reminder.id,
+      owner,
+    });
+
+    return [];
+  }
 
   if (existing?.notificationIds?.length) {
     try {
@@ -522,4 +658,56 @@ export const cancelAllLocalAlarms = async (db: DbLike): Promise<number> => {
     logScheduleEvent('error', 'scheduler_cancel_all_failed', { error: msg });
     throw error;
   }
+};
+
+export const syncReminderDeliveryOwnership = async (
+  db: DbLike,
+  isOnline: boolean,
+  source: string,
+): Promise<ReminderDeliverySyncResult> => {
+  const nextOwner = toReminderDeliveryOwner(isOnline);
+  const previousOwner = cachedReminderDeliveryOwner;
+
+  if (previousOwner === nextOwner) {
+    logScheduleEvent('info', 'reminder_delivery_owner_unchanged', {
+      owner: nextOwner,
+      source,
+    });
+
+    return {
+      owner: nextOwner,
+      previousOwner,
+      changed: false,
+      count: 0,
+      source,
+    };
+  }
+
+  cachedReminderDeliveryOwner = nextOwner;
+
+  let count: number;
+  try {
+    count =
+      nextOwner === 'fcm'
+        ? await cancelAllLocalAlarms(db)
+        : await rescheduleAllActiveReminders(db);
+  } catch (error) {
+    cachedReminderDeliveryOwner = previousOwner;
+    throw error;
+  }
+
+  logScheduleEvent('info', 'reminder_delivery_owner_synced', {
+    owner: nextOwner,
+    previousOwner,
+    source,
+    count,
+  });
+
+  return {
+    owner: nextOwner,
+    previousOwner,
+    changed: true,
+    count,
+    source,
+  };
 };

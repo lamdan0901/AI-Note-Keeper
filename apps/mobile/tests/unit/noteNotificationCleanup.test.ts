@@ -5,6 +5,10 @@ const cancelNative = jest.fn();
 const cancelScheduledNotificationAsync = jest.fn(async () => undefined);
 const mockedUpsertNote = jest.fn(async () => undefined);
 const mockedEnqueueNoteOperation = jest.fn(async () => undefined);
+const netInfoFetch = jest.fn(async () => ({
+  isConnected: false,
+  isInternetReachable: false,
+}));
 
 jest.mock('react-native', () => ({
   NativeModules: {
@@ -19,6 +23,13 @@ jest.mock('react-native', () => ({
 
 jest.mock('expo-notifications', () => ({
   cancelScheduledNotificationAsync,
+}));
+
+jest.mock('@react-native-community/netinfo', () => ({
+  __esModule: true,
+  default: {
+    fetch: netInfoFetch,
+  },
 }));
 
 jest.mock('../../src/db/notesRepo', () => {

@@ -1,6 +1,10 @@
 import type { Note } from '../db/notesRepo';
 import type { Reminder } from '../../../../packages/shared/types/reminder';
-import { scheduleReminderNotification, cancelReminderNotifications } from './scheduler';
+import {
+  scheduleReminderNotification,
+  cancelReminderNotifications,
+  resolveReminderDeliveryOwner,
+} from './scheduler';
 import { DbLike, getNoteScheduleState, upsertNoteScheduleState } from './noteScheduleLedger';
 import { computeScheduleHash } from './scheduleHash';
 import { logScheduleEvent } from './logging';
@@ -72,6 +76,44 @@ export const scheduleNoteReminderNotification = async (
 
   // Cancel existing notifications first
   const existing = await getNoteScheduleState(db, note.id);
+  const owner = await resolveReminderDeliveryOwner();
+
+  if (owner === 'fcm') {
+    if (existing?.notificationIds?.length) {
+      try {
+        await cancelReminderNotifications(existing.notificationIds);
+        logScheduleEvent('info', 'note_reminder_cancel_before_schedule', {
+          noteId: note.id,
+          notificationIds: existing.notificationIds,
+          reason: 'online_fcm_owner',
+        });
+      } catch (e) {
+        logScheduleEvent('error', 'note_reminder_cancel_failed', {
+          noteId: note.id,
+          error: e instanceof Error ? e.message : String(e),
+        });
+        throw e;
+      }
+    }
+
+    await upsertNoteScheduleState(db, {
+      noteId: note.id,
+      notificationIds: [],
+      lastScheduledHash: desiredHash,
+      status: 'canceled',
+      lastScheduledAt: now,
+      lastError: null,
+    });
+
+    logScheduleEvent('info', 'note_reminder_skipped_online', {
+      noteId: note.id,
+      triggerAt,
+      owner,
+    });
+
+    return [];
+  }
+
   if (existing?.notificationIds?.length) {
     try {
       await cancelReminderNotifications(existing.notificationIds);

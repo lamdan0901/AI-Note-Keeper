@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Platform, StyleSheet, View, StatusBar } from 'react-native';
 import * as Notifications from 'expo-notifications';
+import NetInfo from '@react-native-community/netinfo';
 import { getMessaging, onMessage, onTokenRefresh } from '@react-native-firebase/messaging';
 import * as NavigationBar from 'expo-navigation-bar';
 
@@ -30,8 +31,11 @@ import {
 SplashScreen.preventAutoHideAsync();
 
 import { Linking } from 'react-native';
-import { rescheduleAllActiveReminders } from './src/reminders/scheduler';
 import { getDb } from './src/db/bootstrap';
+import {
+  isReminderDeviceOnline,
+  syncReminderDeliveryOwnership,
+} from './src/reminders/scheduler';
 
 export default function App(): JSX.Element | null {
   const [isReady, setIsReady] = useState(false);
@@ -39,17 +43,14 @@ export default function App(): JSX.Element | null {
   const [editNoteId, setEditNoteId] = useState<string | null>(null);
 
   useEffect(() => {
-    const runBackgroundInitialization = async () => {
+    const ensureNotificationPermissions = async () => {
       try {
         const permissions = await Notifications.getPermissionsAsync();
         if (!permissions.granted) {
           await Notifications.requestPermissionsAsync();
         }
-
-        const db = await getDb();
-        await rescheduleAllActiveReminders(db);
       } catch (e) {
-        console.error('Background initialization error:', e);
+        console.error('Notification permission initialization error:', e);
       }
     };
 
@@ -58,8 +59,15 @@ export default function App(): JSX.Element | null {
         // Critical blocking tasks
         await runMigrations();
         await configureReminderNotifications();
+        const db = await getDb();
+        const networkState = await NetInfo.fetch();
+        await syncReminderDeliveryOwnership(
+          db,
+          isReminderDeviceOnline(networkState),
+          'app_bootstrap',
+        );
 
-        runBackgroundInitialization();
+        void ensureNotificationPermissions();
 
         // Check for initial launch props from MainActivity
         // @ts-expect-error - RN internal API

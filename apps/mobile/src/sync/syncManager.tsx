@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback, use
 import NetInfo, { NetInfoState } from '@react-native-community/netinfo';
 import { AppState, AppStateStatus } from 'react-native';
 import { getDb } from '../db/bootstrap';
+import { isReminderDeviceOnline, syncReminderDeliveryOwnership } from '../reminders/scheduler';
 import { syncNotes, SyncResult } from './noteSync';
 import { getPendingCount } from './noteOutbox';
 
@@ -57,6 +58,7 @@ export const SyncProvider: React.FC<SyncProviderProps> = ({ children, userId }) 
   const pendingSyncRef = useRef(false);
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const actionResultTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const reminderOwnershipSyncRef = useRef<Promise<void>>(Promise.resolve());
 
   // Action Result Helpers
   const clearActionResult = useCallback(() => {
@@ -172,10 +174,24 @@ export const SyncProvider: React.FC<SyncProviderProps> = ({ children, userId }) 
     }, 1000); // 1 second debounce
   }, [performSync]);
 
+  const queueReminderOwnershipSync = useCallback((isOnline: boolean, source: string) => {
+    reminderOwnershipSyncRef.current = reminderOwnershipSyncRef.current
+      .catch(() => undefined)
+      .then(async () => {
+        try {
+          const db = await getDb();
+          const result = await syncReminderDeliveryOwnership(db, isOnline, source);
+          console.log('[SyncManager] Reminder delivery ownership synced', result);
+        } catch (error) {
+          console.error('[SyncManager] Reminder delivery ownership sync failed:', error);
+        }
+      });
+  }, []);
+
   // Handle network state changes
   const handleNetworkChange = useCallback(
     (state: NetInfoState) => {
-      const isOnline = state.isConnected === true && state.isInternetReachable === true;
+      const isOnline = isReminderDeviceOnline(state);
       const wasOnline = syncState.isOnline;
 
       if (isOnline === wasOnline) {
@@ -194,14 +210,16 @@ export const SyncProvider: React.FC<SyncProviderProps> = ({ children, userId }) 
       // If we just came online, trigger sync.
       if (isOnline && !wasOnline) {
         console.log('[SyncManager] Coming online - triggering sync');
+        queueReminderOwnershipSync(true, 'network_online');
         debouncedSync();
       }
 
       if (!isOnline && wasOnline) {
         console.log('[SyncManager] Going offline');
+        queueReminderOwnershipSync(false, 'network_offline');
       }
     },
-    [syncState.isOnline, debouncedSync],
+    [syncState.isOnline, debouncedSync, queueReminderOwnershipSync],
   );
 
   // Handle app state changes (foreground/background)
