@@ -8,7 +8,6 @@ import React, {
   useState,
 } from 'react';
 import { getDb } from '../db/bootstrap';
-import { syncNotes } from '../sync/noteSync';
 import {
   AuthSession,
   clearAnonymousInstallKeys,
@@ -115,11 +114,6 @@ const backfillMissingLocalUserId = async (userId: string): Promise<void> => {
   if (!userId) return;
   const db = await getDb();
   await backfillUserIdInDb(db, userId);
-};
-
-const syncNotesForUser = async (userId: string): Promise<void> => {
-  const db = await getDb();
-  await syncNotes(db, userId);
 };
 
 const clearAllLocalData = async (): Promise<void> => {
@@ -339,11 +333,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       fromUserId,
       session,
       strategy,
+      authHttpSucceededAt,
+      flowLabel,
     }: {
       fromUserId: string;
       session: AuthSession;
       strategy: MergeStrategy | 'cloud';
+      authHttpSucceededAt?: number;
+      flowLabel: 'login' | 'register' | 'merge';
     }) => {
+      const localCleanupStartedAt = Date.now();
       await saveAuthSession(session);
       currentTokensRef.current =
         session.accessToken != null
@@ -367,7 +366,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         }
       }
 
+      const localCleanupDurationMs = Date.now() - localCleanupStartedAt;
       await backfillMissingLocalUserId(session.userId);
+      const stateCommittedAt = Date.now();
       setState((prev) => ({
         ...prev,
         isAuthenticated: true,
@@ -376,7 +377,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         transitionState: 'idle',
         pendingMerge: null,
       }));
-      await syncNotesForUser(session.userId);
+      console.log('[Auth] Authenticated state committed', {
+        flow: flowLabel,
+        fromUserId,
+        targetUserId: session.userId,
+        localCleanupDurationMs,
+        authHttpSuccessToStateCommitMs:
+          authHttpSucceededAt == null ? null : stateCommittedAt - authHttpSucceededAt,
+      });
     },
     [],
   );
@@ -400,6 +408,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             refreshToken: pendingMerge.refreshToken,
           },
           strategy,
+          flowLabel: 'merge',
         });
 
         return { success: true };
@@ -420,6 +429,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       password,
       accessToken,
       refreshToken,
+      authHttpSucceededAt,
+      flowLabel,
     }: {
       accountUserId: string;
       accountUsername: string;
@@ -427,6 +438,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       password: string;
       accessToken?: string;
       refreshToken?: string;
+      authHttpSucceededAt: number;
+      flowLabel: 'login' | 'register';
     }): Promise<AuthResult> => {
       const fromUserId = state.userId;
 
@@ -448,6 +461,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           refreshToken,
         },
         strategy: 'local',
+        authHttpSucceededAt,
+        flowLabel,
       });
       return { success: true };
     },
@@ -461,18 +476,26 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         return { success: false, error: 'EXPO_PUBLIC_AUTH_API_URL is required for mobile auth' };
       }
 
+      const startedAt = Date.now();
       try {
         const deviceId = await getOrCreateDeviceId();
         const result = await authHttpClient.login({ username, password, deviceId });
-
-        return await handleAuthSuccess({
+        const authHttpSucceededAt = Date.now();
+        const authResult = await handleAuthSuccess({
           accountUserId: result.userId,
           accountUsername: result.username,
           username,
           password,
           accessToken: result.accessToken,
           refreshToken: result.refreshToken,
+          authHttpSucceededAt,
+          flowLabel: 'login',
         });
+        console.log('[Auth] Login finished', {
+          userId: result.userId,
+          totalDurationMs: Date.now() - startedAt,
+        });
+        return authResult;
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Login failed';
         setState((prev) => ({ ...prev, transitionState: 'idle' }));
@@ -489,18 +512,26 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         return { success: false, error: 'EXPO_PUBLIC_AUTH_API_URL is required for mobile auth' };
       }
 
+      const startedAt = Date.now();
       try {
         const deviceId = await getOrCreateDeviceId();
         const result = await authHttpClient.register({ username, password, deviceId });
-
-        return await handleAuthSuccess({
+        const authHttpSucceededAt = Date.now();
+        const authResult = await handleAuthSuccess({
           accountUserId: result.userId,
           accountUsername: result.username,
           username,
           password,
           accessToken: result.accessToken,
           refreshToken: result.refreshToken,
+          authHttpSucceededAt,
+          flowLabel: 'register',
         });
+        console.log('[Auth] Registration finished', {
+          userId: result.userId,
+          totalDurationMs: Date.now() - startedAt,
+        });
+        return authResult;
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Registration failed';
         setState((prev) => ({ ...prev, transitionState: 'idle' }));
@@ -529,6 +560,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }, []);
 
   const logout = useCallback(async () => {
+    const startedAt = Date.now();
     const deviceId = await getOrCreateDeviceId();
     const previousUserId = state.userId;
     const refreshToken = currentTokensRef.current?.refreshToken;
@@ -560,6 +592,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         deviceId,
         transitionState: 'idle',
         pendingMerge: null,
+      });
+      console.log('[Auth] Logout finished', {
+        previousUserId,
+        deviceId,
+        totalDurationMs: Date.now() - startedAt,
       });
     } finally {
       endLogoutTransition();

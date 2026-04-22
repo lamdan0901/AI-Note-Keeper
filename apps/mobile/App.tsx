@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Platform, StyleSheet, View, StatusBar } from 'react-native';
+import { Platform, StyleSheet, View, StatusBar, Text, ActivityIndicator } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import NetInfo from '@react-native-community/netinfo';
 import { getMessaging, onMessage, onTokenRefresh } from '@react-native-firebase/messaging';
@@ -193,6 +193,7 @@ const AppContent = ({
     cancelPendingMerge,
   } = useAuth();
   const { theme, resolvedMode } = useTheme();
+  const isSigningOut = transitionState === 'logout-snapshot';
   const [currentScreen, setCurrentScreen] = useState<
     'notes' | 'trash' | 'subscriptions' | 'settings'
   >('notes');
@@ -362,6 +363,7 @@ const AppContent = ({
           <SettingsScreen
             isAuthenticated={isAuthenticated}
             username={username}
+            signingOut={isSigningOut}
             onOpenLogin={() => setAuthScreen('login')}
             onOpenRegister={() => setAuthScreen('register')}
             onSignOut={logout}
@@ -403,6 +405,26 @@ const AppContent = ({
         onClose={cancelPendingMerge}
       />
 
+      {isSigningOut && (
+        <View style={styles.logoutOverlay} pointerEvents="auto">
+          <View
+            style={[
+              styles.logoutCard,
+              {
+                backgroundColor: theme.colors.surface,
+                borderColor: theme.colors.border,
+              },
+            ]}
+          >
+            <ActivityIndicator size="large" color={theme.colors.primary} />
+            <Text style={[styles.logoutTitle, { color: theme.colors.text }]}>Signing out...</Text>
+            <Text style={[styles.logoutBody, { color: theme.colors.textMuted }]}>
+              Removing local account data on this device. Large accounts can take a few seconds.
+            </Text>
+          </View>
+        </View>
+      )}
+
       {!isSelectionMode && (
         <BottomTabBar
           activeTab={currentScreen}
@@ -431,6 +453,34 @@ const styles = StyleSheet.create({
   authOverlay: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 2000,
+  },
+  logoutOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.28)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+    zIndex: 2500,
+  },
+  logoutCard: {
+    width: '100%',
+    maxWidth: 320,
+    borderRadius: 18,
+    borderWidth: 1,
+    paddingHorizontal: 20,
+    paddingVertical: 24,
+    alignItems: 'center',
+  },
+  logoutTitle: {
+    marginTop: 14,
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  logoutBody: {
+    marginTop: 8,
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: 'center',
   },
   loadingContainer: {
     flex: 1,

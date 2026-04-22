@@ -1,5 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite/next';
 import { clearNoteNotificationState } from '../reminders/noteNotificationCleanup';
+import { listNoteIdsWithScheduleStateForUser } from '../reminders/noteScheduleLedger';
 
 export const migrateLocalUserData = async (
   db: SQLiteDatabase,
@@ -28,6 +29,12 @@ export const clearAllLocalData = async (db: SQLiteDatabase): Promise<boolean> =>
   } catch {
     return false;
   }
+};
+
+export type LocalUserDataCleanupResult = {
+  notificationCleanupCount: number;
+  notificationCleanupDurationMs: number;
+  deleteDurationMs: number;
 };
 
 export type LocalDataFootprint = {
@@ -66,19 +73,41 @@ export const inspectLocalDataFootprint = async (
 };
 
 export const clearLocalUserData = async (db: SQLiteDatabase, userId: string): Promise<boolean> => {
-  if (!userId) return true;
+  const result = await clearLocalUserDataForLogout(db, userId);
+  return result !== null;
+};
+
+export const clearLocalUserDataForLogout = async (
+  db: SQLiteDatabase,
+  userId: string,
+): Promise<LocalUserDataCleanupResult | null> => {
+  if (!userId) {
+    return {
+      notificationCleanupCount: 0,
+      notificationCleanupDurationMs: 0,
+      deleteDurationMs: 0,
+    };
+  }
   try {
-    const noteRows = await db.getAllAsync<{ id: string }>(`SELECT id FROM notes WHERE userId = ?`, [
-      userId,
-    ]);
-    for (const row of noteRows) {
-      await clearNoteNotificationState(db, row.id);
+    const notificationScopedNoteIds = await listNoteIdsWithScheduleStateForUser(db, userId);
+    const notificationCleanupStartedAt = Date.now();
+    for (const noteId of notificationScopedNoteIds) {
+      await clearNoteNotificationState(db, noteId);
     }
+    const notificationCleanupDurationMs = Date.now() - notificationCleanupStartedAt;
+
+    const deleteStartedAt = Date.now();
     await db.runAsync(`DELETE FROM note_outbox WHERE userId = ?`, [userId]);
     await db.runAsync(`DELETE FROM notes WHERE userId = ?`, [userId]);
-    return true;
+    const deleteDurationMs = Date.now() - deleteStartedAt;
+
+    return {
+      notificationCleanupCount: notificationScopedNoteIds.length,
+      notificationCleanupDurationMs,
+      deleteDurationMs,
+    };
   } catch {
-    return false;
+    return null;
   }
 };
 

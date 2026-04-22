@@ -20,6 +20,7 @@ export type SyncState = {
   pendingCount: number;
   hasConflicts: boolean;
   actionResult: ActionResult | null;
+  hasHydratedOnce: boolean;
 };
 
 const defaultSyncState: SyncState = {
@@ -29,6 +30,7 @@ const defaultSyncState: SyncState = {
   pendingCount: 0,
   hasConflicts: false,
   actionResult: null,
+  hasHydratedOnce: false,
 };
 
 type SyncContextType = SyncState & {
@@ -60,6 +62,19 @@ export const SyncProvider: React.FC<SyncProviderProps> = ({ children, userId }) 
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const actionResultTimerRef = useRef<NodeJS.Timeout | null>(null);
   const reminderOwnershipSyncRef = useRef<Promise<void>>(Promise.resolve());
+  const userIdRef = useRef(userId);
+  const isOnlineRef = useRef(defaultSyncState.isOnline);
+  const hasHydratedOnceRef = useRef(false);
+  const hydratedUserIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    userIdRef.current = userId;
+  }, [userId]);
+
+  useEffect(() => {
+    isOnlineRef.current = syncState.isOnline;
+    hasHydratedOnceRef.current = syncState.hasHydratedOnce;
+  }, [syncState.hasHydratedOnce, syncState.isOnline]);
 
   // Action Result Helpers
   const clearActionResult = useCallback(() => {
@@ -103,9 +118,24 @@ export const SyncProvider: React.FC<SyncProviderProps> = ({ children, userId }) 
   );
 
   // Perform sync operation
-  const performSync = useCallback(async () => {
+  const performSync = useCallback(
+    async ({
+      source,
+      forceDuringHydration = false,
+    }: {
+      source: string;
+      forceDuringHydration?: boolean;
+    }) => {
     if (isLogoutTransitionActive()) {
       pendingSyncRef.current = false;
+      return;
+    }
+
+    if (!forceDuringHydration && !hasHydratedOnceRef.current) {
+      console.log('[SyncManager] Ignoring sync before initial hydration finishes', {
+        source,
+        userId: userIdRef.current,
+      });
       return;
     }
 
@@ -115,16 +145,35 @@ export const SyncProvider: React.FC<SyncProviderProps> = ({ children, userId }) 
       return;
     }
 
+    const syncUserId = userIdRef.current;
+    const isInitialSync = hydratedUserIdRef.current !== syncUserId;
+    const startedAt = Date.now();
+
     try {
       syncInProgressRef.current = true;
       setSyncState((prev) => ({ ...prev, isSyncing: true }));
 
-      console.log('[SyncManager] Starting sync...');
+      if (isInitialSync) {
+        console.log('[SyncManager] Starting first sync after auth change', {
+          userId: syncUserId,
+          source,
+        });
+      } else {
+        console.log('[SyncManager] Starting sync...', {
+          userId: syncUserId,
+          source,
+        });
+      }
+
       const db = await getDb();
-      const result: SyncResult = await syncNotes(db, userId);
+      const result: SyncResult = await syncNotes(db, syncUserId);
 
       // Get actual pending count from outbox after sync
       const pendingCount = await getPendingCount(db);
+
+      if (isInitialSync) {
+        hydratedUserIdRef.current = syncUserId;
+      }
 
       setSyncState((prev) => ({
         ...prev,
@@ -132,9 +181,21 @@ export const SyncProvider: React.FC<SyncProviderProps> = ({ children, userId }) 
         lastSyncAt: Date.now(),
         pendingCount,
         hasConflicts: result.conflictCount > 0,
+        hasHydratedOnce: true,
       }));
 
-      if (result.success) {
+      if (isInitialSync) {
+        console.log('[SyncManager] First sync finished', {
+          userId: syncUserId,
+          source,
+          durationMs: Date.now() - startedAt,
+          success: result.success,
+          pullCount: result.pullCount,
+          pendingCount,
+          conflictCount: result.conflictCount,
+          mergeCount: result.mergeCount,
+        });
+      } else if (result.success) {
         console.log('[SyncManager] Sync completed successfully', {
           pendingCount,
           hasConflicts: result.conflictCount > 0,
@@ -153,9 +214,20 @@ export const SyncProvider: React.FC<SyncProviderProps> = ({ children, userId }) 
       try {
         const db = await getDb();
         const pendingCount = await getPendingCount(db);
-        setSyncState((prev) => ({ ...prev, isSyncing: false, pendingCount }));
+        if (isInitialSync) {
+          hydratedUserIdRef.current = syncUserId;
+        }
+        setSyncState((prev) => ({
+          ...prev,
+          isSyncing: false,
+          pendingCount,
+          hasHydratedOnce: true,
+        }));
       } catch {
-        setSyncState((prev) => ({ ...prev, isSyncing: false }));
+        if (isInitialSync) {
+          hydratedUserIdRef.current = syncUserId;
+        }
+        setSyncState((prev) => ({ ...prev, isSyncing: false, hasHydratedOnce: true }));
       }
     } finally {
       syncInProgressRef.current = false;
@@ -166,14 +238,25 @@ export const SyncProvider: React.FC<SyncProviderProps> = ({ children, userId }) 
       } else if (pendingSyncRef.current) {
         // If another sync was requested while we were syncing, perform it now
         pendingSyncRef.current = false;
-        setTimeout(() => performSync(), 500);
+        setTimeout(() => {
+          void performSync({ source: 'pending-follow-up' });
+        }, 500);
       }
     }
-  }, [userId]);
+    },
+    [],
+  );
 
   // Debounced sync - prevents rapid-fire sync requests
   const debouncedSync = useCallback(() => {
     if (isLogoutTransitionActive()) {
+      return;
+    }
+
+    if (!hasHydratedOnceRef.current) {
+      console.log('[SyncManager] Suppressing debounced sync before initial hydration completes', {
+        userId: userIdRef.current,
+      });
       return;
     }
 
@@ -182,7 +265,7 @@ export const SyncProvider: React.FC<SyncProviderProps> = ({ children, userId }) 
     }
 
     debounceTimerRef.current = setTimeout(() => {
-      performSync();
+      void performSync({ source: 'debounced' });
       debounceTimerRef.current = null;
     }, 1000); // 1 second debounce
   }, [performSync]);
@@ -205,7 +288,7 @@ export const SyncProvider: React.FC<SyncProviderProps> = ({ children, userId }) 
   const handleNetworkChange = useCallback(
     (state: NetInfoState) => {
       const isOnline = isReminderDeviceOnline(state);
-      const wasOnline = syncState.isOnline;
+      const wasOnline = isOnlineRef.current;
 
       if (isOnline === wasOnline) {
         return;
@@ -218,6 +301,7 @@ export const SyncProvider: React.FC<SyncProviderProps> = ({ children, userId }) 
         wasOnline,
       });
 
+      isOnlineRef.current = isOnline;
       setSyncState((prev) => ({ ...prev, isOnline }));
 
       // If we just came online, trigger sync.
@@ -235,7 +319,7 @@ export const SyncProvider: React.FC<SyncProviderProps> = ({ children, userId }) 
         queueReminderOwnershipSync(false, 'network_offline');
       }
     },
-    [syncState.isOnline, debouncedSync, queueReminderOwnershipSync],
+    [debouncedSync, queueReminderOwnershipSync],
   );
 
   // Handle app state changes (foreground/background)
@@ -245,12 +329,12 @@ export const SyncProvider: React.FC<SyncProviderProps> = ({ children, userId }) 
         return;
       }
 
-      if (nextAppState === 'active' && syncState.isOnline) {
+      if (nextAppState === 'active' && isOnlineRef.current) {
         console.log('[SyncManager] App became active - triggering sync');
         debouncedSync();
       }
     },
-    [syncState.isOnline, debouncedSync],
+    [debouncedSync],
   );
 
   // Setup network and app state listeners
@@ -263,9 +347,6 @@ export const SyncProvider: React.FC<SyncProviderProps> = ({ children, userId }) 
     // AppState listener
     const appStateSubscription = AppState.addEventListener('change', handleAppStateChange);
 
-    // Initial sync on mount
-    performSync();
-
     return () => {
       console.log('[SyncManager] Cleaning up listeners');
       unsubscribeNetInfo();
@@ -277,7 +358,27 @@ export const SyncProvider: React.FC<SyncProviderProps> = ({ children, userId }) 
         clearTimeout(actionResultTimerRef.current);
       }
     };
-  }, [handleNetworkChange, handleAppStateChange, performSync]);
+  }, [handleAppStateChange, handleNetworkChange]);
+
+  useEffect(() => {
+    hydratedUserIdRef.current = null;
+    pendingSyncRef.current = false;
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+
+    setSyncState((prev) => ({
+      ...prev,
+      isSyncing: false,
+      lastSyncAt: null,
+      pendingCount: 0,
+      hasConflicts: false,
+      hasHydratedOnce: false,
+    }));
+
+    void performSync({ source: 'initial-user-change', forceDuringHydration: true });
+  }, [performSync, userId]);
 
   const contextValue = {
     ...syncState,

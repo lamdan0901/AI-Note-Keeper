@@ -9,8 +9,8 @@ function isFlagEnabled(raw: string | undefined): boolean {
 }
 
 export function isMobileNotesRealtimeV1Enabled(): boolean {
-  // Existing rollout behavior remains enabled until explicitly changed.
-  return true;
+  // Direct env access keeps Expo's compile-time env replacement working reliably.
+  return isFlagEnabled(process.env.EXPO_PUBLIC_MOBILE_NOTES_REALTIME_V1);
 }
 
 export function isMobileVoiceCaptureV1Enabled(): boolean {

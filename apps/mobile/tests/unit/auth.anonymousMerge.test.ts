@@ -7,9 +7,15 @@ import {
 } from '../../src/auth/localUserData';
 
 const clearNoteNotificationStateMock: jest.Mock = jest.fn(async () => undefined);
+const listNoteIdsWithScheduleStateForUserMock: jest.Mock = jest.fn(async () => []);
 
 jest.mock('../../src/reminders/noteNotificationCleanup', () => ({
   clearNoteNotificationState: (...args: unknown[]) => clearNoteNotificationStateMock(...args),
+}));
+
+jest.mock('../../src/reminders/noteScheduleLedger', () => ({
+  listNoteIdsWithScheduleStateForUser: (...args: unknown[]) =>
+    listNoteIdsWithScheduleStateForUserMock(...args),
 }));
 
 type MockDb = {
@@ -25,18 +31,17 @@ const createDb = (): MockDb => ({
 describe('anonymous to authenticated local merge', () => {
   afterEach(() => {
     clearNoteNotificationStateMock.mockClear();
+    listNoteIdsWithScheduleStateForUserMock.mockClear();
   });
 
   it('clears only scoped local data and notification state', async () => {
     const db = createDb();
-    (db.getAllAsync as any).mockResolvedValue([{ id: 'note-1' }, { id: 'note-2' }]);
+    (listNoteIdsWithScheduleStateForUserMock as any).mockResolvedValueOnce(['note-1', 'note-2']);
 
     const ok = await clearLocalUserData(db as any, 'device-123');
 
     expect(ok).toBe(true);
-    expect(db.getAllAsync).toHaveBeenCalledWith('SELECT id FROM notes WHERE userId = ?', [
-      'device-123',
-    ]);
+    expect(listNoteIdsWithScheduleStateForUserMock).toHaveBeenCalledWith(db, 'device-123');
     expect(clearNoteNotificationStateMock).toHaveBeenNthCalledWith(1, db, 'note-1');
     expect(clearNoteNotificationStateMock).toHaveBeenNthCalledWith(2, db, 'note-2');
     expect(db.runAsync).toHaveBeenNthCalledWith(1, 'DELETE FROM note_outbox WHERE userId = ?', [
@@ -49,7 +54,7 @@ describe('anonymous to authenticated local merge', () => {
 
   it('returns false if clear local data fails', async () => {
     const db = createDb();
-    (db.getAllAsync as any).mockResolvedValue([{ id: 'note-1' }]);
+    (listNoteIdsWithScheduleStateForUserMock as any).mockResolvedValueOnce(['note-1']);
     (db.runAsync as any).mockRejectedValueOnce(new Error('db failure'));
 
     const ok = await clearLocalUserData(db as any, 'device-123');

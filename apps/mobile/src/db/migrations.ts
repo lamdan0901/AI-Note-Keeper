@@ -223,4 +223,10 @@ ALTER TABLE notes ADD COLUMN userId TEXT DEFAULT NULL;
 CREATE INDEX IF NOT EXISTS idx_notes_userId ON notes (userId);
     `.trim(),
   },
+  {
+    id: '015_add_note_outbox_user_id_index',
+    sql: `
+CREATE INDEX IF NOT EXISTS idx_note_outbox_userId ON note_outbox (userId);
+    `.trim(),
+  },
 ];

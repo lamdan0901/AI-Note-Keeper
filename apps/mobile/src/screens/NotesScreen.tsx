@@ -114,12 +114,18 @@ const DueSubscriptionsBridge = ({ onValue }: { onValue: (value: boolean) => void
 
 const RealtimeNotesBridge = ({
   userId,
+  enabled,
   onValue,
 }: {
   userId: string;
+  enabled: boolean;
   onValue: (notes: Note[] | undefined) => void;
 }) => {
-  const notes = useRealtimeNotes(userId, true);
+  const notes = useRealtimeNotes({
+    userId,
+    enabled,
+    skipInitialRefresh: true,
+  });
 
   useEffect(() => {
     onValue(notes);
@@ -244,7 +250,13 @@ const NotesScreenContent = ({
   }, [voiceCaptureEnabled]);
 
   // Get sync state and action helpers
-  const { notifyActionPending, notifyActionSuccess, notifyActionError, lastSyncAt } =
+  const {
+    notifyActionPending,
+    notifyActionSuccess,
+    notifyActionError,
+    lastSyncAt,
+    hasHydratedOnce,
+  } =
     useSyncState();
 
   const { toast, showToast } = useToast();
@@ -856,8 +868,8 @@ const NotesScreenContent = ({
   };
 
   const styles = useMemo(() => createStyles(theme), [theme]);
-  const isRealtimeHydrating =
-    realtimeReadEnabled && realtimeNotes === undefined && notes.length === 0;
+  const shouldEnableRealtimeBridge = realtimeReadEnabled && hasHydratedOnce;
+  const isRealtimeHydrating = !hasHydratedOnce && notes.length === 0;
   const filteredNotes = useMemo(() => {
     const normalizedQuery = debouncedSearchQuery.trim().toLowerCase();
     if (!normalizedQuery) return notes;
@@ -882,7 +894,11 @@ const NotesScreenContent = ({
         <DueSubscriptionsBridge onValue={onDueSubscriptionsChange} />
       )}
       {realtimeReadEnabled && userId && (
-        <RealtimeNotesBridge userId={userId} onValue={handleRealtimeNotesChange} />
+        <RealtimeNotesBridge
+          userId={userId}
+          enabled={shouldEnableRealtimeBridge}
+          onValue={handleRealtimeNotesChange}
+        />
       )}
 
       <NotesHeader

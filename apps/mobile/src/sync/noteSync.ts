@@ -106,6 +106,7 @@ export const syncNotes = async (db: SQLiteDatabase, userId: string): Promise<Syn
   // -------------------------------------------------------------------------
   // 1. PULL: Fetch latest state from server
   // -------------------------------------------------------------------------
+  const pullStartedAt = Date.now();
   const fetchResult = await fetchNotes(userId);
 
   if (fetchResult.status === 'error') {
@@ -122,7 +123,8 @@ export const syncNotes = async (db: SQLiteDatabase, userId: string): Promise<Syn
 
   const serverNotes = fetchResult.notes || [];
   pullCount = serverNotes.length;
-  log('info', `Pulled ${pullCount} notes from server`);
+  const pullDurationMs = Date.now() - pullStartedAt;
+  log('info', `Pulled ${pullCount} notes from server`, { pullDurationMs });
 
   if (!(await ensureActiveUser(userId, 'post-pull'))) {
     return createStaleSyncResult('post-pull', pullCount);
@@ -131,6 +133,7 @@ export const syncNotes = async (db: SQLiteDatabase, userId: string): Promise<Syn
   // -------------------------------------------------------------------------
   // 2. RECONCILE: Check for conflicts between Server and Outbox
   // -------------------------------------------------------------------------
+  const reconcileStartedAt = Date.now();
   const allOutboxItems = await getAllOutboxEntries(db);
   const outboxMap = new Map(allOutboxItems.map((item) => [item.noteId, item]));
 
@@ -201,7 +204,12 @@ export const syncNotes = async (db: SQLiteDatabase, userId: string): Promise<Syn
     }
   }
 
-  log('debug', 'Reconciliation complete', { conflictCount, mergeCount });
+  const reconcileDurationMs = Date.now() - reconcileStartedAt;
+  log('debug', 'Reconciliation complete', {
+    conflictCount,
+    mergeCount,
+    reconcileDurationMs,
+  });
 
   // -------------------------------------------------------------------------
   // 3. PUSH: Process outbox queue with batching and partial failure handling
@@ -210,10 +218,12 @@ export const syncNotes = async (db: SQLiteDatabase, userId: string): Promise<Syn
     return createStaleSyncResult('push', pullCount);
   }
 
+  const pushStartedAt = Date.now();
   const pushResult = await processQueue(db, userId);
   if (pushResult.stale) {
     return createStaleSyncResult('push', pullCount);
   }
+  const pushDurationMs = Date.now() - pushStartedAt;
 
   // -------------------------------------------------------------------------
   // 4. Summary
@@ -227,6 +237,9 @@ export const syncNotes = async (db: SQLiteDatabase, userId: string): Promise<Syn
     failed: pushResult.failed,
     conflicts: conflictCount,
     merges: mergeCount,
+    pullDurationMs,
+    reconcileDurationMs,
+    pushDurationMs,
     remainingPending: postStats.pending,
     remainingRetrying: postStats.retrying,
   });

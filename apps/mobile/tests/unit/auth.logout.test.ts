@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 
 const getDbMock = jest.fn();
-const clearLocalUserDataMock = jest.fn(async () => true);
+const clearLocalUserDataForLogoutMock = jest.fn(async () => ({
+  notificationCleanupCount: 0,
+  notificationCleanupDurationMs: 0,
+  deleteDurationMs: 0,
+}));
 const backfillMissingLocalUserIdMock = jest.fn(async () => undefined);
 
 jest.mock('../../src/db/bootstrap', () => ({
@@ -9,7 +13,7 @@ jest.mock('../../src/db/bootstrap', () => ({
 }));
 
 jest.mock('../../src/auth/localUserData', () => ({
-  clearLocalUserData: clearLocalUserDataMock,
+  clearLocalUserDataForLogout: clearLocalUserDataForLogoutMock,
   backfillMissingLocalUserId: backfillMissingLocalUserIdMock,
   clearAllLocalData: jest.fn(async () => true),
   inspectLocalDataFootprint: jest.fn(async () => ({
@@ -34,7 +38,7 @@ describe('mobile logout cleanup', () => {
     await clearAuthenticatedMobileUserData('account-user-1', 'device-user-1');
 
     expect(getDbMock).toHaveBeenCalledTimes(1);
-    expect(clearLocalUserDataMock as any).toHaveBeenCalledWith(db, 'account-user-1');
+    expect(clearLocalUserDataForLogoutMock as any).toHaveBeenCalledWith(db, 'account-user-1');
     expect(backfillMissingLocalUserIdMock as any).toHaveBeenCalledWith(
       db,
       'device-user-1',
@@ -47,7 +51,7 @@ describe('mobile logout cleanup', () => {
 
     await clearAuthenticatedMobileUserData('device-user-1', 'device-user-1');
 
-    expect(clearLocalUserDataMock).not.toHaveBeenCalled();
+    expect(clearLocalUserDataForLogoutMock).not.toHaveBeenCalled();
     expect(getDbMock).toHaveBeenCalledTimes(1);
     expect(backfillMissingLocalUserIdMock as any).toHaveBeenCalledWith(
       db,

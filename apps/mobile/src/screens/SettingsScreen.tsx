@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Alert } from 'react-native';
+import { Alert, ActivityIndicator } from 'react-native';
 import { Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { type Theme, useTheme } from '../theme';
@@ -13,6 +13,7 @@ const themeOptions = [
 type SettingsScreenProps = {
   isAuthenticated: boolean;
   username: string | null;
+  signingOut?: boolean;
   onOpenLogin: () => void;
   onOpenRegister: () => void;
   onSignOut: () => Promise<void>;
@@ -21,6 +22,7 @@ type SettingsScreenProps = {
 export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   isAuthenticated,
   username,
+  signingOut = false,
   onOpenLogin,
   onOpenRegister,
   onSignOut,
@@ -29,6 +31,10 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   const styles = useMemo(() => createStyles(theme), [theme]);
 
   const handleSignOut = () => {
+    if (signingOut) {
+      return;
+    }
+
     Alert.alert('Sign Out', 'Sign out and switch back to local device account?', [
       { text: 'Cancel', style: 'cancel' },
       {
@@ -53,8 +59,19 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
             {isAuthenticated ? (
               <>
                 <Text style={styles.accountPrimary}>Signed in as {username}</Text>
-                <Pressable style={styles.signOutButton} onPress={handleSignOut}>
-                  <Text style={styles.signOutButtonText}>Sign Out</Text>
+                <Pressable
+                  style={[styles.signOutButton, signingOut && styles.signOutButtonDisabled]}
+                  onPress={handleSignOut}
+                  disabled={signingOut}
+                >
+                  {signingOut ? (
+                    <View style={styles.signOutLoadingContent}>
+                      <ActivityIndicator size="small" color={theme.colors.error} />
+                      <Text style={styles.signOutButtonText}>Signing Out...</Text>
+                    </View>
+                  ) : (
+                    <Text style={styles.signOutButtonText}>Sign Out</Text>
+                  )}
                 </Pressable>
               </>
             ) : (
@@ -173,6 +190,15 @@ const createStyles = (theme: Theme) =>
       paddingVertical: theme.spacing.sm,
       alignItems: 'center',
       backgroundColor: theme.colors.background,
+    },
+    signOutButtonDisabled: {
+      opacity: 0.7,
+    },
+    signOutLoadingContent: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: theme.spacing.xs,
     },
     signOutButtonText: {
       color: theme.colors.error,

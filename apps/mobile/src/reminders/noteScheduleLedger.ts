@@ -92,3 +92,27 @@ export const upsertNoteScheduleState = async (
 export const deleteNoteScheduleState = async (db: DbLike, noteId: string): Promise<void> => {
   await db.runAsync('DELETE FROM note_schedule_meta WHERE noteId = ?', [noteId]);
 };
+
+export const listNoteIdsWithScheduleStateForUser = async (
+  db: DbLike,
+  userId: string,
+): Promise<string[]> => {
+  const rows = await db.getAllAsync<{ id: string }>(
+    `SELECT DISTINCT notes.id
+     FROM notes
+     LEFT JOIN note_schedule_meta ON note_schedule_meta.noteId = notes.id
+     LEFT JOIN notification_ledger ON notification_ledger.reminderId = notes.id
+     WHERE notes.userId = ?
+       AND (
+         notes.triggerAt IS NOT NULL
+         OR notes.snoozedUntil IS NOT NULL
+         OR notes.scheduleStatus IS NOT NULL
+         OR notes.nextTriggerAt IS NOT NULL
+         OR note_schedule_meta.noteId IS NOT NULL
+         OR notification_ledger.reminderId IS NOT NULL
+       )`,
+    [userId],
+  );
+
+  return rows.map((row) => row.id);
+};
