@@ -17,6 +17,7 @@ import {
   WebAuthSession,
 } from './session';
 import { createWebAuthHttpClient, WebAuthHttpError } from './httpClient';
+import { createRefreshSingleFlight } from './refreshSingleFlight';
 
 type TransitionState = 'idle' | 'preflight' | 'awaiting-strategy' | 'applying' | 'logout-snapshot';
 
@@ -241,7 +242,7 @@ export const WebAuthProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return currentTokensRef.current.accessToken;
   }, []);
 
-  const refreshAccessToken = useCallback(async (): Promise<string | null> => {
+  const refreshAccessTokenImpl = useCallback(async (): Promise<string | null> => {
     if (!webAuthClient) {
       currentTokensRef.current = {
         accessToken: null,
@@ -280,6 +281,11 @@ export const WebAuthProvider: React.FC<{ children: React.ReactNode }> = ({ child
       return null;
     }
   }, [webAuthClient]);
+
+  const refreshAccessToken = useMemo(
+    () => createRefreshSingleFlight(refreshAccessTokenImpl),
+    [refreshAccessTokenImpl],
+  );
 
   const register = useCallback(
     async (username: string, password: string): Promise<AuthResult> => {
