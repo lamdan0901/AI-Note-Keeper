@@ -5,6 +5,7 @@ import {
   type ReminderDispatchJob,
 } from '../jobs/reminders/dispatch-due-reminders.js';
 import { createDueReminderScanner } from '../jobs/reminders/due-reminder-scanner.js';
+import { createReminderOccurrenceAdvancer } from '../jobs/reminders/occurrence-advancer.js';
 import {
   createDeviceTokensRepository,
   type DeviceTokensRepository,
@@ -17,6 +18,7 @@ import type {
   DueReminderScanner,
   ReminderDispatchQueue,
   ReminderDispatchQueueJob,
+  ReminderOccurrenceAdvancer,
   ReminderQueueEnqueueResult,
 } from '../jobs/reminders/contracts.js';
 import type {
@@ -52,6 +54,7 @@ export type PgBossAdapterOptions = Readonly<{
   }>;
   queue?: ReminderDispatchQueue;
   scanner?: DueReminderScanner;
+  occurrenceAdvancer?: ReminderOccurrenceAdvancer;
   cronStateRepository?: CronStateRepository;
   dispatchJob?: ReminderDispatchJob;
   pushJobHandler?: PushJobHandler;
@@ -293,6 +296,7 @@ export const createPgBossAdapter = (options: PgBossAdapterOptions = {}): WorkerA
     });
 
   const scanner = options.scanner ?? createDueReminderScanner();
+  const occurrenceAdvancer = options.occurrenceAdvancer ?? createReminderOccurrenceAdvancer();
   const cronStateRepository = options.cronStateRepository ?? createCronStateRepository();
   const dispatchJob =
     options.dispatchJob ??
@@ -300,6 +304,7 @@ export const createPgBossAdapter = (options: PgBossAdapterOptions = {}): WorkerA
       scanner,
       cronStateRepository,
       queue,
+      occurrenceAdvancer,
       now,
     });
 

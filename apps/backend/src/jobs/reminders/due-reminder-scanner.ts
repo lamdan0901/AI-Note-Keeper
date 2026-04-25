@@ -8,6 +8,7 @@ import {
   type ReminderScanInput,
   type ReminderScanResult,
 } from './contracts.js';
+import type { ReminderRepeatRule } from '../../reminders/contracts.js';
 
 type DueReminderRow = Readonly<{
   note_id: string;
@@ -15,6 +16,10 @@ type DueReminderRow = Readonly<{
   trigger_at: Date | null;
   next_trigger_at: Date | null;
   snoozed_until: Date | null;
+  repeat: ReminderRepeatRule | null;
+  start_at: Date | null;
+  base_at_local: string | null;
+  timezone: string | null;
   title: string | null;
   content: string | null;
   content_type: string | null;
@@ -36,6 +41,10 @@ const toCandidate = (row: DueReminderRow): ReminderDueCandidate => {
     triggerAt: toDateOrNull(row.trigger_at),
     nextTriggerAt: toDateOrNull(row.next_trigger_at),
     snoozedUntil: toDateOrNull(row.snoozed_until),
+    repeat: row.repeat,
+    startAt: toDateOrNull(row.start_at),
+    baseAtLocal: row.base_at_local,
+    timezone: row.timezone,
     title: row.title,
     content: row.content,
     contentType: row.content_type,
@@ -117,6 +126,10 @@ export const createDueReminderScanner = (
             trigger_at,
             next_trigger_at,
             snoozed_until,
+            repeat,
+            start_at,
+            base_at_local,
+            timezone,
             title,
             content,
             content_type
@@ -140,6 +153,10 @@ export const createDueReminderScanner = (
             noteId: candidate.noteId,
             userId: candidate.userId,
             triggerTime,
+            repeat: candidate.repeat,
+            startAt: candidate.startAt,
+            baseAtLocal: candidate.baseAtLocal,
+            timezone: candidate.timezone,
             title: text.title,
             body: text.body,
           };
@@ -151,6 +168,10 @@ export const createDueReminderScanner = (
             noteId: string;
             userId: string;
             triggerTime: Date;
+            repeat: ReminderRepeatRule | null;
+            startAt: Date | null;
+            baseAtLocal: string | null;
+            timezone: string | null;
             title: string;
             body: string;
           }> => {

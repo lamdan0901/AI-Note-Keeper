@@ -1,3 +1,5 @@
+import type { ReminderRepeatRule } from '../../reminders/contracts.js';
+
 export const MAX_LOOKBACK_MS = 5 * 60 * 1000;
 export const REMINDER_DISPATCH_CRON_KEY = 'check-reminders';
 
@@ -7,6 +9,10 @@ export type ReminderDueCandidate = Readonly<{
   triggerAt: Date | null;
   nextTriggerAt: Date | null;
   snoozedUntil: Date | null;
+  repeat: ReminderRepeatRule | null;
+  startAt: Date | null;
+  baseAtLocal: string | null;
+  timezone: string | null;
   title?: string | null;
   content?: string | null;
   contentType?: string | null;
@@ -16,6 +22,10 @@ export type ReminderDueOccurrence = Readonly<{
   noteId: string;
   userId: string;
   triggerTime: Date;
+  repeat?: ReminderRepeatRule | null;
+  startAt?: Date | null;
+  baseAtLocal?: string | null;
+  timezone?: string | null;
   // Rendered notification text. Optional for backwards compatibility with
   // existing scanner mocks; production scanner populates both.
   title?: string;
@@ -62,6 +72,15 @@ export type ReminderQueueEnqueueResult = Readonly<{
 
 export type ReminderDispatchQueue = Readonly<{
   enqueue: (job: ReminderDispatchQueueJob) => Promise<ReminderQueueEnqueueResult>;
+}>;
+
+export type DispatchedReminderOccurrence = ReminderDueOccurrence &
+  Readonly<{
+    runNow: Date;
+  }>;
+
+export type ReminderOccurrenceAdvancer = Readonly<{
+  advanceDispatchedOccurrence: (occurrence: DispatchedReminderOccurrence) => Promise<void>;
 }>;
 
 const toTimestamp = (value: Date | number): number => {

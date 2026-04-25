@@ -7,11 +7,14 @@ import {
   createReminderEventId,
   type CronStateRepository,
   type DueReminderScanner,
+  type DispatchedReminderOccurrence,
+  type ReminderOccurrenceAdvancer,
   type ReminderDispatchQueue,
 } from '../../jobs/reminders/contracts.js';
 import { createCronStateRepository } from '../../jobs/reminders/cron-state-repository.js';
 import { createReminderDispatchJob } from '../../jobs/reminders/dispatch-due-reminders.js';
 import { createDueReminderScanner } from '../../jobs/reminders/due-reminder-scanner.js';
+import { createReminderOccurrenceAdvancer } from '../../jobs/reminders/occurrence-advancer.js';
 
 type QueryCall = Readonly<{
   text: string;
@@ -33,6 +36,10 @@ const createDbQueryClient = <Row extends Record<string, unknown>>(
       return { rows };
     },
   };
+};
+
+const noopOccurrenceAdvancer: ReminderOccurrenceAdvancer = {
+  advanceDispatchedOccurrence: async () => undefined,
 };
 
 test('scanner computes since from watermark or bounded lookback when watermark is absent', async () => {
@@ -137,6 +144,41 @@ test('scanner returns reminders due in [since, now] while honoring snoozedUntil 
   assert.equal(result.reminders[0].triggerTime.getTime(), Date.parse('2026-04-19T09:56:00.000Z'));
   assert.equal(result.reminders[1].triggerTime.getTime(), Date.parse('2026-04-19T09:57:00.000Z'));
   assert.equal(result.reminders[2].triggerTime.getTime(), Date.parse('2026-04-19T09:57:30.000Z'));
+});
+
+test('occurrence advancer moves daily repeat to next future occurrence with due-state guard', async () => {
+  const calls: QueryCall[] = [];
+  const db = createDbQueryClient(async (text, values) => {
+    calls.push({ text, values });
+    return [];
+  });
+  const advancer = createReminderOccurrenceAdvancer({ db });
+  const runNow = new Date('2026-04-19T10:00:00.000Z');
+  const triggerTime = new Date('2026-04-19T09:59:00.000Z');
+
+  await advancer.advanceDispatchedOccurrence({
+    noteId: 'note-daily',
+    userId: 'user-1',
+    triggerTime,
+    runNow,
+    repeat: { kind: 'daily', interval: 1 },
+    startAt: triggerTime,
+    baseAtLocal: '2026-04-19T09:59:00',
+    timezone: 'UTC',
+  });
+
+  assert.equal(calls.length, 1);
+  assert.match(calls[0].text, /UPDATE notes/i);
+  assert.match(calls[0].text, /COALESCE\(snoozed_until, next_trigger_at, trigger_at\) = \$7/i);
+  assert.deepEqual(calls[0].values, [
+    triggerTime,
+    new Date('2026-04-20T09:59:00.000Z'),
+    'scheduled',
+    runNow,
+    'note-daily',
+    'user-1',
+    triggerTime,
+  ]);
 });
 
 test('cron state repository upserts and persists durable watermark by key', async () => {
@@ -277,6 +319,7 @@ test('dispatcher enqueues one job per occurrence with stable event identity and 
     scanner: harness.scanner,
     cronStateRepository: harness.cronStateRepository,
     queue: harness.queue,
+    occurrenceAdvancer: noopOccurrenceAdvancer,
     now: () => now,
   });
 
@@ -298,6 +341,78 @@ test('dispatcher enqueues one job per occurrence with stable event identity and 
   ]);
   assert.equal(harness.upsertCalls.length, 1);
   assert.equal(harness.upsertCalls[0].getTime(), now.getTime());
+});
+
+test('dispatcher advances dispatched recurring occurrences before committing watermark', async () => {
+  const now = new Date('2026-04-19T10:00:00.000Z');
+  const triggerTime = new Date('2026-04-19T09:59:00.000Z');
+  const events: string[] = [];
+
+  const scanner: DueReminderScanner = {
+    scanDueReminders: async ({ lastCheckedAt }) => {
+      events.push(`scan:${lastCheckedAt?.toISOString() ?? 'null'}`);
+      return {
+        since: new Date(now.getTime() - MAX_LOOKBACK_MS),
+        now,
+        reminders: [
+          {
+            noteId: 'note-daily',
+            userId: 'user-1',
+            triggerTime,
+            repeat: { kind: 'daily', interval: 1 },
+            startAt: new Date('2026-04-19T09:59:00.000Z'),
+            baseAtLocal: '2026-04-19T09:59:00',
+            timezone: 'UTC',
+          },
+        ],
+      };
+    },
+  };
+
+  const cronStateRepository: CronStateRepository = {
+    getLastCheckedAt: async () => {
+      events.push('get-watermark');
+      return null;
+    },
+    upsertLastCheckedAt: async () => {
+      events.push('set-watermark');
+    },
+  };
+
+  const queue: ReminderDispatchQueue = {
+    enqueue: async (job) => {
+      events.push(`enqueue:${job.jobKey}`);
+      return { status: 'enqueued' };
+    },
+  };
+
+  const occurrenceAdvancer = {
+    advanceDispatchedOccurrence: async (occurrence: DispatchedReminderOccurrence) => {
+      events.push(`advance:${occurrence.noteId}-${occurrence.triggerTime.getTime()}`);
+      assert.equal(occurrence.noteId, 'note-daily');
+      assert.equal(occurrence.runNow.getTime(), now.getTime());
+      assert.deepEqual(occurrence.repeat, { kind: 'daily', interval: 1 });
+    },
+  };
+
+  const dispatchJob = createReminderDispatchJob({
+    scanner,
+    cronStateRepository,
+    queue,
+    occurrenceAdvancer,
+    now: () => now,
+  });
+
+  const result = await dispatchJob.run();
+
+  assert.equal(result.enqueued, 1);
+  assert.deepEqual(events, [
+    'get-watermark',
+    'scan:null',
+    `enqueue:${createReminderEventId('note-daily', triggerTime)}`,
+    `advance:note-daily-${triggerTime.getTime()}`,
+    'set-watermark',
+  ]);
 });
 
 test('first dispatch run without persisted watermark is bounded by MAX_LOOKBACK_MS', async () => {
@@ -328,6 +443,7 @@ test('first dispatch run without persisted watermark is bounded by MAX_LOOKBACK_
     scanner,
     cronStateRepository,
     queue,
+    occurrenceAdvancer: noopOccurrenceAdvancer,
     now: () => now,
   });
 
@@ -372,6 +488,7 @@ test('enqueue failure keeps watermark unchanged for retry-safe at-least-once del
     scanner: harness.scanner,
     cronStateRepository: harness.cronStateRepository,
     queue: harness.queue,
+    occurrenceAdvancer: noopOccurrenceAdvancer,
     now: () => now,
   });
 
@@ -428,6 +545,7 @@ test('restart simulation reuses event identities and dedupes duplicate occurrenc
     scanner: harness.scanner,
     cronStateRepository: harness.cronStateRepository,
     queue: harness.queue,
+    occurrenceAdvancer: noopOccurrenceAdvancer,
     now: () => now,
   });
 

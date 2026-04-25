@@ -3,6 +3,7 @@ import {
   createReminderEventId,
   type CronStateRepository,
   type DueReminderScanner,
+  type ReminderOccurrenceAdvancer,
   type ReminderDispatchQueue,
 } from './contracts.js';
 
@@ -23,6 +24,7 @@ export type ReminderDispatchJobDeps = Readonly<{
   scanner: DueReminderScanner;
   cronStateRepository: CronStateRepository;
   queue: ReminderDispatchQueue;
+  occurrenceAdvancer: ReminderOccurrenceAdvancer;
   now?: () => Date;
   cronKey?: string;
 }>;
@@ -56,10 +58,18 @@ export const createReminderDispatchJob = (deps: ReminderDispatchJobDeps): Remind
         });
 
         if (result.status === 'duplicate') {
+          await deps.occurrenceAdvancer.advanceDispatchedOccurrence({
+            ...reminder,
+            runNow: scan.now,
+          });
           duplicates += 1;
           continue;
         }
 
+        await deps.occurrenceAdvancer.advanceDispatchedOccurrence({
+          ...reminder,
+          runNow: scan.now,
+        });
         enqueued += 1;
       }
 
