@@ -173,7 +173,7 @@ export default function NotesPage({
       const effectiveDraft = draftOverride ?? draft;
       const isNew = !editingNote;
       const isEmpty = !effectiveDraft.title.trim() && !effectiveDraft.content.trim();
-      if (isNew && isEmpty) {
+      if (isEmpty) {
         setModalOpen(false);
         return;
       }

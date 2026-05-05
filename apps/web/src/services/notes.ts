@@ -322,8 +322,8 @@ export async function createNote(sync: SyncFn, userId: string, draft: NoteEditor
       toLegacySyncChange({
         id,
         userId,
-        title: draft.title || undefined,
-        content: draft.content || undefined,
+        title: draft.title,
+        content: draft.content,
         contentType: draft.contentType === 'checklist' ? 'checklist' : undefined,
         color: draft.color,
         active: true,
@@ -365,8 +365,8 @@ export async function updateNote(
       toLegacySyncChange({
         id,
         userId,
-        title: draft.title || undefined,
-        content: draft.content || undefined,
+        title: draft.title,
+        content: draft.content,
         contentType: draft.contentType === 'checklist' ? 'checklist' : undefined,
         color: draft.color,
         active: true,
@@ -479,8 +479,8 @@ export async function restoreNote(sync: SyncFn, userId: string, note: WebNote) {
       toLegacySyncChange({
         id: note.id,
         userId,
-        title: note.title || undefined,
-        content: note.content || undefined,
+        title: note.title ?? undefined,
+        content: note.content ?? undefined,
         contentType: note.contentType === 'checklist' ? 'checklist' : undefined,
         color: note.color ?? undefined,
         active: true,

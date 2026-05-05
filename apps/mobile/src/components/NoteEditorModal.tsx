@@ -131,6 +131,12 @@ export const NoteEditorModal = forwardRef<NoteEditorModalRef, NoteEditorModalPro
       }
     };
 
+    const isBothEmpty =
+      !title.trim() &&
+      (isChecklist
+        ? checklistItems.every((item) => !item.text.trim())
+        : !content.trim());
+
     useImperativeHandle(ref, () => ({
       openEditor,
       openEditorFromVoiceDraft: (draft, warnings = []) => {
@@ -366,7 +372,15 @@ export const NoteEditorModal = forwardRef<NoteEditorModalRef, NoteEditorModalPro
                   <Pressable style={[styles.button, styles.buttonCancel]} onPress={handleClose}>
                     <Text style={styles.buttonTextCancel}>Cancel</Text>
                   </Pressable>
-                  <Pressable style={[styles.button, styles.buttonSave]} onPress={handleSave}>
+                  <Pressable
+                    style={[
+                      styles.button,
+                      styles.buttonSave,
+                      isBothEmpty && styles.buttonSaveDisabled,
+                    ]}
+                    onPress={handleSave}
+                    disabled={isBothEmpty}
+                  >
                     <Text style={styles.buttonTextSave}>Save</Text>
                   </Pressable>
                 </View>
@@ -500,6 +514,9 @@ const createStyles = (theme: Theme) =>
     },
     buttonSave: {
       backgroundColor: theme.colors.primary,
+    },
+    buttonSaveDisabled: {
+      opacity: 0.5,
     },
     buttonCancel: {
       backgroundColor: theme.colors.surface,

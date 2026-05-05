@@ -71,6 +71,12 @@ export function NoteEditorModal({
     isChecklist ? parseChecklist(draft.content) : [],
   );
 
+  const isBothEmpty =
+    !draft.title.trim() &&
+    (isChecklist
+      ? checklistItems.every((item) => !item.text.trim())
+      : !draft.content.trim());
+
   // Sync checklist items back to draft.content
   const handleChecklistChange = (items: ChecklistItem[]) => {
     setChecklistItems(items);
@@ -106,13 +112,13 @@ export function NoteEditorModal({
         }
         onClose();
       } else if (e.key === 'Enter' && e.ctrlKey) {
-        if (!reminderOpen) {
+        if (!reminderOpen && !isBothEmpty) {
           e.preventDefault();
           onSave();
         }
       }
     },
-    [onClose, onSave, reminderOpen],
+    [onClose, onSave, reminderOpen, isBothEmpty],
   );
 
   useEffect(() => {
@@ -312,6 +318,7 @@ export function NoteEditorModal({
             <button
               className="modal-dialog__save-btn"
               onClick={() => onSave()}
+              disabled={isBothEmpty}
               aria-label="Save note"
               type="button"
             >
