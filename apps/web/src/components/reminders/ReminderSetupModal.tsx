@@ -14,13 +14,13 @@ type ReminderSetupModalProps = {
 };
 
 const QUICK_TIMES: Array<{ label: string; hour: number; minute: number }> = [
-  { label: '6:30', hour: 6, minute: 30 },
-  { label: '9:00', hour: 9, minute: 0 },
-  { label: '11:30', hour: 11, minute: 30 },
-  { label: '3:00', hour: 15, minute: 0 },
-  { label: '5:30', hour: 17, minute: 30 },
-  { label: '7:00', hour: 19, minute: 0 },
-  { label: '9:30', hour: 21, minute: 30 },
+  { label: '6:30 AM', hour: 6, minute: 30 },
+  { label: '9:00 AM', hour: 9, minute: 0 },
+  { label: '11:30 AM', hour: 11, minute: 30 },
+  { label: '3:00 PM', hour: 15, minute: 0 },
+  { label: '5:30 PM', hour: 17, minute: 30 },
+  { label: '7:00 PM', hour: 19, minute: 0 },
+  { label: '9:30 PM', hour: 21, minute: 30 },
 ];
 
 const WEEKDAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
