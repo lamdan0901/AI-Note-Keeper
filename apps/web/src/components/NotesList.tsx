@@ -88,7 +88,6 @@ export function NotesList({
           </h2>
           <NoteGroup
             notes={pinnedNotes}
-            className={viewMode === 'grid' ? 'notes-list__group--pinned-grid' : undefined}
             {...groupProps}
           />
         </section>
