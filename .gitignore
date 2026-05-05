@@ -22,3 +22,5 @@ google-services.json
 google-services-base64.txt
 .claude
 .kilo/
+temp_auto_push.bat
+temp_interactive_push.bat

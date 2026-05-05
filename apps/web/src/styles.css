@@ -648,12 +648,6 @@ body {
   column-count: 3;
   column-gap: 16px;
 }
-.notes-list__group--pinned-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
-  align-items: start;
-}
 .notes-list--grid {
   column-count: 3;
   column-gap: 16px;
@@ -667,28 +661,16 @@ body {
   -webkit-column-break-inside: avoid;
   page-break-inside: avoid;
 }
-.notes-list__group--pinned-grid > .note-card-slot {
-  margin: 0;
-  break-inside: auto;
-  -webkit-column-break-inside: auto;
-  page-break-inside: auto;
-}
 @media (max-width: 1024px) {
   .notes-list--grid,
   .notes-list__group--grid {
     column-count: 2;
-  }
-  .notes-list__group--pinned-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 @media (max-width: 600px) {
   .notes-list--grid,
   .notes-list__group--grid {
     column-count: 1;
-  }
-  .notes-list__group--pinned-grid {
-    grid-template-columns: 1fr;
   }
 }
 @media (min-width: 1440px) {
