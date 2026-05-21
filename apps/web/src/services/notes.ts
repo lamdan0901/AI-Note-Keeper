@@ -286,20 +286,8 @@ export function useSyncNotes() {
 type SyncFn = ReturnType<typeof useSyncNotes>;
 type SyncChange = Parameters<SyncFn>[0]['changes'][number];
 
-const LEGACY_REMINDER_FIELDS = new Set([
-  'repeat',
-  'startAt',
-  'baseAtLocal',
-  'nextTriggerAt',
-  'lastFiredAt',
-  'lastAcknowledgedAt',
-]);
-
 function toLegacySyncChange(change: SyncChange): SyncChange {
-  const filteredEntries = Object.entries(change).filter(
-    ([key]) => !LEGACY_REMINDER_FIELDS.has(key),
-  );
-  return Object.fromEntries(filteredEntries) as SyncChange;
+  return change;
 }
 
 /**
