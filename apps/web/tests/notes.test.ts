@@ -85,14 +85,14 @@ describe('notes service payload shaping', () => {
     expect(change).toMatchObject({
       id: 'note-1',
       operation: 'update',
-      triggerAt: undefined,
+      triggerAt: null,
       repeatRule: 'none',
       repeatConfig: null,
       repeat: null,
       startAt: null,
       baseAtLocal: null,
       nextTriggerAt: null,
-      scheduleStatus: undefined,
+      scheduleStatus: null,
       done: false,
       version: 3,
       createdAt: 1_000,
@@ -113,14 +113,14 @@ describe('notes service payload shaping', () => {
     const change = sync.mock.calls[0]?.[0]?.changes?.[0];
     expect(change).toMatchObject({
       done: true,
-      triggerAt: undefined,
+      triggerAt: null,
       repeatRule: 'none',
       repeatConfig: null,
       repeat: null,
       startAt: null,
       baseAtLocal: null,
       nextTriggerAt: null,
-      scheduleStatus: undefined,
+      scheduleStatus: null,
     });
   });
 
@@ -140,14 +140,14 @@ describe('notes service payload shaping', () => {
     const change = sync.mock.calls[0]?.[0]?.changes?.[0];
     expect(change).toMatchObject({
       done: true,
-      triggerAt: undefined,
+      triggerAt: null,
       repeatRule: 'none',
       repeatConfig: null,
       repeat: null,
       startAt: null,
       baseAtLocal: null,
       nextTriggerAt: null,
-      scheduleStatus: undefined,
+      scheduleStatus: null,
       operation: 'update',
     });
   });

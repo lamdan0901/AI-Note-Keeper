@@ -97,12 +97,12 @@ type NotesSyncChange = Readonly<{
   active?: boolean;
   done?: boolean;
   isPinned?: boolean;
-  triggerAt?: number;
-  repeatRule?: string;
+  triggerAt?: number | null;
+  repeatRule?: string | null;
   repeatConfig?: Record<string, unknown> | null;
-  snoozedUntil?: number;
-  scheduleStatus?: string;
-  timezone?: string;
+  snoozedUntil?: number | null;
+  scheduleStatus?: string | null;
+  timezone?: string | null;
   repeat?: Record<string, unknown> | null;
   startAt?: number | null;
   baseAtLocal?: string | null;

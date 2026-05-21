@@ -26,13 +26,13 @@ export interface WebNote {
   done: boolean;
   isPinned: boolean;
 
-  // Reminder-related fields (read-only on web; never cleared by web edits)
+  // Reminder-related fields (edited by web reminder actions)
   triggerAt?: number;
   repeatRule?: 'none' | 'daily' | 'weekly' | 'monthly' | 'custom';
   repeatConfig?: Record<string, unknown> | null;
   repeat?: RepeatRule | null;
   snoozedUntil?: number | null;
-  scheduleStatus?: 'scheduled' | 'unscheduled' | 'error';
+  scheduleStatus?: 'scheduled' | 'unscheduled' | 'error' | null;
   timezone?: string | null;
   baseAtLocal?: string | null;
   startAt?: number | null;
