@@ -54,7 +54,9 @@ export type SubscriptionUpdatePatch = {
   status?: SubscriptionStatus;
   reminderDaysBefore?: ReadonlyArray<number>;
   nextReminderAt?: Date | null;
+  lastNotifiedBillingDate?: Date | null;
   nextTrialReminderAt?: Date | null;
+  lastNotifiedTrialEndDate?: Date | null;
   deletedAt?: Date | null;
   active?: boolean;
   updatedAt?: Date;

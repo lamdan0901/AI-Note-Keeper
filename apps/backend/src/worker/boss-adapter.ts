@@ -1,6 +1,12 @@
 import type { WorkerAdapter, WorkerHealthSnapshot, WorkerRuntimeStatus } from './contracts.js';
 import { createCronStateRepository } from '../jobs/reminders/cron-state-repository.js';
 import {
+  createSubscriptionReminderDispatchJob,
+  type SubscriptionReminderDispatchJob,
+} from '../jobs/subscriptions/dispatch-due-subscription-reminders.js';
+import { createSubscriptionReminderScanner } from '../jobs/subscriptions/scanner.js';
+import { createSubscriptionReminderStateRepository } from '../jobs/subscriptions/state-repository.js';
+import {
   createReminderDispatchJob,
   type ReminderDispatchJob,
 } from '../jobs/reminders/dispatch-due-reminders.js';
@@ -27,6 +33,7 @@ import type {
   PushTerminalFailureRecord,
   PushTerminalFailureRecorder,
 } from '../jobs/push/contracts.js';
+import type { SubscriptionReminderDispatchQueue } from '../jobs/subscriptions/contracts.js';
 
 type AdapterLogger = Readonly<{
   info: (message: string) => void;
@@ -45,6 +52,7 @@ const defaultLogger: AdapterLogger = {
 export type PgBossAdapterOptions = Readonly<{
   logger?: AdapterLogger;
   dispatchIntervalMs?: number;
+  subscriptionDispatchIntervalMs?: number;
   maxConcurrentPushDispatches?: number;
   scheduler?: Readonly<{
     setInterval: (callback: () => void, ms: number) => NodeJS.Timeout;
@@ -57,9 +65,13 @@ export type PgBossAdapterOptions = Readonly<{
   occurrenceAdvancer?: ReminderOccurrenceAdvancer;
   cronStateRepository?: CronStateRepository;
   dispatchJob?: ReminderDispatchJob;
+  subscriptionDispatchJob?: SubscriptionReminderDispatchJob;
   pushJobHandler?: PushJobHandler;
   pushProvider?: PushProvider;
-  deviceTokensRepository?: Pick<DeviceTokensRepository, 'listByUserId' | 'deleteByDeviceIdForUser'>;
+  deviceTokensRepository?: Pick<
+    DeviceTokensRepository,
+    'listByUserId' | 'listUserIdsWithTokens' | 'deleteByDeviceIdForUser'
+  >;
   pushRetryScheduler?: PushRetryScheduler;
   terminalFailureRecorder?: PushTerminalFailureRecorder;
   now?: () => Date;
@@ -83,6 +95,21 @@ const JOB_KEY_RETENTION_WINDOW_MS = 24 * 60 * 60 * 1000;
 const resolveDelayToNextBoundaryMs = (nowMs: number, intervalMs: number): number => {
   const remainderMs = nowMs % intervalMs;
   return remainderMs === 0 ? intervalMs : intervalMs - remainderMs;
+};
+
+const resolveDelayToNextUtcMidnightMs = (nowMs: number): number => {
+  const now = new Date(nowMs);
+  const nextUtcMidnight = Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate() + 1,
+    0,
+    0,
+    0,
+    0,
+  );
+
+  return Math.max(1, nextUtcMidnight - nowMs);
 };
 
 const createInMemoryDispatchQueue = (
@@ -186,6 +213,11 @@ export const createPgBossAdapter = (options: PgBossAdapterOptions = {}): WorkerA
   const dispatchIntervalMs = options.dispatchIntervalMs ?? 60_000;
   if (!Number.isInteger(dispatchIntervalMs) || dispatchIntervalMs <= 0) {
     throw new Error('dispatchIntervalMs must be a positive integer');
+  }
+  const subscriptionDispatchIntervalMs =
+    options.subscriptionDispatchIntervalMs ?? 24 * 60 * 60 * 1000;
+  if (!Number.isInteger(subscriptionDispatchIntervalMs) || subscriptionDispatchIntervalMs <= 0) {
+    throw new Error('subscriptionDispatchIntervalMs must be a positive integer');
   }
   const maxConcurrentPushDispatches = options.maxConcurrentPushDispatches ?? 20;
   if (!Number.isInteger(maxConcurrentPushDispatches) || maxConcurrentPushDispatches <= 0) {
@@ -308,6 +340,36 @@ export const createPgBossAdapter = (options: PgBossAdapterOptions = {}): WorkerA
       now,
     });
 
+  const subscriptionQueue: SubscriptionReminderDispatchQueue = {
+    enqueue: async (job) => {
+      const result = await queue.enqueue({
+        noteId: `subscription:${job.subscriptionId}:${job.kind}`,
+        userId: job.userId,
+        triggerTime: job.triggerTime,
+        eventId: job.eventId,
+        jobKey: job.jobKey,
+        title: job.title,
+        body: job.body,
+      });
+
+      return {
+        status: result.status,
+      };
+    },
+  };
+
+  const subscriptionDispatchJob =
+    options.subscriptionDispatchJob ??
+    createSubscriptionReminderDispatchJob({
+      scanner: createSubscriptionReminderScanner({
+        listUserIds: async () => await deviceTokensRepository.listUserIdsWithTokens(),
+      }),
+      cronStateRepository,
+      queue: subscriptionQueue,
+      stateRepository: createSubscriptionReminderStateRepository(),
+      now,
+    });
+
   const pushRetryScheduler =
     options.pushRetryScheduler ??
     ({
@@ -372,18 +434,27 @@ export const createPgBossAdapter = (options: PgBossAdapterOptions = {}): WorkerA
   pushJobHandlerRef = pushJobHandler;
 
   let dispatchTimerHandle: NodeJS.Timeout | null = null;
+  let subscriptionDispatchTimerHandle: NodeJS.Timeout | null = null;
   let inFlightDispatch: Promise<void> | null = null;
+  let inFlightSubscriptionDispatch: Promise<void> | null = null;
   let lastDispatchAt: string | null = null;
+  let lastSubscriptionDispatchAt: string | null = null;
   let lastDispatchError: string | null = null;
+  let lastSubscriptionDispatchError: string | null = null;
   let skippedTicks = 0;
+  let skippedSubscriptionTicks = 0;
 
   const toSnapshot = (nextStatus: WorkerRuntimeStatus): WorkerHealthSnapshot => ({
     status: nextStatus,
     details: {
       dispatchIntervalMs,
+      subscriptionDispatchIntervalMs,
       lastDispatchAt,
+      lastSubscriptionDispatchAt,
       lastDispatchError,
+      lastSubscriptionDispatchError,
       dispatchInFlight: inFlightDispatch !== null,
+      subscriptionDispatchInFlight: inFlightSubscriptionDispatch !== null,
       pushJobInFlight: inFlightPushJobs.hasInFlight(),
       skippedTicks,
       pushRetriesScheduled,
@@ -422,6 +493,35 @@ export const createPgBossAdapter = (options: PgBossAdapterOptions = {}): WorkerA
     await inFlightDispatch;
   };
 
+  const runSubscriptionDispatchCycle = async (): Promise<void> => {
+    if (status !== 'running') {
+      return;
+    }
+
+    if (inFlightSubscriptionDispatch) {
+      skippedSubscriptionTicks += 1;
+      return;
+    }
+
+    inFlightSubscriptionDispatch = (async () => {
+      try {
+        const result = await subscriptionDispatchJob.run();
+        lastSubscriptionDispatchAt = result.now.toISOString();
+        lastSubscriptionDispatchError = null;
+        logger.info(
+          `[worker] subscription reminder dispatch completed scanned=${result.scanned} enqueued=${result.enqueued} duplicates=${result.duplicates}`,
+        );
+      } catch (error) {
+        lastSubscriptionDispatchError = error instanceof Error ? error.message : String(error);
+        logger.error('[worker] subscription reminder dispatch failed', error);
+      } finally {
+        inFlightSubscriptionDispatch = null;
+      }
+    })();
+
+    await inFlightSubscriptionDispatch;
+  };
+
   const scheduleNextDispatchCycle = (): void => {
     if (status !== 'running' || stopRequested) {
       return;
@@ -432,6 +532,20 @@ export const createPgBossAdapter = (options: PgBossAdapterOptions = {}): WorkerA
       dispatchTimerHandle = null;
       void runDispatchCycle().finally(() => {
         scheduleNextDispatchCycle();
+      });
+    }, delayMs);
+  };
+
+  const scheduleNextSubscriptionDispatchCycle = (): void => {
+    if (status !== 'running' || stopRequested) {
+      return;
+    }
+
+    const delayMs = resolveDelayToNextUtcMidnightMs(now().getTime());
+    subscriptionDispatchTimerHandle = setTimeoutFn(() => {
+      subscriptionDispatchTimerHandle = null;
+      void runSubscriptionDispatchCycle().finally(() => {
+        scheduleNextSubscriptionDispatchCycle();
       });
     }, delayMs);
   };
@@ -450,8 +564,10 @@ export const createPgBossAdapter = (options: PgBossAdapterOptions = {}): WorkerA
       logger.info('[worker] adapter started (dispatch + push handlers enabled)');
 
       scheduleNextDispatchCycle();
+      scheduleNextSubscriptionDispatchCycle();
 
       void runDispatchCycle();
+      void runSubscriptionDispatchCycle();
     },
     stop: async () => {
       if (status === 'stopped') {
@@ -468,6 +584,11 @@ export const createPgBossAdapter = (options: PgBossAdapterOptions = {}): WorkerA
         dispatchTimerHandle = null;
       }
 
+      if (subscriptionDispatchTimerHandle) {
+        clearTimeoutFn(subscriptionDispatchTimerHandle);
+        subscriptionDispatchTimerHandle = null;
+      }
+
       for (const retryHandle of scheduledPushRetryHandles) {
         clearTimeoutFn(retryHandle);
       }
@@ -476,6 +597,10 @@ export const createPgBossAdapter = (options: PgBossAdapterOptions = {}): WorkerA
 
       if (inFlightDispatch) {
         await inFlightDispatch;
+      }
+
+      if (inFlightSubscriptionDispatch) {
+        await inFlightSubscriptionDispatch;
       }
 
       acceptingDispatchWork = false;

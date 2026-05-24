@@ -364,6 +364,7 @@ test('pg-boss adapter stop prevents new push jobs after shutdown resolves', asyn
       upsertLastCheckedAt: async () => undefined,
     },
     deviceTokensRepository: {
+      listUserIdsWithTokens: async () => ['user-1'],
       listByUserId: async () => [
         {
           id: 'token-1',
@@ -450,6 +451,7 @@ test('pg-boss adapter dispatches due reminders into push handler with resolved d
       upsertLastCheckedAt: async () => undefined,
     },
     deviceTokensRepository: {
+      listUserIdsWithTokens: async () => ['user-1'],
       listByUserId: async () => [
         {
           id: 'token-1',

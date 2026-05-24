@@ -24,6 +24,7 @@ const TRIGGER_DEDUP_WINDOW_MS = 30_000;
 // so older push senders can't override a freshly-synced note's real content.
 const LEGACY_PLACEHOLDER_TITLE = 'Reminder';
 const LEGACY_PLACEHOLDER_BODY = 'You have a reminder';
+const SUBSCRIPTION_ID_PREFIX = 'subscription:';
 
 const isLegacyPlaceholder = (title: string, body: string): boolean => {
   return title === LEGACY_PLACEHOLDER_TITLE && body === LEGACY_PLACEHOLDER_BODY;
@@ -197,13 +198,17 @@ export const handleFcmMessage = async (remoteMessage: FcmRemoteMessage): Promise
   const bodyText = rawBody.trim();
 
   let title = titleText || bodyText || 'Reminder';
-  let body =
-    titleText && bodyText ? bodyText : titleText || bodyText ? '' : 'You have a reminder';
+  let body = titleText && bodyText ? bodyText : titleText || bodyText ? '' : 'You have a reminder';
+
+  const isSubscriptionNotification = reminderId.startsWith(SUBSCRIPTION_ID_PREFIX);
 
   // Defensive fallback: if the server sent the legacy placeholder, look up the
   // note locally and render real text. Covers older backend builds and any
   // future case where the push payload is missing the note fields.
-  if (isLegacyPlaceholder(title, body) || (!titleText && !bodyText)) {
+  if (
+    !isSubscriptionNotification &&
+    (isLegacyPlaceholder(title, body) || (!titleText && !bodyText))
+  ) {
     const resolved = await resolveNotificationTextFromNote(reminderId, title, body);
     title = resolved.title;
     body = resolved.body;

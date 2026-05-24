@@ -103,8 +103,12 @@ const toPatchColumns = (
   if (Object.hasOwn(patch, 'reminderDaysBefore'))
     add('reminder_days_before', JSON.stringify(patch.reminderDaysBefore ?? []));
   if (Object.hasOwn(patch, 'nextReminderAt')) add('next_reminder_at', patch.nextReminderAt ?? null);
+  if (Object.hasOwn(patch, 'lastNotifiedBillingDate'))
+    add('last_notified_billing_date', patch.lastNotifiedBillingDate ?? null);
   if (Object.hasOwn(patch, 'nextTrialReminderAt'))
     add('next_trial_reminder_at', patch.nextTrialReminderAt ?? null);
+  if (Object.hasOwn(patch, 'lastNotifiedTrialEndDate'))
+    add('last_notified_trial_end_date', patch.lastNotifiedTrialEndDate ?? null);
   if (Object.hasOwn(patch, 'deletedAt')) add('deleted_at', patch.deletedAt ?? null);
   if (Object.hasOwn(patch, 'active')) add('active', patch.active ?? true);
   if (Object.hasOwn(patch, 'updatedAt')) add('updated_at', patch.updatedAt ?? new Date());
