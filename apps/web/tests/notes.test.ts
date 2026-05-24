@@ -49,6 +49,8 @@ describe('notes service payload shaping', () => {
       repeat: { kind: 'daily', interval: 2 },
     });
 
+    const expectedTriggerAt = new Date('2026-02-10T10:30:00.000Z').getTime();
+
     await createNote(sync, USER_ID, draft);
 
     const arg = sync.mock.calls[0]?.[0];
@@ -58,17 +60,17 @@ describe('notes service payload shaping', () => {
     expect(arg.changes[0]).toMatchObject({
       id: 'draft-1',
       operation: 'create',
-      triggerAt: new Date('2026-02-10T10:30:00.000Z').getTime(),
+      triggerAt: expectedTriggerAt,
       repeatRule: 'daily',
       repeatConfig: { interval: 2 },
+      repeat: { kind: 'daily', interval: 2 },
+      startAt: expectedTriggerAt,
+      nextTriggerAt: expectedTriggerAt,
       scheduleStatus: 'unscheduled',
       timezone: getResolvedTimezone(),
       done: false,
     });
-    expect(arg.changes[0]).not.toHaveProperty('repeat');
-    expect(arg.changes[0]).not.toHaveProperty('startAt');
-    expect(arg.changes[0]).not.toHaveProperty('baseAtLocal');
-    expect(arg.changes[0]).not.toHaveProperty('nextTriggerAt');
+    expect(arg.changes[0].baseAtLocal).toEqual(expect.any(String));
   });
 
   it('updateNote clears reminder fields when draft has no reminder', async () => {
@@ -83,10 +85,14 @@ describe('notes service payload shaping', () => {
     expect(change).toMatchObject({
       id: 'note-1',
       operation: 'update',
-      triggerAt: undefined,
+      triggerAt: null,
       repeatRule: 'none',
       repeatConfig: null,
-      scheduleStatus: undefined,
+      repeat: null,
+      startAt: null,
+      baseAtLocal: null,
+      nextTriggerAt: null,
+      scheduleStatus: null,
       done: false,
       version: 3,
       createdAt: 1_000,
@@ -107,10 +113,14 @@ describe('notes service payload shaping', () => {
     const change = sync.mock.calls[0]?.[0]?.changes?.[0];
     expect(change).toMatchObject({
       done: true,
-      triggerAt: undefined,
+      triggerAt: null,
       repeatRule: 'none',
       repeatConfig: null,
-      scheduleStatus: undefined,
+      repeat: null,
+      startAt: null,
+      baseAtLocal: null,
+      nextTriggerAt: null,
+      scheduleStatus: null,
     });
   });
 
@@ -130,10 +140,14 @@ describe('notes service payload shaping', () => {
     const change = sync.mock.calls[0]?.[0]?.changes?.[0];
     expect(change).toMatchObject({
       done: true,
-      triggerAt: undefined,
+      triggerAt: null,
       repeatRule: 'none',
       repeatConfig: null,
-      scheduleStatus: undefined,
+      repeat: null,
+      startAt: null,
+      baseAtLocal: null,
+      nextTriggerAt: null,
+      scheduleStatus: null,
       operation: 'update',
     });
   });

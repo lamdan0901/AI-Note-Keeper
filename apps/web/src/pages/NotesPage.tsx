@@ -97,7 +97,11 @@ export default function NotesPage({
       return;
     }
 
-    const reconciled = reconcileOptimisticNotes(allNotes, optimisticUpsertsById, optimisticDeletedIds);
+    const reconciled = reconcileOptimisticNotes(
+      allNotes,
+      optimisticUpsertsById,
+      optimisticDeletedIds,
+    );
 
     setOptimisticUpsertsById((previous) => {
       const previousIds = Object.keys(previous);
@@ -202,7 +206,7 @@ export default function NotesPage({
           active: true,
           done: effectiveDraft.done,
           isPinned: effectiveDraft.isPinned,
-          triggerAt: reminderFields.triggerAt,
+          triggerAt: reminderFields.triggerAt ?? undefined,
           repeatRule: reminderFields.repeatRule,
           repeatConfig: reminderFields.repeatConfig,
           repeat: reminderFields.repeat,
@@ -238,7 +242,7 @@ export default function NotesPage({
           color: effectiveDraft.color,
           done: effectiveDraft.done,
           isPinned: effectiveDraft.isPinned,
-          triggerAt: reminderFields.triggerAt,
+          triggerAt: reminderFields.triggerAt ?? undefined,
           repeatRule: reminderFields.repeatRule,
           repeatConfig: reminderFields.repeatConfig,
           repeat: reminderFields.repeat,

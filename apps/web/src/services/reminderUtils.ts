@@ -7,16 +7,16 @@ import { formatReminderLabel } from '../../../../packages/shared/utils/repeatLab
 import type { NoteEditorDraft, WebNote } from './notesTypes';
 
 type ReminderSyncFields = {
-  triggerAt?: number;
+  triggerAt?: number | null;
   repeatRule?: 'none' | 'daily' | 'weekly' | 'monthly' | 'custom';
   repeatConfig?: Record<string, unknown> | null;
   repeat?: RepeatRule | null;
   startAt?: number | null;
   baseAtLocal?: string | null;
   nextTriggerAt?: number | null;
-  snoozedUntil?: number;
-  scheduleStatus?: 'scheduled' | 'unscheduled' | 'error';
-  timezone?: string;
+  snoozedUntil?: number | null;
+  scheduleStatus?: 'scheduled' | 'unscheduled' | 'error' | null;
+  timezone?: string | null;
 };
 
 function normalizeToFutureDate(date: Date, now: Date): Date {
@@ -83,16 +83,16 @@ export function buildReminderSyncFields(
 ): ReminderSyncFields {
   if (!draft.reminder) {
     return {
-      triggerAt: undefined,
+      triggerAt: null,
       repeatRule: 'none' as const,
       repeatConfig: null,
       repeat: null,
       startAt: null,
       baseAtLocal: null,
       nextTriggerAt: null,
-      snoozedUntil: undefined,
-      scheduleStatus: undefined,
-      timezone,
+      snoozedUntil: null,
+      scheduleStatus: null,
+      timezone: null,
     };
   }
 

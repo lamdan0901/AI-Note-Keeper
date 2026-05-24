@@ -117,16 +117,16 @@ describe('buildReminderSyncFields', () => {
         'UTC',
       ),
     ).toMatchObject({
-      triggerAt: undefined,
+      triggerAt: null,
       repeatRule: 'none',
       repeatConfig: null,
       repeat: null,
       startAt: null,
       baseAtLocal: null,
       nextTriggerAt: null,
-      snoozedUntil: undefined,
-      scheduleStatus: undefined,
-      timezone: 'UTC',
+      snoozedUntil: null,
+      scheduleStatus: null,
+      timezone: null,
     });
   });
 
