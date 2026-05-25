@@ -16,6 +16,7 @@ type DeviceTokenRow = Readonly<{
 
 export type DeviceTokensRepository = Readonly<{
   listByUserId: (userId: string) => Promise<ReadonlyArray<DeviceTokenRecord>>;
+  listUserIdsWithTokens: () => Promise<ReadonlyArray<string>>;
   findByDeviceId: (deviceId: string) => Promise<DeviceTokenRecord | null>;
   upsertByDeviceId: (
     input: Readonly<{ userId: string; deviceId: string; fcmToken: string; platform: 'android' }>,
@@ -55,6 +56,18 @@ export const createDeviceTokensRepository = (
       );
 
       return result.rows.map((row) => toDomain(row));
+    },
+
+    listUserIdsWithTokens: async () => {
+      const result = await db.query<Readonly<{ user_id: string }>>(
+        `
+          SELECT DISTINCT user_id
+          FROM device_push_tokens
+          ORDER BY user_id ASC
+        `,
+      );
+
+      return result.rows.map((row) => row.user_id);
     },
 
     findByDeviceId: async (deviceId) => {
