@@ -40,6 +40,14 @@ type AdapterLogger = Readonly<{
   error: (message: string, error?: unknown) => void;
 }>;
 
+const sanitizeLogText = (value?: string): string => {
+  if (typeof value !== 'string' || value.length === 0) {
+    return '';
+  }
+
+  return value.replace(/\s+/g, ' ').trim();
+};
+
 const defaultLogger: AdapterLogger = {
   info: (message) => {
     console.log(message);
@@ -161,7 +169,11 @@ const createInMemoryDispatchQueue = (
       }
 
       enqueuedJobKeys.set(job.jobKey, nowMs);
-      logger.info(`[worker] queued reminder occurrence ${job.eventId}`);
+      const title = sanitizeLogText(job.title);
+      const body = sanitizeLogText(job.body);
+      logger.info(
+        `[worker] fired reminder enqueue status=enqueued noteId=${job.noteId} event=${job.eventId} triggerTime=${job.triggerTime.toISOString()} title="${title}" body="${body}"`,
+      );
 
       if (onEnqueue) {
         await onEnqueue(job);
