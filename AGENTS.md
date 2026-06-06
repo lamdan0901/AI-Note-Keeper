@@ -18,7 +18,6 @@ apps/
   backend/              # backend services and Convex-powered API/worker runtime
   mobile/               # Expo React Native mobile app
   web/                  # frontend web app
-convex/                  # legacy Convex schema, functions, and generated types
 packages/                # shared packages, constants, hooks, auth, tokens, types, utils
 tests/                   # integration / contract / runtime test suites
 docs/                    # documentation and runbooks
