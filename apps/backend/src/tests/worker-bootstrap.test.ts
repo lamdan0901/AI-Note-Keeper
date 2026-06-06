@@ -504,6 +504,72 @@ test('pg-boss adapter dispatches due reminders into push handler with resolved d
   assert.deepEqual(handledJobs[0].tokens, [{ deviceId: 'device-1', fcmToken: 'fcm-token-1' }]);
 });
 
+test('pg-boss adapter logs fired reminder enqueue detail with trigger time and note text', async () => {
+  const now = new Date('2026-04-20T10:00:00.000Z');
+  const infoLogs: string[] = [];
+
+  const adapter = createPgBossAdapter({
+    dispatchIntervalMs: 10,
+    scanner: {
+      scanDueReminders: async () => ({
+        since: now,
+        now,
+        reminders: [
+          {
+            noteId: 'note-1',
+            userId: 'user-1',
+            triggerTime: now,
+            title: 'Doctor checkup',
+            body: 'Bring blood test results',
+          },
+        ],
+      }),
+    },
+    cronStateRepository: {
+      getLastCheckedAt: async () => null,
+      upsertLastCheckedAt: async () => undefined,
+    },
+    deviceTokensRepository: {
+      listUserIdsWithTokens: async () => ['user-1'],
+      listByUserId: async () => [],
+      deleteByDeviceIdForUser: async () => false,
+    },
+    pushJobHandler: {
+      handle: async () => ({
+        processed: 0,
+        delivered: 0,
+        retriesScheduled: 0,
+        unregisteredRemoved: 0,
+        terminalFailures: 0,
+      }),
+    },
+    logger: {
+      info: (message: string) => {
+        infoLogs.push(message);
+      },
+      error: (_message: string, _error?: unknown) => {
+        // no-op
+      },
+    },
+  });
+
+  await adapter.start();
+  await waitFor(
+    () => infoLogs.some((message) => message.includes('[worker] fired reminder enqueue')),
+    500,
+  );
+  await adapter.stop();
+
+  const firedLog = infoLogs.find((message) => message.includes('[worker] fired reminder enqueue'));
+  assert.ok(firedLog);
+  assert.match(firedLog, /status=enqueued/);
+  assert.match(firedLog, /noteId=note-1/);
+  assert.match(firedLog, /event=note-1-1776679200000/);
+  assert.match(firedLog, /triggerTime=2026-04-20T10:00:00.000Z/);
+  assert.match(firedLog, /title="Doctor checkup"/);
+  assert.match(firedLog, /body="Bring blood test results"/);
+});
+
 test('API and worker runtime scaffolds can be initialized independently', async () => {
   const api = createApiServer({
     isDependencyDegraded: () => false,
