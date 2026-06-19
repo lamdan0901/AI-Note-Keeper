@@ -99,6 +99,7 @@ const defaultScheduler: Readonly<{
 
 const MAX_IN_MEMORY_JOB_KEYS = 50_000;
 const JOB_KEY_RETENTION_WINDOW_MS = 24 * 60 * 60 * 1000;
+const DEFAULT_REMINDER_DISPATCH_INTERVAL_MS = 10 * 60 * 1000;
 
 const resolveDelayToNextBoundaryMs = (nowMs: number, intervalMs: number): number => {
   const remainderMs = nowMs % intervalMs;
@@ -222,7 +223,7 @@ export const createPgBossAdapter = (options: PgBossAdapterOptions = {}): WorkerA
     ((handle: NodeJS.Timeout) => {
       clearTimeout(handle);
     });
-  const dispatchIntervalMs = options.dispatchIntervalMs ?? 60_000;
+  const dispatchIntervalMs = options.dispatchIntervalMs ?? DEFAULT_REMINDER_DISPATCH_INTERVAL_MS;
   if (!Number.isInteger(dispatchIntervalMs) || dispatchIntervalMs <= 0) {
     throw new Error('dispatchIntervalMs must be a positive integer');
   }
@@ -454,7 +455,6 @@ export const createPgBossAdapter = (options: PgBossAdapterOptions = {}): WorkerA
   let lastDispatchError: string | null = null;
   let lastSubscriptionDispatchError: string | null = null;
   let skippedTicks = 0;
-  let skippedSubscriptionTicks = 0;
 
   const toSnapshot = (nextStatus: WorkerRuntimeStatus): WorkerHealthSnapshot => ({
     status: nextStatus,
@@ -507,11 +507,6 @@ export const createPgBossAdapter = (options: PgBossAdapterOptions = {}): WorkerA
 
   const runSubscriptionDispatchCycle = async (): Promise<void> => {
     if (status !== 'running') {
-      return;
-    }
-
-    if (inFlightSubscriptionDispatch) {
-      skippedSubscriptionTicks += 1;
       return;
     }
 

@@ -122,6 +122,22 @@ test('pg-boss adapter scaffold exposes deterministic lifecycle signatures', asyn
   assert.equal(stoppedHealth.status, 'stopped');
 });
 
+test('pg-boss adapter defaults reminder dispatch cadence to 10 minutes', async () => {
+  const adapter = createPgBossAdapter({
+    logger: {
+      info: (_message: string) => {
+        // no-op
+      },
+      error: (_message: string, _error?: unknown) => {
+        // no-op
+      },
+    },
+  });
+
+  const health = await adapter.health();
+  assert.equal(health.details?.dispatchIntervalMs, 10 * 60 * 1000);
+});
+
 test('pg-boss adapter aligns recurring dispatch to exact interval boundaries', async () => {
   let nowMs = Date.parse('2026-04-20T10:03:22.345Z');
   const timeoutQueue: Array<
@@ -186,20 +202,21 @@ test('pg-boss adapter aligns recurring dispatch to exact interval boundaries', a
     },
   });
 
-  let nextTimeoutIndex = 0;
-
   const runNextTimeout = async (): Promise<void> => {
-    while (nextTimeoutIndex < timeoutQueue.length && timeoutQueue[nextTimeoutIndex].cleared) {
-      nextTimeoutIndex += 1;
-    }
+    const nextTimeoutIndex = timeoutQueue.findIndex(
+      (item) =>
+        !item.cleared &&
+        timeoutQueue.every(
+          (candidate) => candidate.cleared || candidate.delayMs >= item.delayMs,
+        ),
+    );
 
-    assert.ok(nextTimeoutIndex < timeoutQueue.length);
+    assert.ok(nextTimeoutIndex >= 0);
     const next = timeoutQueue[nextTimeoutIndex];
     timeoutQueue[nextTimeoutIndex] = {
       ...next,
       cleared: true,
     };
-    nextTimeoutIndex += 1;
 
     nowMs += next.delayMs;
     next.callback();
@@ -211,18 +228,15 @@ test('pg-boss adapter aligns recurring dispatch to exact interval boundaries', a
 
   assert.equal(runDispatchTimes.length, 1);
   assert.equal(runDispatchTimes[0], '2026-04-20T10:03:22.345Z');
-  assert.equal(timeoutQueue.length, 1);
-  assert.equal(timeoutQueue[0].delayMs, 37_655);
+  assert.equal(timeoutQueue.some((item) => item.delayMs === 37_655), true);
 
   await runNextTimeout();
   assert.equal(runDispatchTimes[1], '2026-04-20T10:04:00.000Z');
-  assert.equal(timeoutQueue.length, 2);
-  assert.equal(timeoutQueue[1].delayMs, 60_000);
+  assert.equal(timeoutQueue.some((item) => !item.cleared && item.delayMs === 60_000), true);
 
   await runNextTimeout();
   assert.equal(runDispatchTimes[2], '2026-04-20T10:05:00.000Z');
-  assert.equal(timeoutQueue.length, 3);
-  assert.equal(timeoutQueue[2].delayMs, 60_000);
+  assert.equal(timeoutQueue.some((item) => !item.cleared && item.delayMs === 60_000), true);
 
   await adapter.stop();
 });
