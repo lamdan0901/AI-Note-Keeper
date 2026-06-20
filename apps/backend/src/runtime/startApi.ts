@@ -3,6 +3,8 @@ import { type Server } from 'node:net';
 import { config } from '../config.js';
 import { pool } from '../db/pool.js';
 import { evaluateReadiness, type ReadinessStatus } from '../health/readiness.js';
+import { createNotesService } from '../notes/service.js';
+import { createReminderSchedulerRuntime } from '../reminders/runtime.js';
 import { createApiServer } from './createApiServer.js';
 
 type ApiLogger = Readonly<{
@@ -70,9 +72,22 @@ export const startApiRuntime = async (options: StartApiRuntimeOptions = {}): Pro
     logger.error('[backend] database dependency degraded', error);
   });
 
+  const reminderRuntime = createReminderSchedulerRuntime();
+  const notesService = createNotesService({
+    remindersRepository: reminderRuntime.remindersRepository,
+    schedulerService: reminderRuntime.schedulerService,
+  });
   const app = createApiServer({
     isDependencyDegraded: () => dependencyDegraded,
     readinessProbe: createDefaultReadinessProbe(() => dependencyDegraded),
+    notesService,
+    remindersService: reminderRuntime.remindersService,
+    reminderScheduledTaskExecutor: reminderRuntime.schedulerCallbacksEnabled
+      ? reminderRuntime.scheduledTaskExecutor
+      : undefined,
+    reminderQstashVerifierConfig: reminderRuntime.schedulerCallbacksEnabled
+      ? reminderRuntime.qstashVerifierConfig ?? undefined
+      : undefined,
   });
 
   const port = options.port ?? config.PORT;

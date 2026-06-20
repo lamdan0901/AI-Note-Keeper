@@ -34,6 +34,8 @@ import type {
   PushTerminalFailureRecorder,
 } from '../jobs/push/contracts.js';
 import type { SubscriptionReminderDispatchQueue } from '../jobs/subscriptions/contracts.js';
+import { createReminderRepairJob, type ReminderRepairJob } from '../reminders/repair-job.js';
+import { createReminderSchedulerRuntime } from '../reminders/runtime.js';
 
 type AdapterLogger = Readonly<{
   info: (message: string) => void;
@@ -60,6 +62,7 @@ const defaultLogger: AdapterLogger = {
 export type PgBossAdapterOptions = Readonly<{
   logger?: AdapterLogger;
   dispatchIntervalMs?: number;
+  reminderRepairIntervalMs?: number;
   subscriptionDispatchIntervalMs?: number;
   maxConcurrentPushDispatches?: number;
   scheduler?: Readonly<{
@@ -73,6 +76,7 @@ export type PgBossAdapterOptions = Readonly<{
   occurrenceAdvancer?: ReminderOccurrenceAdvancer;
   cronStateRepository?: CronStateRepository;
   dispatchJob?: ReminderDispatchJob;
+  reminderRepairJob?: ReminderRepairJob;
   subscriptionDispatchJob?: SubscriptionReminderDispatchJob;
   pushJobHandler?: PushJobHandler;
   pushProvider?: PushProvider;
@@ -216,6 +220,11 @@ export const createPgBossAdapter = (options: PgBossAdapterOptions = {}): WorkerA
   const logger = options.logger ?? defaultLogger;
   const scheduler = options.scheduler ?? defaultScheduler;
   const now = options.now ?? (() => new Date());
+  const explicitLegacyReminderDispatch =
+    options.scanner !== undefined ||
+    options.queue !== undefined ||
+    options.occurrenceAdvancer !== undefined ||
+    options.dispatchIntervalMs !== undefined;
   const setTimeoutFn =
     scheduler.setTimeout ?? ((callback: () => void, ms: number) => setTimeout(callback, ms));
   const clearTimeoutFn =
@@ -223,6 +232,10 @@ export const createPgBossAdapter = (options: PgBossAdapterOptions = {}): WorkerA
     ((handle: NodeJS.Timeout) => {
       clearTimeout(handle);
     });
+  const reminderRepairIntervalMs = options.reminderRepairIntervalMs ?? 15 * 60 * 1000;
+  if (!Number.isInteger(reminderRepairIntervalMs) || reminderRepairIntervalMs <= 0) {
+    throw new Error('reminderRepairIntervalMs must be a positive integer');
+  }
   const dispatchIntervalMs = options.dispatchIntervalMs ?? DEFAULT_REMINDER_DISPATCH_INTERVAL_MS;
   if (!Number.isInteger(dispatchIntervalMs) || dispatchIntervalMs <= 0) {
     throw new Error('dispatchIntervalMs must be a positive integer');
@@ -237,6 +250,7 @@ export const createPgBossAdapter = (options: PgBossAdapterOptions = {}): WorkerA
     throw new Error('maxConcurrentPushDispatches must be a positive integer');
   }
   const deviceTokensRepository = options.deviceTokensRepository ?? createDeviceTokensRepository();
+  const pushProvider = options.pushProvider ?? createFcmPushProvider();
   const terminalFailures: PushTerminalFailureRecord[] = [];
   const terminalFailureRecorder =
     options.terminalFailureRecorder ??
@@ -352,6 +366,24 @@ export const createPgBossAdapter = (options: PgBossAdapterOptions = {}): WorkerA
       occurrenceAdvancer,
       now,
     });
+  const reminderRuntime = createReminderSchedulerRuntime({
+    deviceTokensRepository,
+    pushProvider,
+    now,
+  });
+  const useLegacyReminderDispatch =
+    explicitLegacyReminderDispatch || !reminderRuntime.schedulerCallbacksEnabled;
+  const reminderRepairJob =
+    options.reminderRepairJob ??
+    createReminderRepairJob({
+      remindersRepository: reminderRuntime.remindersRepository,
+      executor: reminderRuntime.scheduledTaskExecutor,
+      schedulerService: reminderRuntime.schedulerService,
+      now,
+    });
+  const reminderIntervalMs = useLegacyReminderDispatch
+    ? dispatchIntervalMs
+    : reminderRepairIntervalMs;
 
   const subscriptionQueue: SubscriptionReminderDispatchQueue = {
     enqueue: async (job) => {
@@ -437,7 +469,7 @@ export const createPgBossAdapter = (options: PgBossAdapterOptions = {}): WorkerA
     options.pushJobHandler ??
     createPushJobHandler({
       deliveryService: createPushDeliveryService({
-        provider: options.pushProvider ?? createFcmPushProvider(),
+        provider: pushProvider,
       }),
       deviceTokensRepository,
       retryScheduler: pushRetryScheduler,
@@ -446,29 +478,33 @@ export const createPgBossAdapter = (options: PgBossAdapterOptions = {}): WorkerA
 
   pushJobHandlerRef = pushJobHandler;
 
-  let dispatchTimerHandle: NodeJS.Timeout | null = null;
+  let reminderRepairTimerHandle: NodeJS.Timeout | null = null;
   let subscriptionDispatchTimerHandle: NodeJS.Timeout | null = null;
-  let inFlightDispatch: Promise<void> | null = null;
+  let inFlightReminderRepair: Promise<void> | null = null;
   let inFlightSubscriptionDispatch: Promise<void> | null = null;
-  let lastDispatchAt: string | null = null;
+  let lastReminderRepairAt: string | null = null;
   let lastSubscriptionDispatchAt: string | null = null;
-  let lastDispatchError: string | null = null;
+  let lastReminderRepairError: string | null = null;
   let lastSubscriptionDispatchError: string | null = null;
-  let skippedTicks = 0;
+  let skippedReminderRepairTicks = 0;
+  let skippedSubscriptionTicks = 0;
 
   const toSnapshot = (nextStatus: WorkerRuntimeStatus): WorkerHealthSnapshot => ({
     status: nextStatus,
     details: {
-      dispatchIntervalMs,
+      dispatchIntervalMs: reminderIntervalMs,
+      dispatchMode: useLegacyReminderDispatch ? 'legacy-dispatch' : 'scheduler-repair',
       subscriptionDispatchIntervalMs,
-      lastDispatchAt,
+      reminderRepairIntervalMs,
+      lastDispatchAt: lastReminderRepairAt,
       lastSubscriptionDispatchAt,
-      lastDispatchError,
+      lastDispatchError: lastReminderRepairError,
       lastSubscriptionDispatchError,
-      dispatchInFlight: inFlightDispatch !== null,
+      dispatchInFlight: inFlightReminderRepair !== null,
       subscriptionDispatchInFlight: inFlightSubscriptionDispatch !== null,
       pushJobInFlight: inFlightPushJobs.hasInFlight(),
-      skippedTicks,
+      skippedTicks: skippedReminderRepairTicks,
+      skippedSubscriptionTicks,
       pushRetriesScheduled,
       pushRetriesExecuted,
       pushRetryTimersPending: scheduledPushRetryHandles.size,
@@ -476,37 +512,57 @@ export const createPgBossAdapter = (options: PgBossAdapterOptions = {}): WorkerA
     },
   });
 
-  const runDispatchCycle = async (): Promise<void> => {
+  const runReminderRepairCycle = async (): Promise<void> => {
     if (status !== 'running') {
       return;
     }
 
-    if (inFlightDispatch) {
-      skippedTicks += 1;
+    if (inFlightReminderRepair) {
+      skippedReminderRepairTicks += 1;
       return;
     }
 
-    inFlightDispatch = (async () => {
+    const runStartedAt = now();
+    inFlightReminderRepair = (async () => {
       try {
-        const result = await dispatchJob.run();
-        lastDispatchAt = result.now.toISOString();
-        lastDispatchError = null;
-        logger.info(
-          `[worker] reminder dispatch completed scanned=${result.scanned} enqueued=${result.enqueued} duplicates=${result.duplicates}`,
-        );
+        if (useLegacyReminderDispatch) {
+          const result = await dispatchJob.run();
+          lastReminderRepairAt = result.now.toISOString();
+          lastReminderRepairError = null;
+          logger.info(
+            `[worker] reminder dispatch completed scanned=${result.scanned} enqueued=${result.enqueued} duplicates=${result.duplicates}`,
+          );
+        } else {
+          const result = await reminderRepairJob.run();
+          lastReminderRepairAt = runStartedAt.toISOString();
+          lastReminderRepairError = null;
+          logger.info(
+            `[worker] reminder repair completed candidates=${result.candidates} executed=${result.executed} scheduled=${result.scheduled}`,
+          );
+        }
       } catch (error) {
-        lastDispatchError = error instanceof Error ? error.message : String(error);
-        logger.error('[worker] reminder dispatch failed', error);
+        lastReminderRepairError = error instanceof Error ? error.message : String(error);
+        logger.error(
+          useLegacyReminderDispatch
+            ? '[worker] reminder dispatch failed'
+            : '[worker] reminder repair failed',
+          error,
+        );
       } finally {
-        inFlightDispatch = null;
+        inFlightReminderRepair = null;
       }
     })();
 
-    await inFlightDispatch;
+    await inFlightReminderRepair;
   };
 
   const runSubscriptionDispatchCycle = async (): Promise<void> => {
     if (status !== 'running') {
+      return;
+    }
+
+    if (inFlightSubscriptionDispatch) {
+      skippedSubscriptionTicks += 1;
       return;
     }
 
@@ -529,16 +585,16 @@ export const createPgBossAdapter = (options: PgBossAdapterOptions = {}): WorkerA
     await inFlightSubscriptionDispatch;
   };
 
-  const scheduleNextDispatchCycle = (): void => {
+  const scheduleNextReminderRepairCycle = (): void => {
     if (status !== 'running' || stopRequested) {
       return;
     }
 
-    const delayMs = resolveDelayToNextBoundaryMs(now().getTime(), dispatchIntervalMs);
-    dispatchTimerHandle = setTimeoutFn(() => {
-      dispatchTimerHandle = null;
-      void runDispatchCycle().finally(() => {
-        scheduleNextDispatchCycle();
+    const delayMs = resolveDelayToNextBoundaryMs(now().getTime(), reminderIntervalMs);
+    reminderRepairTimerHandle = setTimeoutFn(() => {
+      reminderRepairTimerHandle = null;
+      void runReminderRepairCycle().finally(() => {
+        scheduleNextReminderRepairCycle();
       });
     }, delayMs);
   };
@@ -570,10 +626,10 @@ export const createPgBossAdapter = (options: PgBossAdapterOptions = {}): WorkerA
       status = 'running';
       logger.info('[worker] adapter started (dispatch + push handlers enabled)');
 
-      scheduleNextDispatchCycle();
+      scheduleNextReminderRepairCycle();
       scheduleNextSubscriptionDispatchCycle();
 
-      void runDispatchCycle();
+      void runReminderRepairCycle();
       void runSubscriptionDispatchCycle();
     },
     stop: async () => {
@@ -586,9 +642,9 @@ export const createPgBossAdapter = (options: PgBossAdapterOptions = {}): WorkerA
       stopRequested = true;
       acceptingRetryWork = false;
 
-      if (dispatchTimerHandle) {
-        clearTimeoutFn(dispatchTimerHandle);
-        dispatchTimerHandle = null;
+      if (reminderRepairTimerHandle) {
+        clearTimeoutFn(reminderRepairTimerHandle);
+        reminderRepairTimerHandle = null;
       }
 
       if (subscriptionDispatchTimerHandle) {
@@ -602,8 +658,8 @@ export const createPgBossAdapter = (options: PgBossAdapterOptions = {}): WorkerA
 
       scheduledPushRetryHandles.clear();
 
-      if (inFlightDispatch) {
-        await inFlightDispatch;
+      if (inFlightReminderRepair) {
+        await inFlightReminderRepair;
       }
 
       if (inFlightSubscriptionDispatch) {

@@ -17,12 +17,16 @@ import {
   type NotePatchInput,
   type NotesRepository,
 } from './repositories/notes-repository.js';
+import type { ReminderSchedulerService } from '../reminders/scheduler-service.js';
+import type { RemindersRepository } from '../reminders/repositories/reminders-repository.js';
 
 const TRASH_RETENTION_MS = 14 * 24 * 60 * 60 * 1000;
 
 type NotesServiceDeps = Readonly<{
   notesRepository?: NotesRepository;
   noteChangeEventsRepository?: NoteChangeEventsRepository;
+  remindersRepository?: Pick<RemindersRepository, 'findByIdForUser'>;
+  schedulerService?: ReminderSchedulerService;
   now?: () => Date;
 }>;
 
@@ -49,6 +53,30 @@ const toForbiddenError = (): AppError => {
     code: 'forbidden',
     message: 'Cross-user note mutation is not allowed',
   });
+};
+
+const REMINDER_SCHEDULING_FIELDS = [
+  'triggerAt',
+  'repeatRule',
+  'repeatConfig',
+  'repeat',
+  'snoozedUntil',
+  'scheduleStatus',
+  'timezone',
+  'active',
+  'startAt',
+  'baseAtLocal',
+  'nextTriggerAt',
+  'deletedAt',
+] as const;
+
+const shouldManageReminderSchedule = (change: NoteSyncChange): boolean => {
+  if (change.operation === 'delete') {
+    return true;
+  }
+
+  const source = change as Record<string, unknown>;
+  return REMINDER_SCHEDULING_FIELDS.some((field) => hasOwnField(source, field));
 };
 
 const makeNoteCreateInput = (change: NoteSyncChange, userId: string): NoteCreateInput => {
@@ -161,7 +189,57 @@ export const createNotesService = (deps: NotesServiceDeps = {}): NotesService =>
   const notesRepository = deps.notesRepository ?? createNotesRepository();
   const noteChangeEventsRepository =
     deps.noteChangeEventsRepository ?? createNoteChangeEventsRepository();
+  const reminderScheduling =
+    deps.remindersRepository && deps.schedulerService
+      ? {
+          remindersRepository: deps.remindersRepository,
+          schedulerService: deps.schedulerService,
+        }
+      : null;
   const now = deps.now ?? (() => new Date());
+
+  const readReminder = async (
+    input: Readonly<{ noteId: string; userId: string }>,
+  ) => {
+    if (!reminderScheduling) {
+      return null;
+    }
+
+    return await reminderScheduling.remindersRepository.findByIdForUser({
+      reminderId: input.noteId,
+      userId: input.userId,
+    });
+  };
+
+  const cancelReminderSchedule = async (
+    input: Readonly<{ noteId: string; userId: string }>,
+  ): Promise<void> => {
+    if (!reminderScheduling) {
+      return;
+    }
+
+    const reminder = await readReminder(input);
+    if (!reminder) {
+      return;
+    }
+
+    await reminderScheduling.schedulerService.cancelCurrentSchedule(reminder);
+  };
+
+  const scheduleReminderIfActive = async (
+    input: Readonly<{ noteId: string; userId: string }>,
+  ): Promise<void> => {
+    if (!reminderScheduling) {
+      return;
+    }
+
+    const reminder = await readReminder(input);
+    if (!reminder?.active || !reminder.nextTriggerAt) {
+      return;
+    }
+
+    await reminderScheduling.schedulerService.scheduleNextOccurrence(reminder);
+  };
 
   // Serialize mutations for deterministic behavior across concurrent sync calls.
   let mutationQueue = Promise.resolve();
@@ -196,6 +274,7 @@ export const createNotesService = (deps: NotesServiceDeps = {}): NotesService =>
       noteId: change.id,
       userId,
     });
+    const manageReminderSchedule = reminderScheduling && shouldManageReminderSchedule(change);
 
     if (change.operation === 'delete') {
       if (existing) {
@@ -204,6 +283,10 @@ export const createNotesService = (deps: NotesServiceDeps = {}): NotesService =>
 
         // D-02 strict greater-than LWW gate.
         if (shouldApplyIncoming) {
+          if (manageReminderSchedule) {
+            await cancelReminderSchedule({ noteId: change.id, userId });
+          }
+
           await notesRepository.patch({
             noteId: change.id,
             userId,
@@ -230,6 +313,10 @@ export const createNotesService = (deps: NotesServiceDeps = {}): NotesService =>
     if (!existing) {
       await notesRepository.create(makeNoteCreateInput(change, userId));
 
+      if (manageReminderSchedule) {
+        await scheduleReminderIfActive({ noteId: change.id, userId });
+      }
+
       await noteChangeEventsRepository.appendEvent({
         noteId: change.id,
         userId,
@@ -245,11 +332,19 @@ export const createNotesService = (deps: NotesServiceDeps = {}): NotesService =>
 
     // D-02 strict greater-than LWW gate.
     if (shouldApplyIncoming) {
+      if (manageReminderSchedule) {
+        await cancelReminderSchedule({ noteId: change.id, userId });
+      }
+
       await notesRepository.patch({
         noteId: change.id,
         userId,
         patch: makePatchInput(change, existing.version),
       });
+
+      if (manageReminderSchedule) {
+        await scheduleReminderIfActive({ noteId: change.id, userId });
+      }
     }
 
     await noteChangeEventsRepository.appendEvent({
@@ -300,6 +395,7 @@ export const createNotesService = (deps: NotesServiceDeps = {}): NotesService =>
         },
       });
 
+      await scheduleReminderIfActive({ noteId, userId });
       return true;
     },
 
@@ -309,6 +405,7 @@ export const createNotesService = (deps: NotesServiceDeps = {}): NotesService =>
         return false;
       }
 
+      await cancelReminderSchedule({ noteId, userId });
       await notesRepository.patch({
         noteId,
         userId,
@@ -329,10 +426,20 @@ export const createNotesService = (deps: NotesServiceDeps = {}): NotesService =>
         return false;
       }
 
+      await cancelReminderSchedule({ noteId, userId });
       return await notesRepository.hardDelete({ noteId, userId });
     },
 
     emptyTrash: async ({ userId }) => {
+      const notes = await notesRepository.listByUser(userId);
+      for (const note of notes) {
+        if (note.active) {
+          continue;
+        }
+
+        await cancelReminderSchedule({ noteId: note.id, userId });
+      }
+
       return await notesRepository.emptyTrash({ userId });
     },
 
@@ -348,6 +455,7 @@ export const createNotesService = (deps: NotesServiceDeps = {}): NotesService =>
 
         const deletedAt = note.deletedAt?.getTime() ?? 0;
         if (deletedAt > 0 && deletedAt <= cutoff) {
+          await cancelReminderSchedule({ noteId: note.id, userId });
           const wasDeleted = await notesRepository.hardDelete({
             noteId: note.id,
             userId,

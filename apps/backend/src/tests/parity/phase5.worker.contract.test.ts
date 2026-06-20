@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import type { Server } from 'node:net';
 import test from 'node:test';
 
 import type { AuthService } from '../../auth/service.js';
@@ -9,6 +8,7 @@ import type { DeviceTokensService } from '../../device-tokens/service.js';
 import type { NotesService } from '../../notes/service.js';
 import type { RemindersService } from '../../reminders/service.js';
 import type { SubscriptionsService } from '../../subscriptions/service.js';
+import { startHttpTestServer } from '../support/http-test-server.js';
 
 process.env.DATABASE_URL ??= 'postgres://localhost:5432/ai-note-keeper-test';
 
@@ -185,31 +185,7 @@ const startApi = async (
     }),
   });
 
-  const server = await new Promise<Server>((resolve, reject) => {
-    const running = app.listen(0, '127.0.0.1', () => resolve(running));
-    running.once('error', reject);
-  });
-
-  const address = server.address();
-  if (!address || typeof address === 'string') {
-    throw new Error('Expected TCP server address info');
-  }
-
-  return {
-    baseUrl: `http://127.0.0.1:${address.port}`,
-    close: async () => {
-      await new Promise<void>((resolve, reject) => {
-        server.close((error) => {
-          if (error) {
-            reject(error);
-            return;
-          }
-
-          resolve();
-        });
-      });
-    },
-  };
+  return await startHttpTestServer(app);
 };
 
 test('phase-5 worker contract: merge routes stay behind dependency gate and auth middleware ordering', async () => {

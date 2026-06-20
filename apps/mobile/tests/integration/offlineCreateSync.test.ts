@@ -17,6 +17,10 @@ const markNoteSyncedMock = jest.fn() as jest.MockedFunction<
 const getOrCreateDeviceIdMock = jest.fn() as jest.MockedFunction<
   (...args: unknown[]) => Promise<unknown>
 >;
+const resolveCurrentUserIdMock = jest.fn() as jest.MockedFunction<
+  (...args: unknown[]) => Promise<unknown>
+>;
+const isLogoutTransitionActiveMock = jest.fn(() => false);
 
 jest.mock('../../src/api/httpClient', () => ({
   createDefaultMobileApiClient: () => ({
@@ -36,6 +40,11 @@ jest.mock('../../src/db/syncHelpers', () => ({
 
 jest.mock('../../src/auth/session', () => ({
   getOrCreateDeviceId: getOrCreateDeviceIdMock,
+  resolveCurrentUserId: resolveCurrentUserIdMock,
+}));
+
+jest.mock('../../src/auth/logoutState', () => ({
+  isLogoutTransitionActive: isLogoutTransitionActiveMock,
 }));
 
 import { processQueue } from '../../src/sync/syncQueueProcessor';
@@ -45,6 +54,8 @@ describe('Offline create sync', () => {
     jest.clearAllMocks();
     process.env.EXPO_PUBLIC_API_BASE_URL = 'https://api.example.test';
     getOrCreateDeviceIdMock.mockResolvedValue('device-1');
+    resolveCurrentUserIdMock.mockResolvedValue('user-1');
+    isLogoutTransitionActiveMock.mockReturnValue(false);
   });
 
   it('syncs offline-created reminders within 5 minutes after reconnect', async () => {

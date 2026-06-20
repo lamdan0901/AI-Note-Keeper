@@ -1,0 +1,52 @@
+{
+  "columns": [
+    {
+      "id": "expense",
+      "name": "Expense",
+      "type": "text",
+      "icon": "text",
+      "visible": true,
+      "position": 0,
+      "defaultValue": ""
+    },
+    {
+      "id": "row_number",
+      "name": "#",
+      "type": "number",
+      "icon": "number",
+      "visible": true,
+      "position": 1,
+      "defaultValue": null,
+      "computed": "auto_increment"
+    },
+    {
+      "id": "amount",
+      "name": "Amount",
+      "type": "currency",
+      "icon": "currency",
+      "visible": true,
+      "position": 2,
+      "defaultValue": 0,
+      "role": "amount"
+    },
+    {
+      "id": "date",
+      "name": "Date",
+      "type": "date",
+      "icon": "date",
+      "visible": true,
+      "position": 3,
+      "defaultValue": null,
+      "role": "date"
+    },
+    {
+      "id": "comment",
+      "name": "Comment",
+      "type": "text",
+      "icon": "text",
+      "visible": true,
+      "position": 4,
+      "defaultValue": ""
+    }
+  ]
+}

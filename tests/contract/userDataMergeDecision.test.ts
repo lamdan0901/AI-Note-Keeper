@@ -10,8 +10,22 @@ describe('resolveMergeResolution', () => {
         sourceSampleOnly: true,
         targetEmpty: false,
         hasConflicts: false,
-        sourceCounts: { notes: 1, subscriptions: 0, tokens: 0, events: 0 },
-        targetCounts: { notes: 3, subscriptions: 1, tokens: 0, events: 0 },
+        sourceCounts: {
+          notes: 1,
+          subscriptions: 0,
+          tokens: 0,
+          events: 0,
+          expensePeriods: 0,
+          expenseRows: 0,
+        },
+        targetCounts: {
+          notes: 3,
+          subscriptions: 1,
+          tokens: 0,
+          events: 0,
+          expensePeriods: 0,
+          expenseRows: 0,
+        },
       }),
     ).toBe('cloud');
   });
@@ -23,8 +37,22 @@ describe('resolveMergeResolution', () => {
         sourceSampleOnly: false,
         targetEmpty: true,
         hasConflicts: false,
-        sourceCounts: { notes: 2, subscriptions: 1, tokens: 0, events: 0 },
-        targetCounts: { notes: 0, subscriptions: 0, tokens: 0, events: 0 },
+        sourceCounts: {
+          notes: 2,
+          subscriptions: 1,
+          tokens: 0,
+          events: 0,
+          expensePeriods: 0,
+          expenseRows: 0,
+        },
+        targetCounts: {
+          notes: 0,
+          subscriptions: 0,
+          tokens: 0,
+          events: 0,
+          expensePeriods: 0,
+          expenseRows: 0,
+        },
       }),
     ).toBe('local');
   });
@@ -36,8 +64,22 @@ describe('resolveMergeResolution', () => {
         sourceSampleOnly: false,
         targetEmpty: false,
         hasConflicts: true,
-        sourceCounts: { notes: 2, subscriptions: 1, tokens: 0, events: 0 },
-        targetCounts: { notes: 1, subscriptions: 1, tokens: 0, events: 0 },
+        sourceCounts: {
+          notes: 2,
+          subscriptions: 1,
+          tokens: 0,
+          events: 0,
+          expensePeriods: 0,
+          expenseRows: 0,
+        },
+        targetCounts: {
+          notes: 1,
+          subscriptions: 1,
+          tokens: 0,
+          events: 0,
+          expensePeriods: 0,
+          expenseRows: 0,
+        },
       }),
     ).toBe('prompt');
   });

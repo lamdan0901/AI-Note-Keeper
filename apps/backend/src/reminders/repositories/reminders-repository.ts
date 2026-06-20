@@ -25,6 +25,10 @@ type ReminderRow = Readonly<{
   next_trigger_at: Date | null;
   last_fired_at: Date | null;
   last_acknowledged_at: Date | null;
+  schedule_provider: string | null;
+  schedule_target_id: string | null;
+  schedule_target_version: number | null;
+  schedule_target_fire_at: Date | null;
   version: number | null;
   created_at: Date;
   updated_at: Date;
@@ -34,12 +38,27 @@ export type RemindersRepository = Readonly<{
   listByUser: (
     input: Readonly<{ userId: string; updatedSince?: Date }>,
   ) => Promise<ReminderRecord[]>;
+  listRepairCandidates: (
+    input: Readonly<{ now: Date; limit: number }>,
+  ) => Promise<ReminderRecord[]>;
+  findById: (input: Readonly<{ reminderId: string }>) => Promise<ReminderRecord | null>;
   findByIdForUser: (
     input: Readonly<{ reminderId: string; userId: string }>,
   ) => Promise<ReminderRecord | null>;
   create: (input: ReminderCreateInput) => Promise<ReminderRecord>;
   patch: (
     input: Readonly<{ reminderId: string; userId: string; patch: ReminderPatchInput }>,
+  ) => Promise<ReminderRecord | null>;
+  advanceAfterDelivery: (
+    input: Readonly<{
+      reminderId: string;
+      userId: string;
+      occurrenceAt: Date;
+      expectedVersion: number;
+      nextTriggerAt: Date | null;
+      scheduleStatus: string;
+      runNow: Date;
+    }>,
   ) => Promise<ReminderRecord | null>;
   deleteByIdForUser: (input: Readonly<{ reminderId: string; userId: string }>) => Promise<boolean>;
 }>;
@@ -63,6 +82,10 @@ const toDomain = (row: ReminderRow): ReminderRecord => {
     nextTriggerAt: row.next_trigger_at,
     lastFiredAt: row.last_fired_at,
     lastAcknowledgedAt: row.last_acknowledged_at,
+    scheduleProvider: row.schedule_provider,
+    scheduleTargetId: row.schedule_target_id,
+    scheduleTargetVersion: row.schedule_target_version,
+    scheduleTargetFireAt: row.schedule_target_fire_at,
     version: row.version ?? 1,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -87,6 +110,10 @@ const INSERT_COLUMNS = [
   'next_trigger_at',
   'last_fired_at',
   'last_acknowledged_at',
+  'schedule_provider',
+  'schedule_target_id',
+  'schedule_target_version',
+  'schedule_target_fire_at',
   'version',
   'created_at',
   'updated_at',
@@ -118,6 +145,14 @@ const patchToColumnValue = (
   if (Object.hasOwn(patch, 'lastFiredAt')) add('last_fired_at', patch.lastFiredAt ?? null);
   if (Object.hasOwn(patch, 'lastAcknowledgedAt'))
     add('last_acknowledged_at', patch.lastAcknowledgedAt ?? null);
+  if (Object.hasOwn(patch, 'scheduleProvider'))
+    add('schedule_provider', patch.scheduleProvider ?? null);
+  if (Object.hasOwn(patch, 'scheduleTargetId'))
+    add('schedule_target_id', patch.scheduleTargetId ?? null);
+  if (Object.hasOwn(patch, 'scheduleTargetVersion'))
+    add('schedule_target_version', patch.scheduleTargetVersion ?? null);
+  if (Object.hasOwn(patch, 'scheduleTargetFireAt'))
+    add('schedule_target_fire_at', patch.scheduleTargetFireAt ?? null);
   if (Object.hasOwn(patch, 'version')) add('version', patch.version ?? 1);
   if (Object.hasOwn(patch, 'updatedAt')) add('updated_at', patch.updatedAt ?? new Date());
 
@@ -177,6 +212,53 @@ export const createRemindersRepository = (
       return result.rows.map(toDomain);
     },
 
+    listRepairCandidates: async ({ now, limit }) => {
+      const result = await db.query<ReminderRow>(
+        `
+          SELECT *
+          FROM notes
+          WHERE trigger_at IS NOT NULL
+            AND active = true
+            AND deleted_at IS NULL
+            AND (
+              next_trigger_at <= $1
+              OR (
+                next_trigger_at IS NOT NULL
+                AND schedule_target_id IS NULL
+              )
+              OR (
+                schedule_target_version IS NOT NULL
+                AND schedule_target_version <> version
+              )
+            )
+          ORDER BY next_trigger_at ASC NULLS LAST, updated_at ASC
+          LIMIT $2
+        `,
+        [now, limit],
+      );
+
+      return result.rows.map(toDomain);
+    },
+
+    findById: async ({ reminderId }) => {
+      const result = await db.query<ReminderRow>(
+        `
+          SELECT *
+          FROM notes
+          WHERE id = $1
+            AND trigger_at IS NOT NULL
+          LIMIT 1
+        `,
+        [reminderId],
+      );
+
+      if (result.rows.length === 0) {
+        return null;
+      }
+
+      return toDomain(result.rows[0]);
+    },
+
     findByIdForUser: async ({ reminderId, userId }) => {
       return await findByIdAndUser(db, { reminderId, userId });
     },
@@ -200,6 +282,10 @@ export const createRemindersRepository = (
         input.nextTriggerAt,
         input.lastFiredAt,
         input.lastAcknowledgedAt,
+        input.scheduleProvider,
+        input.scheduleTargetId,
+        input.scheduleTargetVersion,
+        input.scheduleTargetFireAt,
         input.version,
         input.createdAt,
         input.updatedAt,
@@ -247,6 +333,55 @@ export const createRemindersRepository = (
           RETURNING *
         `,
         values,
+      );
+
+      if (result.rows.length === 0) {
+        return null;
+      }
+
+      return toDomain(result.rows[0]);
+    },
+
+    advanceAfterDelivery: async ({
+      reminderId,
+      userId,
+      occurrenceAt,
+      expectedVersion,
+      nextTriggerAt,
+      scheduleStatus,
+      runNow,
+    }) => {
+      const result = await db.query<ReminderRow>(
+        `
+          UPDATE notes
+          SET
+            last_fired_at = $1,
+            next_trigger_at = $2,
+            schedule_status = $3,
+            schedule_provider = NULL,
+            schedule_target_id = NULL,
+            schedule_target_version = NULL,
+            schedule_target_fire_at = NULL,
+            updated_at = GREATEST(updated_at, $4),
+            snoozed_until = NULL
+          WHERE id = $5
+            AND user_id = $6
+            AND version = $7
+            AND active = true
+            AND deleted_at IS NULL
+            AND COALESCE(snoozed_until, next_trigger_at, trigger_at) = $8
+          RETURNING *
+        `,
+        [
+          occurrenceAt,
+          nextTriggerAt,
+          scheduleStatus,
+          runNow,
+          reminderId,
+          userId,
+          expectedVersion,
+          occurrenceAt,
+        ],
       );
 
       if (result.rows.length === 0) {

@@ -27,12 +27,16 @@ const createServiceDouble = (): MergeService => {
             subscriptions: 1,
             tokens: 1,
             events: 1,
+            expensePeriods: 2,
+            expenseRows: 5,
           },
           targetCounts: {
             notes: 1,
             subscriptions: 0,
             tokens: 1,
             events: 0,
+            expensePeriods: 1,
+            expenseRows: 3,
           },
         },
       };
@@ -63,12 +67,16 @@ const createServiceDouble = (): MergeService => {
             subscriptions: 1,
             tokens: 1,
             events: 1,
+            expensePeriods: 2,
+            expenseRows: 5,
           },
           targetCounts: {
             notes: strategy === 'cloud' ? 1 : 2,
             subscriptions: 1,
             tokens: 1,
             events: 1,
+            expensePeriods: 1,
+            expenseRows: 3,
           },
         },
       };
@@ -158,12 +166,16 @@ test('merge preflight returns parity summary fields and count objects', async ()
     assert.equal(typeof payload.summary.hasConflicts, 'boolean');
     assert.deepEqual(Object.keys(payload.summary.sourceCounts).sort(), [
       'events',
+      'expensePeriods',
+      'expenseRows',
       'notes',
       'subscriptions',
       'tokens',
     ]);
     assert.deepEqual(Object.keys(payload.summary.targetCounts).sort(), [
       'events',
+      'expensePeriods',
+      'expenseRows',
       'notes',
       'subscriptions',
       'tokens',

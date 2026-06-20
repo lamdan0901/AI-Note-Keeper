@@ -2,6 +2,15 @@ import { z } from 'zod';
 
 import { AppError } from '../middleware/error-middleware.js';
 
+export type ReminderDeliveryStatus = 'pending' | 'sent' | 'failed' | 'stale' | 'canceled';
+
+export type ReminderSchedulerPayload = Readonly<{
+  reminderId: string;
+  occurrenceAt: string;
+  version: number;
+  deliveryKey: string;
+}>;
+
 export type ReminderRepeatRule =
   | Readonly<{ kind: 'daily'; interval: number }>
   | Readonly<{ kind: 'weekly'; interval: number; weekdays: number[] }>
@@ -105,6 +114,10 @@ export type ReminderRecord = Readonly<{
   nextTriggerAt: Date | null;
   lastFiredAt: Date | null;
   lastAcknowledgedAt: Date | null;
+  scheduleProvider: string | null;
+  scheduleTargetId: string | null;
+  scheduleTargetVersion: number | null;
+  scheduleTargetFireAt: Date | null;
   version: number;
   createdAt: Date;
   updatedAt: Date;
@@ -128,6 +141,10 @@ export type ReminderCreateInput = Readonly<{
   nextTriggerAt: Date | null;
   lastFiredAt: Date | null;
   lastAcknowledgedAt: Date | null;
+  scheduleProvider: string | null;
+  scheduleTargetId: string | null;
+  scheduleTargetVersion: number | null;
+  scheduleTargetFireAt: Date | null;
   version: number;
   createdAt: Date;
   updatedAt: Date;
@@ -149,6 +166,10 @@ export type ReminderPatchInput = {
   nextTriggerAt?: Date | null;
   lastFiredAt?: Date | null;
   lastAcknowledgedAt?: Date | null;
+  scheduleProvider?: string | null;
+  scheduleTargetId?: string | null;
+  scheduleTargetVersion?: number | null;
+  scheduleTargetFireAt?: Date | null;
   version?: number;
   updatedAt?: Date;
 };

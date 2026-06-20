@@ -7,6 +7,8 @@ import type { AiRateLimiter } from '../ai/rate-limit.js';
 import type { AiService } from '../ai/service.js';
 import { createDeviceTokensRoutes } from '../device-tokens/routes.js';
 import type { DeviceTokensService } from '../device-tokens/service.js';
+import { createExpensesRoutes } from '../expenses/routes.js';
+import type { ExpensesService } from '../expenses/service.js';
 import { createDependencyGate, createHealthStatus } from '../health.js';
 import { type ReadinessStatus } from '../health/readiness.js';
 import { createMergeRoutes } from '../merge/routes.js';
@@ -15,7 +17,10 @@ import { errorMiddleware, notFoundMiddleware } from '../middleware/error-middlew
 import { withErrorBoundary } from '../middleware/validate.js';
 import { createNotesRoutes } from '../notes/routes.js';
 import type { NotesService } from '../notes/service.js';
+import { createReminderInternalRoutes } from '../reminders/internal-routes.js';
+import type { QstashVerifierConfig } from '../reminders/runtime.js';
 import { createRemindersRoutes } from '../reminders/routes.js';
+import type { ScheduledTaskExecutor } from '../reminders/scheduled-task-executor.js';
 import type { RemindersService } from '../reminders/service.js';
 import { createSubscriptionsRoutes } from '../subscriptions/routes.js';
 import type { SubscriptionsService } from '../subscriptions/service.js';
@@ -27,10 +32,13 @@ export type ApiServerFactoryOptions = Readonly<{
   notesService?: NotesService;
   remindersService?: RemindersService;
   subscriptionsService?: SubscriptionsService;
+  expensesService?: ExpensesService;
   deviceTokensService?: DeviceTokensService;
   mergeService?: MergeService;
   aiService?: AiService;
   aiRateLimiter?: AiRateLimiter;
+  reminderScheduledTaskExecutor?: ScheduledTaskExecutor;
+  reminderQstashVerifierConfig?: QstashVerifierConfig;
 }>;
 
 const parseTrustProxySetting = (): boolean | number | string => {
@@ -134,7 +142,13 @@ export const createApiServer = (options: ApiServerFactoryOptions = {}): express.
   };
 
   app.use(createCorsMiddleware(isAllowedOrigin));
-  app.use(express.json());
+  app.use(
+    express.json({
+      verify: (request, _response, buffer) => {
+        (request as typeof request & { rawBody?: string }).rawBody = buffer.toString('utf8');
+      },
+    }),
+  );
 
   app.get('/health/live', (_request, response) => {
     response.json(createHealthStatus());
@@ -158,6 +172,12 @@ export const createApiServer = (options: ApiServerFactoryOptions = {}): express.
   app.use('/api/notes', createNotesRoutes(options.notesService));
   app.use('/api/reminders', createRemindersRoutes(options.remindersService));
   app.use('/api/subscriptions', createSubscriptionsRoutes(options.subscriptionsService));
+  app.use(
+    '/api/expenses',
+    createExpensesRoutes(
+      options.expensesService ? { service: options.expensesService } : undefined,
+    ),
+  );
   app.use('/api/device-tokens', createDeviceTokensRoutes(options.deviceTokensService));
   app.use('/api/merge', createMergeRoutes(options.mergeService));
   app.use('/api/ai', createAiRoutes(options.aiService, options.aiRateLimiter));
@@ -165,6 +185,16 @@ export const createApiServer = (options: ApiServerFactoryOptions = {}): express.
   app.get('/api/sample', (_request, response) => {
     response.json({ message: 'Hello from the backend API!' });
   });
+
+  if (options.reminderScheduledTaskExecutor && options.reminderQstashVerifierConfig) {
+    app.use(
+      '/internal/reminders',
+      createReminderInternalRoutes({
+        executor: options.reminderScheduledTaskExecutor,
+        verifierConfig: options.reminderQstashVerifierConfig,
+      }),
+    );
+  }
 
   app.use(notFoundMiddleware);
   app.use(errorMiddleware);

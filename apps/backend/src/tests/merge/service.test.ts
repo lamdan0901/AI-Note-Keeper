@@ -138,6 +138,9 @@ const emptySnapshot = (): MergeSnapshot => ({
   subscriptions: [],
   tokens: [],
   events: [],
+  expenseSettings: null,
+  expensePeriods: [],
+  expenseRows: [],
 });
 
 const cloneSnapshot = (snapshot: MergeSnapshot): MergeSnapshot => {
@@ -146,8 +149,58 @@ const cloneSnapshot = (snapshot: MergeSnapshot): MergeSnapshot => {
     subscriptions: [...snapshot.subscriptions],
     tokens: [...snapshot.tokens],
     events: [...snapshot.events],
+    expenseSettings: snapshot.expenseSettings,
+    expensePeriods: [...snapshot.expensePeriods],
+    expenseRows: [...snapshot.expenseRows],
   };
 };
+
+const createExpensePeriod = (
+  input: Readonly<{
+    id: string;
+    userId: string;
+    year?: number;
+    month?: number;
+  }>,
+) => {
+  const timestamp = new Date(1_700_000_000_000);
+  return {
+    id: input.id,
+    userId: input.userId,
+    year: input.year ?? 2026,
+    month: input.month ?? 6,
+    schema: { columns: [] },
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+};
+
+const createExpenseRow = (
+  input: Readonly<{
+    id: string;
+    periodId: string;
+    userId: string;
+    position?: number;
+    cells?: Record<string, unknown>;
+  }>,
+) => {
+  const timestamp = new Date(1_700_000_000_000);
+  return {
+    id: input.id,
+    periodId: input.periodId,
+    userId: input.userId,
+    position: input.position ?? 0,
+    cells: input.cells ?? { expense: 'food', amount: -100 },
+    deletedAt: null,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+};
+
+const snapshot = (partial: Partial<MergeSnapshot>): MergeSnapshot => ({
+  ...emptySnapshot(),
+  ...partial,
+});
 
 const createRepositoryDouble = (
   input: Readonly<{
@@ -253,6 +306,12 @@ const createRepositoryDouble = (
           subscriptions: source.subscriptions.map((item) => ({ ...item, userId: targetUserId })),
           tokens: source.tokens.map((item) => ({ ...item, userId: targetUserId })),
           events: source.events.map((item) => ({ ...item, userId: targetUserId })),
+          expenseSettings: source.expenseSettings,
+          expensePeriods: source.expensePeriods.map((period) => ({
+            ...period,
+            userId: targetUserId,
+          })),
+          expenseRows: source.expenseRows.map((row) => ({ ...row, userId: targetUserId })),
         });
       },
 
@@ -302,6 +361,15 @@ const createRepositoryDouble = (
             ...target.events,
             ...source.events.map((item) => ({ ...item, userId: targetUserId })),
           ],
+          expenseSettings: target.expenseSettings ?? source.expenseSettings,
+          expensePeriods: [
+            ...target.expensePeriods,
+            ...source.expensePeriods.map((period) => ({ ...period, userId: targetUserId })),
+          ],
+          expenseRows: [
+            ...target.expenseRows,
+            ...source.expenseRows.map((row) => ({ ...row, userId: targetUserId })),
+          ],
         });
       },
     };
@@ -347,7 +415,7 @@ test('preflight returns parity summary fields and count metadata', async () => {
   const { repository } = createRepositoryDouble({
     users: [validUser],
     snapshots: {
-      'source-user': {
+      'source-user': snapshot({
         notes: [
           createNote({
             id: 'welcome-note',
@@ -356,10 +424,7 @@ test('preflight returns parity summary fields and count metadata', async () => {
             content: 'This is your first note. Edit or delete it anytime.',
           }),
         ],
-        subscriptions: [],
-        tokens: [],
-        events: [],
-      },
+      }),
       'target-user': emptySnapshot(),
     },
   });
@@ -386,14 +451,112 @@ test('preflight returns parity summary fields and count metadata', async () => {
       subscriptions: 0,
       tokens: 0,
       events: 0,
+      expensePeriods: 0,
+      expenseRows: 0,
     },
     targetCounts: {
       notes: 0,
       subscriptions: 0,
       tokens: 0,
       events: 0,
+      expensePeriods: 0,
+      expenseRows: 0,
     },
   });
+});
+
+test('preflight includes expense period and row counts', async () => {
+  const { repository } = createRepositoryDouble({
+    users: [validUser],
+    snapshots: {
+      'source-user': {
+        ...emptySnapshot(),
+        expensePeriods: [
+          createExpensePeriod({ id: 'period-guest', userId: 'source-user', year: 2026, month: 6 }),
+        ],
+        expenseRows: [
+          createExpenseRow({
+            id: 'row-guest',
+            periodId: 'period-guest',
+            userId: 'source-user',
+          }),
+        ],
+      },
+      'target-user': {
+        ...emptySnapshot(),
+        expensePeriods: [
+          createExpensePeriod({ id: 'period-account', userId: 'target-user', year: 2026, month: 5 }),
+        ],
+        expenseRows: [
+          createExpenseRow({
+            id: 'row-account',
+            periodId: 'period-account',
+            userId: 'target-user',
+          }),
+          createExpenseRow({
+            id: 'row-account-2',
+            periodId: 'period-account',
+            userId: 'target-user',
+            position: 1,
+          }),
+        ],
+      },
+    },
+  });
+
+  const service = createMergeService({
+    repository,
+    verifyPasswordFn: validPasswordCheck,
+  });
+
+  const result = await service.preflight({
+    fromUserId: 'source-user',
+    toUserId: 'target-user',
+    username: 'alice',
+    password: 'correct-password',
+  });
+
+  assert.equal(result.summary.sourceCounts.expensePeriods, 1);
+  assert.equal(result.summary.sourceCounts.expenseRows, 1);
+  assert.equal(result.summary.targetCounts.expensePeriods, 1);
+  assert.equal(result.summary.targetCounts.expenseRows, 2);
+  assert.equal(result.summary.hasConflicts, false);
+});
+
+test('preflight reports expense month collisions as conflicts', async () => {
+  const { repository } = createRepositoryDouble({
+    users: [validUser],
+    snapshots: {
+      'source-user': {
+        ...emptySnapshot(),
+        expensePeriods: [
+          createExpensePeriod({ id: 'period-guest', userId: 'source-user', year: 2026, month: 6 }),
+        ],
+        expenseRows: [],
+      },
+      'target-user': {
+        ...emptySnapshot(),
+        expensePeriods: [
+          createExpensePeriod({ id: 'period-account', userId: 'target-user', year: 2026, month: 6 }),
+        ],
+        expenseRows: [],
+      },
+    },
+  });
+
+  const service = createMergeService({
+    repository,
+    verifyPasswordFn: validPasswordCheck,
+  });
+
+  const result = await service.preflight({
+    fromUserId: 'source-user',
+    toUserId: 'target-user',
+    username: 'alice',
+    password: 'correct-password',
+  });
+
+  assert.equal(result.summary.hasConflicts, true);
 });
 
 test('preflight rejects same-account merge before transaction state changes', async () => {
@@ -432,18 +595,15 @@ test('apply executes inside one explicit transaction and commits atomically per 
   const { repository, stats } = createRepositoryDouble({
     users: [validUser],
     snapshots: {
-      'source-user': {
+      'source-user': snapshot({
         notes: [createNote({ id: 'n-1', userId: 'source-user', title: 'Local note' })],
         subscriptions: [createSubscription({ id: 's-1', userId: 'source-user' })],
         tokens: [createToken({ id: 't-1', userId: 'source-user', deviceId: 'device-1' })],
         events: [createEvent({ id: 'e-1', noteId: 'n-1', userId: 'source-user' })],
-      },
-      'target-user': {
+      }),
+      'target-user': snapshot({
         notes: [createNote({ id: 'n-old', userId: 'target-user', title: 'Cloud note' })],
-        subscriptions: [],
-        tokens: [],
-        events: [],
-      },
+      }),
     },
   });
 
@@ -471,12 +631,12 @@ test('apply rejects same-account merge before mutation and transaction start', a
   const { repository, stats } = createRepositoryDouble({
     users: [validUser],
     snapshots: {
-      'target-user': {
+      'target-user': snapshot({
         notes: [createNote({ id: 'n-1', userId: 'target-user', title: 'existing' })],
         subscriptions: [createSubscription({ id: 's-1', userId: 'target-user' })],
         tokens: [createToken({ id: 't-1', userId: 'target-user', deviceId: 'device-1' })],
         events: [createEvent({ id: 'e-1', noteId: 'n-1', userId: 'target-user' })],
-      },
+      }),
     },
   });
 
@@ -511,7 +671,7 @@ test('strategy both uses canonical shared resolution semantics', async () => {
   const conflictRepo = createRepositoryDouble({
     users: [validUser],
     snapshots: {
-      'source-user': {
+      'source-user': snapshot({
         notes: [
           createNote({
             id: 'same-note',
@@ -520,11 +680,8 @@ test('strategy both uses canonical shared resolution semantics', async () => {
             content: 'local',
           }),
         ],
-        subscriptions: [],
-        tokens: [],
-        events: [],
-      },
-      'target-user': {
+      }),
+      'target-user': snapshot({
         notes: [
           createNote({
             id: 'same-note',
@@ -533,10 +690,7 @@ test('strategy both uses canonical shared resolution semantics', async () => {
             content: 'cloud',
           }),
         ],
-        subscriptions: [],
-        tokens: [],
-        events: [],
-      },
+      }),
     },
   });
 
@@ -560,7 +714,7 @@ test('strategy both uses canonical shared resolution semantics', async () => {
   const sampleOnlyRepo = createRepositoryDouble({
     users: [validUser],
     snapshots: {
-      'source-user': {
+      'source-user': snapshot({
         notes: [
           createNote({
             id: 'welcome-note',
@@ -569,16 +723,10 @@ test('strategy both uses canonical shared resolution semantics', async () => {
             content: 'This is your first note. Edit or delete it anytime.',
           }),
         ],
-        subscriptions: [],
-        tokens: [],
-        events: [],
-      },
-      'target-user': {
+      }),
+      'target-user': snapshot({
         notes: [createNote({ id: 'cloud-note', userId: 'target-user', title: 'Cloud data' })],
-        subscriptions: [],
-        tokens: [],
-        events: [],
-      },
+      }),
     },
   });
 
@@ -605,18 +753,12 @@ test('strategy both passes explicit sourceUserId for event-only source snapshots
   const { repository, stats } = createRepositoryDouble({
     users: [validUser],
     snapshots: {
-      'source-user': {
-        notes: [],
-        subscriptions: [],
-        tokens: [],
+      'source-user': snapshot({
         events: [createEvent({ id: 'e-1', noteId: 'orphan-note', userId: 'source-user' })],
-      },
-      'target-user': {
-        notes: [],
+      }),
+      'target-user': snapshot({
         subscriptions: [createSubscription({ id: 's-1', userId: 'target-user' })],
-        tokens: [],
-        events: [],
-      },
+      }),
     },
   });
 
@@ -718,12 +860,9 @@ test('concurrent apply attempts lock migration-attempt and target-user rows', as
   const { repository, stats } = createRepositoryDouble({
     users: [validUser],
     snapshots: {
-      'source-user': {
+      'source-user': snapshot({
         notes: [createNote({ id: 'n-1', userId: 'source-user', title: 'source' })],
-        subscriptions: [],
-        tokens: [],
-        events: [],
-      },
+      }),
       'target-user': emptySnapshot(),
     },
   });

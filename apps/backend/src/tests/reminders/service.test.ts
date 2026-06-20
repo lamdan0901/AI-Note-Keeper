@@ -11,6 +11,7 @@ import type {
   ReminderUpdatePayload,
 } from '../../reminders/contracts.js';
 import type { RemindersRepository } from '../../reminders/repositories/reminders-repository.js';
+import type { ReminderSchedulerService } from '../../reminders/scheduler-service.js';
 import { createRemindersService } from '../../reminders/service.js';
 
 type InMemoryRemindersRepository = RemindersRepository &
@@ -57,6 +58,10 @@ const createReminderRecord = (
     nextTriggerAt: input.nextTriggerAt ?? null,
     lastFiredAt: null,
     lastAcknowledgedAt: null,
+    scheduleProvider: null,
+    scheduleTargetId: null,
+    scheduleTargetVersion: null,
+    scheduleTargetFireAt: null,
     version: input.version ?? 1,
     createdAt: updatedAt,
     updatedAt,
@@ -91,6 +96,47 @@ const createInMemoryRemindersRepository = (
         return item.updatedAt.getTime() > updatedSince.getTime();
       });
     },
+    listRepairCandidates: async ({ now, limit }) => {
+      return [...byKey.values()]
+        .filter((item) => {
+          if (!item.active || item.nextTriggerAt === null) {
+            return false;
+          }
+
+          return (
+            item.nextTriggerAt.getTime() <= now.getTime() ||
+            item.scheduleTargetId === null ||
+            item.scheduleTargetVersion !== item.version
+          );
+        })
+        .sort((left, right) => {
+          const leftNext = left.nextTriggerAt;
+          const rightNext = right.nextTriggerAt;
+          if (leftNext === null && rightNext === null) {
+            return left.updatedAt.getTime() - right.updatedAt.getTime();
+          }
+          if (leftNext === null) {
+            return 1;
+          }
+          if (rightNext === null) {
+            return -1;
+          }
+          if (leftNext.getTime() !== rightNext.getTime()) {
+            return leftNext.getTime() - rightNext.getTime();
+          }
+          return left.updatedAt.getTime() - right.updatedAt.getTime();
+        })
+        .slice(0, limit);
+    },
+    findById: async ({ reminderId }) => {
+      for (const record of byKey.values()) {
+        if (record.id === reminderId) {
+          return record;
+        }
+      }
+
+      return null;
+    },
     findByIdForUser: async ({ reminderId, userId }) => {
       return byKey.get(`${userId}:${reminderId}`) ?? null;
     },
@@ -114,6 +160,10 @@ const createInMemoryRemindersRepository = (
         nextTriggerAt: input.nextTriggerAt,
         lastFiredAt: input.lastFiredAt,
         lastAcknowledgedAt: input.lastAcknowledgedAt,
+        scheduleProvider: input.scheduleProvider,
+        scheduleTargetId: input.scheduleTargetId,
+        scheduleTargetVersion: input.scheduleTargetVersion,
+        scheduleTargetFireAt: input.scheduleTargetFireAt,
         version: input.version,
         createdAt: input.createdAt,
         updatedAt: input.updatedAt,
@@ -160,10 +210,63 @@ const createInMemoryRemindersRepository = (
         ...(Object.hasOwn(patch, 'lastAcknowledgedAt')
           ? { lastAcknowledgedAt: patch.lastAcknowledgedAt ?? null }
           : {}),
+        ...(Object.hasOwn(patch, 'scheduleProvider')
+          ? { scheduleProvider: patch.scheduleProvider ?? null }
+          : {}),
+        ...(Object.hasOwn(patch, 'scheduleTargetId')
+          ? { scheduleTargetId: patch.scheduleTargetId ?? null }
+          : {}),
+        ...(Object.hasOwn(patch, 'scheduleTargetVersion')
+          ? { scheduleTargetVersion: patch.scheduleTargetVersion ?? null }
+          : {}),
+        ...(Object.hasOwn(patch, 'scheduleTargetFireAt')
+          ? { scheduleTargetFireAt: patch.scheduleTargetFireAt ?? null }
+          : {}),
         ...(Object.hasOwn(patch, 'version') ? { version: patch.version ?? existing.version } : {}),
         ...(Object.hasOwn(patch, 'updatedAt')
           ? { updatedAt: patch.updatedAt ?? existing.updatedAt }
           : {}),
+      };
+
+      byKey.set(`${userId}:${reminderId}`, next);
+      return next;
+    },
+    advanceAfterDelivery: async ({
+      reminderId,
+      userId,
+      occurrenceAt,
+      expectedVersion,
+      nextTriggerAt,
+      scheduleStatus,
+      runNow,
+    }) => {
+      const existing = byKey.get(`${userId}:${reminderId}`);
+      if (!existing) {
+        return null;
+      }
+
+      const currentOccurrence =
+        existing.snoozedUntil ?? existing.nextTriggerAt ?? existing.triggerAt;
+      if (
+        existing.version !== expectedVersion ||
+        !existing.active ||
+        currentOccurrence.getTime() !== occurrenceAt.getTime()
+      ) {
+        return null;
+      }
+
+      const next: ReminderRecord = {
+        ...existing,
+        lastFiredAt: occurrenceAt,
+        nextTriggerAt,
+        scheduleStatus,
+        scheduleProvider: null,
+        scheduleTargetId: null,
+        scheduleTargetVersion: null,
+        scheduleTargetFireAt: null,
+        updatedAt:
+          existing.updatedAt.getTime() > runNow.getTime() ? existing.updatedAt : runNow,
+        snoozedUntil: null,
       };
 
       byKey.set(`${userId}:${reminderId}`, next);
@@ -194,6 +297,12 @@ const createChangeEventsDouble = () => {
 
   return { appended, repository };
 };
+
+const createNoopSchedulerService = (): ReminderSchedulerService => ({
+  scheduleNextOccurrence: async () => ({ scheduled: false }),
+  cancelCurrentSchedule: async () => undefined,
+  clearScheduleMetadata: async () => undefined,
+});
 
 test('invalid timezone on create and update throws validation error without mutation', async () => {
   const repository = createInMemoryRemindersRepository([
@@ -272,6 +381,7 @@ test('recurrence definition updates recompute nextTriggerAt and ignore client ne
     remindersRepository: repository,
     noteChangeEventsRepository: events.repository,
     computeNext: () => 1_700_000_999_000,
+    schedulerService: createNoopSchedulerService(),
     onReminderChanged: ({ reminder }) => {
       changed.push(reminder.id);
     },
@@ -361,6 +471,7 @@ test('ack and snooze mutate expected fields while preserving recurrence definiti
     remindersRepository: repository,
     noteChangeEventsRepository: events.repository,
     computeNext: () => 1_700_000_800_000,
+    schedulerService: createNoopSchedulerService(),
     now: () => new Date(1_700_000_500_000),
   });
 
@@ -416,6 +527,7 @@ test('event dedupe key and immediate callback trigger only on effective change',
   const service = createRemindersService({
     remindersRepository: repository,
     noteChangeEventsRepository: events.repository,
+    schedulerService: createNoopSchedulerService(),
     onReminderChanged: ({ operation }) => {
       callbacks.push(operation);
     },
@@ -444,4 +556,145 @@ test('event dedupe key and immediate callback trigger only on effective change',
   assert.equal(events.appended.length, 1);
   assert.equal(events.appended[0].startsWith('reminder-1:user-1:update:'), true);
   assert.deepEqual(callbacks, ['update']);
+});
+
+test('create reminder schedules next occurrence after durable create', async () => {
+  const repository = createInMemoryRemindersRepository([]);
+  const events = createChangeEventsDouble();
+  const scheduled: string[] = [];
+  const service = createRemindersService({
+    remindersRepository: repository,
+    noteChangeEventsRepository: events.repository,
+    computeNext: () => 1_700_000_900_000,
+    schedulerService: {
+      scheduleNextOccurrence: async (reminder) => {
+        scheduled.push(`${reminder.id}:${reminder.version}:${reminder.nextTriggerAt?.getTime()}`);
+        return { scheduled: true, deliveryKey: 'delivery-key' };
+      },
+      cancelCurrentSchedule: async () => undefined,
+      clearScheduleMetadata: async () => undefined,
+    },
+    now: () => new Date(1_700_000_500_000),
+  });
+
+  await service.createReminder({
+    userId: 'user-1',
+    id: 'reminder-scheduled',
+    triggerAt: 1_700_000_000_000,
+    repeat: { kind: 'daily', interval: 1 },
+    startAt: 1_700_000_000_000,
+    baseAtLocal: '2026-01-01T09:00:00',
+    active: true,
+    timezone: 'UTC',
+  });
+
+  assert.deepEqual(scheduled, ['reminder-scheduled:1:1700000900000']);
+});
+
+test('create one-time reminder uses triggerAt as nextTriggerAt and schedules it', async () => {
+  const repository = createInMemoryRemindersRepository([]);
+  const events = createChangeEventsDouble();
+  const scheduled: string[] = [];
+  const service = createRemindersService({
+    remindersRepository: repository,
+    noteChangeEventsRepository: events.repository,
+    schedulerService: {
+      scheduleNextOccurrence: async (reminder) => {
+        scheduled.push(`${reminder.id}:${reminder.nextTriggerAt?.getTime()}`);
+        return { scheduled: true, deliveryKey: 'delivery-key' };
+      },
+      cancelCurrentSchedule: async () => undefined,
+      clearScheduleMetadata: async () => undefined,
+    },
+    now: () => new Date(1_700_000_500_000),
+  });
+
+  const created = await service.createReminder({
+    userId: 'user-1',
+    id: 'reminder-once',
+    triggerAt: 1_700_001_200_000,
+    active: true,
+    timezone: 'UTC',
+  });
+
+  assert.equal(created.nextTriggerAt?.getTime(), 1_700_001_200_000);
+  assert.equal(created.scheduleStatus, 'scheduled');
+  assert.deepEqual(scheduled, ['reminder-once:1700001200000']);
+});
+
+test('update reminder cancels old schedule and creates replacement for new version', async () => {
+  const existing = createReminderRecord({
+    id: 'reminder-1',
+    userId: 'user-1',
+    updatedAt: 1_700_000_000_000,
+    nextTriggerAt: new Date(1_700_000_100_000),
+    version: 2,
+  });
+  const repository = createInMemoryRemindersRepository([
+    {
+      ...existing,
+      scheduleProvider: 'fake',
+      scheduleTargetId: 'old-schedule',
+      scheduleTargetVersion: 2,
+      scheduleTargetFireAt: new Date(1_700_000_100_000),
+    },
+  ]);
+  const events = createChangeEventsDouble();
+  const actions: string[] = [];
+  const service = createRemindersService({
+    remindersRepository: repository,
+    noteChangeEventsRepository: events.repository,
+    schedulerService: {
+      scheduleNextOccurrence: async (reminder) => {
+        actions.push(`schedule:${reminder.version}`);
+        return { scheduled: true, deliveryKey: 'new-key' };
+      },
+      cancelCurrentSchedule: async (reminder) => {
+        actions.push(`cancel:${reminder.scheduleTargetId}`);
+      },
+      clearScheduleMetadata: async () => undefined,
+    },
+  });
+
+  await service.updateReminder({
+    userId: 'user-1',
+    reminderId: 'reminder-1',
+    patch: {
+      updatedAt: 1_700_000_200_000,
+      title: 'After',
+    },
+  });
+
+  assert.deepEqual(actions, ['cancel:old-schedule', 'schedule:3']);
+});
+
+test('delete reminder cancels current schedule before deleting reminder', async () => {
+  const repository = createInMemoryRemindersRepository([
+    {
+      ...createReminderRecord({
+        id: 'reminder-1',
+        userId: 'user-1',
+        updatedAt: 1_700_000_000_000,
+      }),
+      scheduleTargetId: 'schedule-1',
+    },
+  ]);
+  const events = createChangeEventsDouble();
+  const actions: string[] = [];
+  const service = createRemindersService({
+    remindersRepository: repository,
+    noteChangeEventsRepository: events.repository,
+    schedulerService: {
+      scheduleNextOccurrence: async () => ({ scheduled: false }),
+      cancelCurrentSchedule: async (reminder) => {
+        actions.push(`cancel:${reminder.scheduleTargetId}`);
+      },
+      clearScheduleMetadata: async () => undefined,
+    },
+  });
+
+  const deleted = await service.deleteReminder({ userId: 'user-1', reminderId: 'reminder-1' });
+
+  assert.equal(deleted, true);
+  assert.deepEqual(actions, ['cancel:schedule-1']);
 });

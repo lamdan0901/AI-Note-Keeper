@@ -21,6 +21,10 @@ CREATE TABLE IF NOT EXISTS notes (
   last_fired_at TIMESTAMP WITH TIME ZONE,
   last_acknowledged_at TIMESTAMP WITH TIME ZONE,
   version INTEGER DEFAULT 1,
+  schedule_provider TEXT,
+  schedule_target_id TEXT,
+  schedule_target_version INTEGER,
+  schedule_target_fire_at TIMESTAMP WITH TIME ZONE,
   deleted_at TIMESTAMP WITH TIME ZONE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP

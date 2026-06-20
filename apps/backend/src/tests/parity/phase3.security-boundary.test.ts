@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import type { Server } from 'node:net';
 import test from 'node:test';
 
 import { createTokenFactory } from '../../auth/tokens.js';
 import { createApiServer } from '../../runtime/createApiServer.js';
+import { startHttpTestServer } from '../support/http-test-server.js';
 
 const startServer = async () => {
   const app = createApiServer({
@@ -19,31 +19,7 @@ const startServer = async () => {
     }),
   });
 
-  const server = await new Promise<Server>((resolve, reject) => {
-    const running = app.listen(0, '127.0.0.1', () => resolve(running));
-    running.once('error', reject);
-  });
-
-  const address = server.address();
-  if (!address || typeof address === 'string') {
-    throw new Error('Expected address info from test server');
-  }
-
-  return {
-    baseUrl: `http://127.0.0.1:${address.port}`,
-    close: async () => {
-      await new Promise<void>((resolve, reject) => {
-        server.close((error) => {
-          if (error) {
-            reject(error);
-            return;
-          }
-
-          resolve();
-        });
-      });
-    },
-  };
+  return await startHttpTestServer(app);
 };
 
 const expectAuthEnvelope = async (response: Response) => {

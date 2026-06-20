@@ -31,6 +31,12 @@ type FcmV1ErrorPayload = Readonly<{
   }>;
 }>;
 
+type FetchImplementation = typeof globalThis.fetch;
+
+type FcmPushProviderOptions = Readonly<{
+  fetch?: FetchImplementation;
+}>;
+
 const FCM_REQUEST_TIMEOUT_MS = 10_000;
 const OAUTH_TOKEN_URI = 'https://oauth2.googleapis.com/token';
 const FCM_SCOPE = 'https://www.googleapis.com/auth/firebase.messaging';
@@ -142,7 +148,11 @@ const encodeFormBody = (input: Readonly<Record<string, string>>): string => {
 };
 
 const resolveAccessToken = async (
-  input: Readonly<{ projectId: string; serviceAccount: FirebaseServiceAccount }>,
+  input: Readonly<{
+    projectId: string;
+    serviceAccount: FirebaseServiceAccount;
+    fetch: FetchImplementation;
+  }>,
 ): Promise<
   | Readonly<{ ok: false; failure: PushProviderResponse }>
   | Readonly<{ ok: true; accessToken: string }>
@@ -184,7 +194,7 @@ const resolveAccessToken = async (
 
   let tokenResponse: Response;
   try {
-    tokenResponse = await fetch(input.serviceAccount.token_uri ?? OAUTH_TOKEN_URI, {
+    tokenResponse = await input.fetch(input.serviceAccount.token_uri ?? OAUTH_TOKEN_URI, {
       method: 'POST',
       signal: AbortSignal.timeout(FCM_REQUEST_TIMEOUT_MS),
       headers: {
@@ -290,7 +300,9 @@ const buildPayload = (request: PushDeliveryRequest): Readonly<Record<string, unk
   };
 };
 
-export const createFcmPushProvider = (): PushProvider => {
+export const createFcmPushProvider = (options: FcmPushProviderOptions = {}): PushProvider => {
+  const fetchImplementation = options.fetch ?? globalThis.fetch;
+
   return {
     sendToToken: async (request) => {
       const serviceAccount = parseServiceAccount();
@@ -311,14 +323,18 @@ export const createFcmPushProvider = (): PushProvider => {
         });
       }
 
-      const tokenResolution = await resolveAccessToken({ projectId, serviceAccount });
+      const tokenResolution = await resolveAccessToken({
+        projectId,
+        serviceAccount,
+        fetch: fetchImplementation,
+      });
       if (!tokenResolution.ok) {
         return tokenResolution.failure;
       }
 
       let response: Response;
       try {
-        response = await fetch(
+        response = await fetchImplementation(
           `https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`,
           {
             method: 'POST',

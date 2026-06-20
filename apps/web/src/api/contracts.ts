@@ -10,7 +10,7 @@ export type TokenProvider = () => string | null | undefined;
 export type RefreshAccessToken = () => Promise<string | null | undefined>;
 
 export type HttpRequestOptions = Readonly<{
-  method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   body?: unknown;
   headers?: Readonly<Record<string, string>>;
   retryOnUnauthorized?: boolean;

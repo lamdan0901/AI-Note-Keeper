@@ -13,6 +13,7 @@ import type {
 } from './contracts.js';
 import {
   createMergeRepository,
+  expensePeriodMonthKey,
   type MergeNoteRecord,
   type MergeRepository,
   type MergeRepositoryTransaction,
@@ -154,6 +155,8 @@ const buildCounts = (snapshot: MergeSnapshot): MergeCounts => {
     subscriptions: snapshot.subscriptions.length,
     tokens: snapshot.tokens.length,
     events: snapshot.events.length,
+    expensePeriods: snapshot.expensePeriods.length,
+    expenseRows: snapshot.expenseRows.length,
   };
 };
 
@@ -170,7 +173,10 @@ const isSnapshotEmpty = (snapshot: MergeSnapshot): boolean => {
     snapshot.notes.length === 0 &&
     snapshot.subscriptions.length === 0 &&
     snapshot.tokens.length === 0 &&
-    snapshot.events.length === 0
+    snapshot.events.length === 0 &&
+    snapshot.expensePeriods.length === 0 &&
+    snapshot.expenseRows.length === 0 &&
+    snapshot.expenseSettings === null
   );
 };
 
@@ -178,7 +184,10 @@ const isSampleOnlySnapshot = (snapshot: MergeSnapshot): boolean => {
   if (
     snapshot.subscriptions.length > 0 ||
     snapshot.tokens.length > 0 ||
-    snapshot.events.length > 0
+    snapshot.events.length > 0 ||
+    snapshot.expensePeriods.length > 0 ||
+    snapshot.expenseRows.length > 0 ||
+    snapshot.expenseSettings !== null
   ) {
     return false;
   }
@@ -212,14 +221,34 @@ const getConflictingNoteIds = (
   return conflicts;
 };
 
+const getConflictingExpenseMonths = (
+  source: MergeSnapshot,
+  target: MergeSnapshot,
+): ReadonlySet<string> => {
+  const targetMonths = new Set(
+    target.expensePeriods.map((period) => expensePeriodMonthKey(period)),
+  );
+  const conflicts = new Set<string>();
+
+  for (const sourcePeriod of source.expensePeriods) {
+    const monthKey = expensePeriodMonthKey(sourcePeriod);
+    if (targetMonths.has(monthKey)) {
+      conflicts.add(monthKey);
+    }
+  }
+
+  return conflicts;
+};
+
 const toSummary = (source: MergeSnapshot, target: MergeSnapshot): MergeSummary => {
   const conflictingNoteIds = getConflictingNoteIds(source, target);
+  const conflictingExpenseMonths = getConflictingExpenseMonths(source, target);
 
   return {
     sourceEmpty: isSnapshotEmpty(source),
     sourceSampleOnly: isSampleOnlySnapshot(source),
     targetEmpty: isSnapshotEmpty(target),
-    hasConflicts: conflictingNoteIds.size > 0,
+    hasConflicts: conflictingNoteIds.size > 0 || conflictingExpenseMonths.size > 0,
     sourceCounts: buildCounts(source),
     targetCounts: buildCounts(target),
   };

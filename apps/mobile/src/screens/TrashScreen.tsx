@@ -386,7 +386,7 @@ const TrashScreenContent: React.FC<TrashScreenProps> = ({
         }
       })();
     },
-    [loadTrash, userId],
+    [loadTrash],
   );
 
   const handleEmptyNotesTrash = useCallback(() => {

@@ -22,7 +22,18 @@ const authEnvSchema = z.object({
     .positive('JWT_REFRESH_TTL_SECONDS must be positive'),
 });
 
+const schedulerEnvSchema = z.object({
+  REMINDER_SCHEDULER_PROVIDER: z.enum(['disabled', 'qstash']).default('disabled'),
+  REMINDER_SCHEDULER_CALLBACK_BASE_URL: z.string().url().optional(),
+  QSTASH_TOKEN: z.string().min(1).optional(),
+  QSTASH_CURRENT_SIGNING_KEY: z.string().min(1).optional(),
+  QSTASH_NEXT_SIGNING_KEY: z.string().min(1).optional(),
+  QSTASH_URL: z.string().url().optional(),
+});
+
+type CoreConfig = z.infer<typeof envSchema>;
 export type AuthConfig = z.infer<typeof authEnvSchema>;
+export type ReminderSchedulerConfig = z.infer<typeof schedulerEnvSchema>;
 
 const authDefaults: AuthConfig = {
   JWT_ISSUER: 'ai-note-keeper-dev',
@@ -34,17 +45,33 @@ const authDefaults: AuthConfig = {
   JWT_REFRESH_TTL_SECONDS: 2_592_000,
 };
 
-const parseResult = envSchema.safeParse(process.env);
-
 let cachedAuthConfig: AuthConfig | null = null;
+let cachedCoreConfig: CoreConfig | null = null;
 
-if (!parseResult.success) {
-  console.error('❌ Failed to parse environment variables:');
-  console.error(parseResult.error.format());
-  process.exit(1);
-}
+const resolveCoreConfig = (): CoreConfig => {
+  if (cachedCoreConfig) {
+    return cachedCoreConfig;
+  }
 
-export const config = parseResult.data;
+  const parsed = envSchema.safeParse(process.env);
+  if (!parsed.success) {
+    console.error('❌ Failed to parse environment variables:');
+    console.error(parsed.error.format());
+    process.exit(1);
+  }
+
+  cachedCoreConfig = parsed.data;
+  return parsed.data;
+};
+
+export const config = {
+  get PORT(): number {
+    return resolveCoreConfig().PORT;
+  },
+  get DATABASE_URL(): string {
+    return resolveCoreConfig().DATABASE_URL;
+  },
+} satisfies CoreConfig;
 
 export const readAuthConfig = (env: NodeJS.ProcessEnv = process.env): AuthConfig => {
   if (env === process.env && cachedAuthConfig) {
@@ -60,6 +87,37 @@ export const readAuthConfig = (env: NodeJS.ProcessEnv = process.env): AuthConfig
 
   if (env === process.env) {
     cachedAuthConfig = parsed.data;
+  }
+
+  return parsed.data;
+};
+
+export const readReminderSchedulerConfig = (
+  env: NodeJS.ProcessEnv = process.env,
+): ReminderSchedulerConfig => {
+  const parsed = schedulerEnvSchema.safeParse(env);
+  if (!parsed.success) {
+    throw new Error(
+      `Invalid reminder scheduler configuration: ${JSON.stringify(parsed.error.format())}`,
+    );
+  }
+
+  if (parsed.data.REMINDER_SCHEDULER_PROVIDER === 'qstash') {
+    if (!parsed.data.REMINDER_SCHEDULER_CALLBACK_BASE_URL) {
+      throw new Error('REMINDER_SCHEDULER_CALLBACK_BASE_URL is required for qstash scheduler');
+    }
+
+    if (!parsed.data.QSTASH_TOKEN) {
+      throw new Error('QSTASH_TOKEN is required for qstash scheduler');
+    }
+
+    if (!parsed.data.QSTASH_CURRENT_SIGNING_KEY) {
+      throw new Error('QSTASH_CURRENT_SIGNING_KEY is required for qstash scheduler');
+    }
+
+    if (!parsed.data.QSTASH_NEXT_SIGNING_KEY) {
+      throw new Error('QSTASH_NEXT_SIGNING_KEY is required for qstash scheduler');
+    }
   }
 
   return parsed.data;

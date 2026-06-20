@@ -19,6 +19,10 @@ const createReminder = (
     userId: string;
     updatedAt: number;
     title?: string | null;
+    scheduleProvider?: string | null;
+    scheduleTargetId?: string | null;
+    scheduleTargetVersion?: number | null;
+    scheduleTargetFireAt?: Date | null;
   }>,
 ): ReminderRecord => {
   const updatedAt = new Date(input.updatedAt);
@@ -41,10 +45,21 @@ const createReminder = (
     nextTriggerAt: updatedAt,
     lastFiredAt: null,
     lastAcknowledgedAt: null,
+    scheduleProvider: input.scheduleProvider ?? null,
+    scheduleTargetId: input.scheduleTargetId ?? null,
+    scheduleTargetVersion: input.scheduleTargetVersion ?? null,
+    scheduleTargetFireAt: input.scheduleTargetFireAt ?? null,
     version: 1,
     createdAt: updatedAt,
     updatedAt,
   };
+};
+
+const assertSchedulerFieldsOmitted = (reminder: Record<string, unknown>): void => {
+  assert.equal(Object.hasOwn(reminder, 'scheduleProvider'), false);
+  assert.equal(Object.hasOwn(reminder, 'scheduleTargetId'), false);
+  assert.equal(Object.hasOwn(reminder, 'scheduleTargetVersion'), false);
+  assert.equal(Object.hasOwn(reminder, 'scheduleTargetFireAt'), false);
 };
 
 const createServiceDouble = (): RemindersService &
@@ -354,6 +369,126 @@ test('request body userId tampering is ignored in create and update flows', asyn
     assert.equal(payload.reminder?.title, 'owner-update');
     assert.equal(service.byKey.get('user-1:reminder-1')?.title, 'owner-update');
     assert.equal(service.byKey.get('user-2:reminder-1')?.title, 'foreign');
+  } finally {
+    await server.close();
+  }
+});
+
+test('reminder API responses omit internal scheduler metadata fields', async () => {
+  const service = createServiceDouble();
+  const scheduledReminder = createReminder({
+    id: 'reminder-1',
+    userId: 'user-1',
+    updatedAt: 1_700_000_000_000,
+    title: 'scheduled',
+    scheduleProvider: 'test-provider',
+    scheduleTargetId: 'target-1',
+    scheduleTargetVersion: 7,
+    scheduleTargetFireAt: new Date('2026-01-01T00:00:00.000Z'),
+  });
+  service.byKey.set('user-1:reminder-1', scheduledReminder);
+
+  const server = await startServer(service);
+  const token = await createAccessToken('user-1');
+
+  try {
+    const listResponse = await fetch(`${server.baseUrl}/api/reminders`, {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    assert.equal(listResponse.status, 200);
+    const listPayload = (await listResponse.json()) as { reminders: Record<string, unknown>[] };
+    assert.equal(listPayload.reminders.length, 1);
+    assertSchedulerFieldsOmitted(listPayload.reminders[0]);
+
+    const getResponse = await fetch(`${server.baseUrl}/api/reminders/reminder-1`, {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    assert.equal(getResponse.status, 200);
+    const getPayload = (await getResponse.json()) as { reminder: Record<string, unknown> | null };
+    assert.notEqual(getPayload.reminder, null);
+    if (getPayload.reminder === null) {
+      throw new Error('Expected reminder payload');
+    }
+    assertSchedulerFieldsOmitted(getPayload.reminder);
+
+    const createResponse = await fetch(`${server.baseUrl}/api/reminders`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${token}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        id: 'reminder-2',
+        title: 'created',
+        triggerAt: 1_700_000_100_000,
+        active: true,
+        timezone: 'UTC',
+      }),
+    });
+    assert.equal(createResponse.status, 200);
+    const createPayload = (await createResponse.json()) as {
+      reminder: Record<string, unknown> | null;
+    };
+    assert.notEqual(createPayload.reminder, null);
+    if (createPayload.reminder === null) {
+      throw new Error('Expected created reminder payload');
+    }
+    assertSchedulerFieldsOmitted(createPayload.reminder);
+
+    const updateResponse = await fetch(`${server.baseUrl}/api/reminders/reminder-1`, {
+      method: 'PATCH',
+      headers: {
+        authorization: `Bearer ${token}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        updatedAt: Date.now() + 1_000,
+        title: 'updated',
+      } satisfies ReminderUpdatePayload),
+    });
+    assert.equal(updateResponse.status, 200);
+    const updatePayload = (await updateResponse.json()) as {
+      reminder: Record<string, unknown> | null;
+    };
+    assert.notEqual(updatePayload.reminder, null);
+    if (updatePayload.reminder === null) {
+      throw new Error('Expected updated reminder payload');
+    }
+    assertSchedulerFieldsOmitted(updatePayload.reminder);
+
+    const ackResponse = await fetch(`${server.baseUrl}/api/reminders/reminder-1/ack`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${token}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ ackType: 'done' }),
+    });
+    assert.equal(ackResponse.status, 200);
+    const ackPayload = (await ackResponse.json()) as { reminder: Record<string, unknown> | null };
+    assert.notEqual(ackPayload.reminder, null);
+    if (ackPayload.reminder === null) {
+      throw new Error('Expected ack reminder payload');
+    }
+    assertSchedulerFieldsOmitted(ackPayload.reminder);
+
+    const snoozeResponse = await fetch(`${server.baseUrl}/api/reminders/reminder-1/snooze`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${token}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ snoozedUntil: 1_700_000_200_000 }),
+    });
+    assert.equal(snoozeResponse.status, 200);
+    const snoozePayload = (await snoozeResponse.json()) as {
+      reminder: Record<string, unknown> | null;
+    };
+    assert.notEqual(snoozePayload.reminder, null);
+    if (snoozePayload.reminder === null) {
+      throw new Error('Expected snoozed reminder payload');
+    }
+    assertSchedulerFieldsOmitted(snoozePayload.reminder);
   } finally {
     await server.close();
   }

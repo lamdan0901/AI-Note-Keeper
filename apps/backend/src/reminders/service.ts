@@ -15,6 +15,11 @@ import {
   type ReminderRepeatRule,
   type ReminderUpdatePayload,
 } from './contracts.js';
+import { createDisabledSchedulerProvider } from './scheduler-provider.js';
+import {
+  createReminderSchedulerService,
+  type ReminderSchedulerService,
+} from './scheduler-service.js';
 import type { RemindersRepository } from './repositories/reminders-repository.js';
 
 type ComputeNextTrigger = (
@@ -163,6 +168,7 @@ export type ReminderChangedPayload = Readonly<{
 type RemindersServiceDeps = Readonly<{
   remindersRepository?: RemindersRepository;
   noteChangeEventsRepository?: NoteChangeEventsRepository;
+  schedulerService?: ReminderSchedulerService;
   now?: () => Date;
   computeNext?: ComputeNextTrigger;
   onReminderChanged?: (input: ReminderChangedPayload) => Promise<void> | void;
@@ -230,6 +236,10 @@ const normalizeReminderForHash = (reminder: ReminderRecord): Record<string, unkn
     nextTriggerAt: reminder.nextTriggerAt?.getTime() ?? null,
     lastFiredAt: reminder.lastFiredAt?.getTime() ?? null,
     lastAcknowledgedAt: reminder.lastAcknowledgedAt?.getTime() ?? null,
+    scheduleProvider: reminder.scheduleProvider,
+    scheduleTargetId: reminder.scheduleTargetId,
+    scheduleTargetVersion: reminder.scheduleTargetVersion,
+    scheduleTargetFireAt: reminder.scheduleTargetFireAt?.getTime() ?? null,
     version: reminder.version,
     updatedAt: reminder.updatedAt.getTime(),
     createdAt: reminder.createdAt.getTime(),
@@ -282,6 +292,26 @@ const hasEffectivePatch = (existing: ReminderRecord, patch: ReminderPatchInput):
   ) {
     return true;
   }
+  if (
+    hasOwnField(source, 'scheduleProvider') &&
+    patch.scheduleProvider !== existing.scheduleProvider
+  ) {
+    return true;
+  }
+  if (hasOwnField(source, 'scheduleTargetId') && patch.scheduleTargetId !== existing.scheduleTargetId)
+    return true;
+  if (
+    hasOwnField(source, 'scheduleTargetVersion') &&
+    patch.scheduleTargetVersion !== existing.scheduleTargetVersion
+  ) {
+    return true;
+  }
+  if (
+    hasOwnField(source, 'scheduleTargetFireAt') &&
+    !isDateEqual(patch.scheduleTargetFireAt, existing.scheduleTargetFireAt)
+  ) {
+    return true;
+  }
 
   return false;
 };
@@ -311,6 +341,28 @@ const computeRecurrenceNextTrigger = (
   return next === null ? null : new Date(next);
 };
 
+const resolveInitialNextTrigger = (
+  nextCompute: ComputeNextTrigger,
+  input: Readonly<{
+    triggerAt: Date;
+    repeat: ReminderRepeatRule | null;
+    startAt: Date | null;
+    baseAtLocal: string | null;
+    timezone: string;
+    nowMs: number;
+  }>,
+): Date => {
+  const computed = computeRecurrenceNextTrigger(nextCompute, {
+    repeat: input.repeat,
+    startAt: input.startAt,
+    baseAtLocal: input.baseAtLocal,
+    timezone: input.timezone,
+    nowMs: input.nowMs,
+  });
+
+  return computed ?? input.triggerAt;
+};
+
 export const createRemindersService = (deps: RemindersServiceDeps = {}): RemindersService => {
   const remindersRepository =
     deps.remindersRepository ??
@@ -328,6 +380,12 @@ export const createRemindersService = (deps: RemindersServiceDeps = {}): Reminde
       };
       return mod.createNoteChangeEventsRepository();
     })();
+  const schedulerService =
+    deps.schedulerService ??
+    createReminderSchedulerService({
+      provider: createDisabledSchedulerProvider(),
+      remindersRepository,
+    });
   const now = deps.now ?? (() => new Date());
   const nextCompute = deps.computeNext ?? computeNextTrigger;
   const onReminderChanged = deps.onReminderChanged ?? (() => undefined);
@@ -388,13 +446,16 @@ export const createRemindersService = (deps: RemindersServiceDeps = {}): Reminde
       const baseAtLocal = input.baseAtLocal ?? null;
       const repeat = input.repeat ?? null;
       const triggerAt = new Date(input.triggerAt);
-      const computedNextTrigger = computeRecurrenceNextTrigger(nextCompute, {
+      const computedNextTrigger = resolveInitialNextTrigger(nextCompute, {
+        triggerAt,
         repeat,
         startAt,
         baseAtLocal,
         timezone: input.timezone,
         nowMs: nowDate.getTime(),
       });
+      const initialScheduleStatus =
+        input.active && computedNextTrigger !== null ? 'scheduled' : 'unscheduled';
 
       const createInput: ReminderCreateInput = {
         id: input.id,
@@ -410,13 +471,17 @@ export const createRemindersService = (deps: RemindersServiceDeps = {}): Reminde
             ? null
             : new Date(input.snoozedUntil),
         active: input.active,
-        scheduleStatus: input.scheduleStatus ?? 'unscheduled',
+        scheduleStatus: input.scheduleStatus ?? initialScheduleStatus,
         timezone: input.timezone,
         baseAtLocal,
         startAt,
         nextTriggerAt: computedNextTrigger,
         lastFiredAt: null,
         lastAcknowledgedAt: null,
+        scheduleProvider: null,
+        scheduleTargetId: null,
+        scheduleTargetVersion: null,
+        scheduleTargetFireAt: null,
         version: 1,
         createdAt: input.createdAt === undefined ? nowDate : new Date(input.createdAt),
         updatedAt: input.updatedAt === undefined ? nowDate : new Date(input.updatedAt),
@@ -424,6 +489,9 @@ export const createRemindersService = (deps: RemindersServiceDeps = {}): Reminde
 
       const created = await remindersRepository.create(createInput);
       await emitChangeEvent(created, 'create', input.deviceId ?? 'web');
+      if (created.nextTriggerAt && created.active) {
+        await schedulerService.scheduleNextOccurrence(created);
+      }
       return created;
     },
 
@@ -489,6 +557,13 @@ export const createRemindersService = (deps: RemindersServiceDeps = {}): Reminde
         return await remindersRepository.findByIdForUser({ reminderId, userId });
       }
 
+      await schedulerService.cancelCurrentSchedule(existing);
+      if (updated.active && updated.nextTriggerAt) {
+        await schedulerService.scheduleNextOccurrence(updated);
+      } else {
+        await schedulerService.clearScheduleMetadata(updated);
+      }
+
       await emitChangeEvent(updated, 'update', deviceId ?? 'web');
       return updated;
     },
@@ -499,6 +574,7 @@ export const createRemindersService = (deps: RemindersServiceDeps = {}): Reminde
         return false;
       }
 
+      await schedulerService.cancelCurrentSchedule(existing);
       const deleted = await remindersRepository.deleteByIdForUser({ reminderId, userId });
       if (!deleted) {
         return false;
@@ -569,6 +645,13 @@ export const createRemindersService = (deps: RemindersServiceDeps = {}): Reminde
         return await remindersRepository.findByIdForUser({ reminderId, userId });
       }
 
+      await schedulerService.cancelCurrentSchedule(existing);
+      if (updated.active && updated.nextTriggerAt) {
+        await schedulerService.scheduleNextOccurrence(updated);
+      } else {
+        await schedulerService.clearScheduleMetadata(updated);
+      }
+
       await emitChangeEvent(updated, 'update', deviceId ?? 'web');
       return updated;
     },
@@ -600,6 +683,11 @@ export const createRemindersService = (deps: RemindersServiceDeps = {}): Reminde
 
       if (!updated) {
         return await remindersRepository.findByIdForUser({ reminderId, userId });
+      }
+
+      await schedulerService.cancelCurrentSchedule(existing);
+      if (updated.active && updated.nextTriggerAt) {
+        await schedulerService.scheduleNextOccurrence(updated);
       }
 
       await emitChangeEvent(updated, 'update', deviceId ?? 'web');

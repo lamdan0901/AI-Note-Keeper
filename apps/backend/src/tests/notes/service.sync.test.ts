@@ -17,6 +17,7 @@ import {
   type NotesRepository,
 } from '../../notes/repositories/notes-repository.js';
 import { createNotesService } from '../../notes/service.js';
+import type { ReminderRecord } from '../../reminders/contracts.js';
 
 const createNote = (
   input: Readonly<{
@@ -488,6 +489,410 @@ test('sync preserves omitted canonical fields and clears explicit null canonical
   assert.equal(cleared.repeat, null);
   assert.equal(cleared.startAt, null);
   assert.equal(cleared.baseAtLocal, null);
+});
+
+test('sync reschedules note reminder when reminder timing changes', async () => {
+  const baseRepository = createInMemoryNotesRepository([
+    createNote({
+      id: 'note-reminder',
+      userId: 'user-1',
+      title: 'Reminder note',
+      updatedAt: 1_700_000_100_000,
+    }),
+  ]);
+  let patched = false;
+
+  const notesRepository: NotesRepository = {
+    listByUser: baseRepository.listByUser,
+    findByIdForUser: baseRepository.findByIdForUser,
+    create: baseRepository.create,
+    patch: async (input: Readonly<{ noteId: string; userId: string; patch: NotePatchInput }>) => {
+      patched = true;
+      return await baseRepository.patch(input);
+    },
+    hardDelete: baseRepository.hardDelete,
+    emptyTrash: baseRepository.emptyTrash,
+  };
+
+  const existingReminder: ReminderRecord = {
+    id: 'note-reminder',
+    userId: 'user-1',
+    title: 'Reminder note',
+    triggerAt: new Date(1_700_000_400_000),
+    done: null,
+    repeatRule: 'none',
+    repeatConfig: null,
+    repeat: null,
+    snoozedUntil: null,
+    active: true,
+    scheduleStatus: 'scheduled',
+    timezone: 'UTC',
+    baseAtLocal: null,
+    startAt: null,
+    nextTriggerAt: new Date(1_700_000_400_000),
+    lastFiredAt: null,
+    lastAcknowledgedAt: null,
+    scheduleProvider: 'qstash',
+    scheduleTargetId: 'schedule-old',
+    scheduleTargetVersion: 1,
+    scheduleTargetFireAt: new Date(1_700_000_400_000),
+    version: 1,
+    createdAt: new Date(1_700_000_100_000),
+    updatedAt: new Date(1_700_000_100_000),
+  };
+  const updatedReminder: ReminderRecord = {
+    ...existingReminder,
+    triggerAt: new Date(1_700_000_900_000),
+    nextTriggerAt: new Date(1_700_000_900_000),
+    scheduleTargetId: null,
+    scheduleTargetVersion: null,
+    scheduleTargetFireAt: null,
+    version: 2,
+    updatedAt: new Date(1_700_000_200_000),
+  };
+  const schedulerEvents: string[] = [];
+
+  const service = createNotesService({
+    notesRepository,
+    noteChangeEventsRepository: createInMemoryChangeEventsRepository(),
+    remindersRepository: {
+      findByIdForUser: async ({
+        reminderId,
+        userId,
+      }: Readonly<{ reminderId: string; userId: string }>) => {
+        assert.equal(reminderId, 'note-reminder');
+        assert.equal(userId, 'user-1');
+        return patched ? updatedReminder : existingReminder;
+      },
+    },
+    schedulerService: {
+      scheduleNextOccurrence: async (reminder: ReminderRecord) => {
+        schedulerEvents.push(`schedule:${reminder.id}:${reminder.nextTriggerAt?.getTime()}`);
+        return { scheduled: true, deliveryKey: 'delivery-key' };
+      },
+      cancelCurrentSchedule: async (reminder: ReminderRecord) => {
+        schedulerEvents.push(`cancel:${reminder.scheduleTargetId}`);
+      },
+      clearScheduleMetadata: async (reminder: ReminderRecord) => {
+        schedulerEvents.push(`clear:${reminder.id}`);
+      },
+    },
+  } as unknown as Parameters<typeof createNotesService>[0]);
+
+  await service.sync({
+    userId: 'user-1',
+    lastSyncAt: 0,
+    changes: [
+      {
+        id: 'note-reminder',
+        userId: 'user-1',
+        operation: 'update',
+        payloadHash: 'reminder-time-update',
+        deviceId: 'device-1',
+        triggerAt: 1_700_000_900_000,
+        nextTriggerAt: 1_700_000_900_000,
+        scheduleStatus: 'scheduled',
+        timezone: 'UTC',
+        updatedAt: 1_700_000_200_000,
+      },
+    ],
+  });
+
+  assert.deepEqual(schedulerEvents, [
+    'cancel:schedule-old',
+    'schedule:note-reminder:1700000900000',
+  ]);
+});
+
+test('trashing and restoring a note cancels then recreates its reminder schedule', async () => {
+  const notesRepository = createInMemoryNotesRepository([
+    createNote({
+      id: 'note-reminder',
+      userId: 'user-1',
+      title: 'Reminder note',
+      updatedAt: 1_700_000_100_000,
+    }),
+  ]);
+  const schedulerEvents: string[] = [];
+  let currentNow = new Date(1_700_000_200_000);
+
+  const service = createNotesService({
+    notesRepository,
+    noteChangeEventsRepository: createInMemoryChangeEventsRepository(),
+    remindersRepository: {
+      findByIdForUser: async ({
+        reminderId,
+        userId,
+      }: Readonly<{ reminderId: string; userId: string }>) => {
+        assert.equal(reminderId, 'note-reminder');
+        assert.equal(userId, 'user-1');
+        const note = await notesRepository.findByIdForUser({ noteId: reminderId, userId });
+        if (!note) {
+          return null;
+        }
+
+        return {
+          id: note.id,
+          userId: note.userId,
+          title: note.title,
+          triggerAt: new Date(1_700_000_400_000),
+          done: null,
+          repeatRule: 'none',
+          repeatConfig: null,
+          repeat: null,
+          snoozedUntil: null,
+          active: note.active,
+          scheduleStatus: note.active ? 'scheduled' : 'unscheduled',
+          timezone: 'UTC',
+          baseAtLocal: null,
+          startAt: null,
+          nextTriggerAt: new Date(1_700_000_400_000),
+          lastFiredAt: null,
+          lastAcknowledgedAt: null,
+          scheduleProvider: 'qstash',
+          scheduleTargetId: 'schedule-old',
+          scheduleTargetVersion: note.version,
+          scheduleTargetFireAt: new Date(1_700_000_400_000),
+          version: note.version,
+          createdAt: new Date(1_700_000_100_000),
+          updatedAt: note.updatedAt,
+        } satisfies ReminderRecord;
+      },
+    },
+    schedulerService: {
+      scheduleNextOccurrence: async (reminder: ReminderRecord) => {
+        schedulerEvents.push(`schedule:${reminder.id}:${reminder.nextTriggerAt?.getTime()}`);
+        return { scheduled: true, deliveryKey: 'delivery-key' };
+      },
+      cancelCurrentSchedule: async (reminder: ReminderRecord) => {
+        schedulerEvents.push(`cancel:${reminder.scheduleTargetId}`);
+      },
+      clearScheduleMetadata: async () => undefined,
+    },
+    now: () => currentNow,
+  });
+
+  const trashed = await service.trashNote({ userId: 'user-1', noteId: 'note-reminder' });
+
+  assert.equal(trashed, true);
+  assert.deepEqual(schedulerEvents, ['cancel:schedule-old']);
+  assert.equal(notesRepository.byKey.get('user-1:note-reminder')?.active, false);
+
+  schedulerEvents.splice(0, schedulerEvents.length);
+  currentNow = new Date(1_700_000_300_000);
+
+  const restored = await service.restoreNote({ userId: 'user-1', noteId: 'note-reminder' });
+
+  assert.equal(restored, true);
+  assert.deepEqual(schedulerEvents, ['schedule:note-reminder:1700000400000']);
+  assert.equal(notesRepository.byKey.get('user-1:note-reminder')?.active, true);
+});
+
+test('note trash cleanup paths cancel reminder schedules before removal', async () => {
+  {
+    const notesRepository = createInMemoryNotesRepository([
+      {
+        ...createNote({
+          id: 'note-permanent',
+          userId: 'user-1',
+          title: 'Permanent delete',
+          updatedAt: 1_700_000_100_000,
+        }),
+        active: false,
+        deletedAt: new Date(1_700_000_150_000),
+      },
+    ]);
+    const schedulerEvents: string[] = [];
+    const service = createNotesService({
+      notesRepository,
+      noteChangeEventsRepository: createInMemoryChangeEventsRepository(),
+      remindersRepository: {
+        findByIdForUser: async ({ reminderId, userId }) => {
+          const note = await notesRepository.findByIdForUser({ noteId: reminderId, userId });
+          if (!note) {
+            return null;
+          }
+
+          return {
+            id: note.id,
+            userId: note.userId,
+            title: note.title,
+            triggerAt: new Date(1_700_000_400_000),
+            done: null,
+            repeatRule: 'none',
+            repeatConfig: null,
+            repeat: null,
+            snoozedUntil: null,
+            active: note.active,
+            scheduleStatus: 'scheduled',
+            timezone: 'UTC',
+            baseAtLocal: null,
+            startAt: null,
+            nextTriggerAt: new Date(1_700_000_400_000),
+            lastFiredAt: null,
+            lastAcknowledgedAt: null,
+            scheduleProvider: 'qstash',
+            scheduleTargetId: 'schedule-permanent',
+            scheduleTargetVersion: note.version,
+            scheduleTargetFireAt: new Date(1_700_000_400_000),
+            version: note.version,
+            createdAt: new Date(1_700_000_100_000),
+            updatedAt: note.updatedAt,
+          } satisfies ReminderRecord;
+        },
+      },
+      schedulerService: {
+        scheduleNextOccurrence: async () => ({ scheduled: true, deliveryKey: 'unused' }),
+        cancelCurrentSchedule: async (reminder: ReminderRecord) => {
+          schedulerEvents.push(`cancel:${reminder.scheduleTargetId}`);
+        },
+        clearScheduleMetadata: async () => undefined,
+      },
+    });
+
+    const deleted = await service.permanentlyDeleteNote({
+      userId: 'user-1',
+      noteId: 'note-permanent',
+    });
+
+    assert.equal(deleted, true);
+    assert.deepEqual(schedulerEvents, ['cancel:schedule-permanent']);
+  }
+
+  {
+    const notesRepository = createInMemoryNotesRepository([
+      {
+        ...createNote({
+          id: 'note-empty-trash',
+          userId: 'user-1',
+          title: 'Trash cleanup',
+          updatedAt: 1_700_000_100_000,
+        }),
+        active: false,
+        deletedAt: new Date(1_700_000_150_000),
+      },
+    ]);
+    const schedulerEvents: string[] = [];
+    const service = createNotesService({
+      notesRepository,
+      noteChangeEventsRepository: createInMemoryChangeEventsRepository(),
+      remindersRepository: {
+        findByIdForUser: async ({ reminderId, userId }) => {
+          const note = await notesRepository.findByIdForUser({ noteId: reminderId, userId });
+          if (!note) {
+            return null;
+          }
+
+          return {
+            id: note.id,
+            userId: note.userId,
+            title: note.title,
+            triggerAt: new Date(1_700_000_400_000),
+            done: null,
+            repeatRule: 'none',
+            repeatConfig: null,
+            repeat: null,
+            snoozedUntil: null,
+            active: note.active,
+            scheduleStatus: 'scheduled',
+            timezone: 'UTC',
+            baseAtLocal: null,
+            startAt: null,
+            nextTriggerAt: new Date(1_700_000_400_000),
+            lastFiredAt: null,
+            lastAcknowledgedAt: null,
+            scheduleProvider: 'qstash',
+            scheduleTargetId: 'schedule-empty-trash',
+            scheduleTargetVersion: note.version,
+            scheduleTargetFireAt: new Date(1_700_000_400_000),
+            version: note.version,
+            createdAt: new Date(1_700_000_100_000),
+            updatedAt: note.updatedAt,
+          } satisfies ReminderRecord;
+        },
+      },
+      schedulerService: {
+        scheduleNextOccurrence: async () => ({ scheduled: true, deliveryKey: 'unused' }),
+        cancelCurrentSchedule: async (reminder: ReminderRecord) => {
+          schedulerEvents.push(`cancel:${reminder.scheduleTargetId}`);
+        },
+        clearScheduleMetadata: async () => undefined,
+      },
+    });
+
+    const deleted = await service.emptyTrash({ userId: 'user-1' });
+
+    assert.equal(deleted, 1);
+    assert.deepEqual(schedulerEvents, ['cancel:schedule-empty-trash']);
+  }
+
+  {
+    const notesRepository = createInMemoryNotesRepository([
+      {
+        ...createNote({
+          id: 'note-purge-trash',
+          userId: 'user-1',
+          title: 'Expired trash',
+          updatedAt: 1_700_000_100_000,
+        }),
+        active: false,
+        deletedAt: new Date(1_700_000_100_000 - 15 * 24 * 60 * 60 * 1000),
+      },
+    ]);
+    const schedulerEvents: string[] = [];
+    const service = createNotesService({
+      notesRepository,
+      noteChangeEventsRepository: createInMemoryChangeEventsRepository(),
+      remindersRepository: {
+        findByIdForUser: async ({ reminderId, userId }) => {
+          const note = await notesRepository.findByIdForUser({ noteId: reminderId, userId });
+          if (!note) {
+            return null;
+          }
+
+          return {
+            id: note.id,
+            userId: note.userId,
+            title: note.title,
+            triggerAt: new Date(1_700_000_400_000),
+            done: null,
+            repeatRule: 'none',
+            repeatConfig: null,
+            repeat: null,
+            snoozedUntil: null,
+            active: note.active,
+            scheduleStatus: 'scheduled',
+            timezone: 'UTC',
+            baseAtLocal: null,
+            startAt: null,
+            nextTriggerAt: new Date(1_700_000_400_000),
+            lastFiredAt: null,
+            lastAcknowledgedAt: null,
+            scheduleProvider: 'qstash',
+            scheduleTargetId: 'schedule-purge-trash',
+            scheduleTargetVersion: note.version,
+            scheduleTargetFireAt: new Date(1_700_000_400_000),
+            version: note.version,
+            createdAt: new Date(1_700_000_100_000),
+            updatedAt: note.updatedAt,
+          } satisfies ReminderRecord;
+        },
+      },
+      schedulerService: {
+        scheduleNextOccurrence: async () => ({ scheduled: true, deliveryKey: 'unused' }),
+        cancelCurrentSchedule: async (reminder: ReminderRecord) => {
+          schedulerEvents.push(`cancel:${reminder.scheduleTargetId}`);
+        },
+        clearScheduleMetadata: async () => undefined,
+      },
+      now: () => new Date(1_700_000_100_000),
+    });
+
+    const deleted = await service.purgeExpiredTrash({ userId: 'user-1' });
+
+    assert.equal(deleted, 1);
+    assert.deepEqual(schedulerEvents, ['cancel:schedule-purge-trash']);
+  }
 });
 
 test('concurrent timestamp winner uses deterministic latest updatedAt result', async () => {

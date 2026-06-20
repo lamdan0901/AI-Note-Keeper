@@ -2,7 +2,7 @@ import { SQLiteDatabase } from 'expo-sqlite/next';
 import { nowMs } from '../../../../packages/shared/utils/time';
 import { calculatePayloadHash } from '../../../../packages/shared/utils/hash';
 import { Note } from '../db/notesRepo';
-import { getRetryDelayMs, shouldRetry } from './retryPolicy';
+import { defaultRetryPolicy, getRetryDelayMs, shouldRetry } from './retryPolicy';
 
 export type NoteOperation = 'create' | 'update' | 'delete';
 
@@ -67,9 +67,10 @@ export const getPendingOperations = async (
 ): Promise<OutboxEntry[]> => {
   const entries = await db.getAllAsync<OutboxEntry>(
     `SELECT * FROM note_outbox 
-     WHERE nextRetryAt IS NULL OR nextRetryAt <= ? 
+     WHERE retryCount < ?
+       AND (nextRetryAt IS NULL OR nextRetryAt <= ?)
      ORDER BY createdAt ASC`,
-    [now],
+    [defaultRetryPolicy.maxAttempts, now],
   );
   return entries;
 };
@@ -119,6 +120,14 @@ export const markOperationFailed = async (
       `[Outbox] Marked ${noteId} for retry #${newRetryCount} at ${new Date(nextRetryAt).toISOString()}`,
     );
   } else {
+    await db.runAsync(
+      `UPDATE note_outbox 
+       SET retryCount = ?, 
+           nextRetryAt = NULL,
+           lastAttemptAt = ?
+       WHERE noteId = ?`,
+      [newRetryCount, now, noteId],
+    );
     console.error(`[Outbox] Max retries exceeded for ${noteId}: ${error}`);
     // Keep in outbox but don't schedule retry - requires manual intervention
   }
