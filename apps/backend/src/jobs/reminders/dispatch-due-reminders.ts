@@ -7,6 +7,8 @@ import {
   type ReminderDispatchQueue,
 } from './contracts.js';
 
+// Fallback scanner path retained for repair/backfill tests and emergency operation.
+// The normal reminder delivery path is scheduled-task execution.
 export type ReminderDispatchRunResult = Readonly<{
   cronKey: string;
   since: Date;

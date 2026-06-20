@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import type { Server } from 'node:net';
 import test from 'node:test';
 
 import type { AuthService } from '../../auth/service.js';
@@ -21,6 +20,7 @@ process.env.DATABASE_URL ??= 'postgres://localhost:5432/ai-note-keeper-test';
 
 const { createTokenFactory } = await import('../../auth/tokens.js');
 const { createApiServer } = await import('../../runtime/createApiServer.js');
+const { startHttpTestServer } = await import('../support/http-test-server.js');
 
 const createAuthServiceDouble = (): AuthService => ({
   register: async (input) => ({
@@ -83,6 +83,9 @@ const createReminderHarness = (): ReturnType<typeof createRemindersService> => {
       lastAcknowledgedAt: value.lastAcknowledgedAt
         ? new Date(value.lastAcknowledgedAt.getTime())
         : null,
+      scheduleTargetFireAt: value.scheduleTargetFireAt
+        ? new Date(value.scheduleTargetFireAt.getTime())
+        : null,
       createdAt: new Date(value.createdAt.getTime()),
       updatedAt: new Date(value.updatedAt.getTime()),
     };
@@ -116,6 +119,18 @@ const createReminderHarness = (): ReturnType<typeof createRemindersService> => {
       ...(Object.hasOwn(patch, 'lastAcknowledgedAt')
         ? { lastAcknowledgedAt: patch.lastAcknowledgedAt ?? null }
         : {}),
+      ...(Object.hasOwn(patch, 'scheduleProvider')
+        ? { scheduleProvider: patch.scheduleProvider ?? null }
+        : {}),
+      ...(Object.hasOwn(patch, 'scheduleTargetId')
+        ? { scheduleTargetId: patch.scheduleTargetId ?? null }
+        : {}),
+      ...(Object.hasOwn(patch, 'scheduleTargetVersion')
+        ? { scheduleTargetVersion: patch.scheduleTargetVersion ?? null }
+        : {}),
+      ...(Object.hasOwn(patch, 'scheduleTargetFireAt')
+        ? { scheduleTargetFireAt: patch.scheduleTargetFireAt ?? null }
+        : {}),
       ...(Object.hasOwn(patch, 'version') ? { version: patch.version ?? 1 } : {}),
       ...(Object.hasOwn(patch, 'updatedAt')
         ? { updatedAt: patch.updatedAt ?? current.updatedAt }
@@ -140,6 +155,41 @@ const createReminderHarness = (): ReturnType<typeof createRemindersService> => {
         .sort((left, right) => right.updatedAt.getTime() - left.updatedAt.getTime())
         .map(cloneReminder);
     },
+    listRepairCandidates: async ({ now, limit }) => {
+      return [...byKey.values()]
+        .filter((item) => {
+          if (!item.active || item.nextTriggerAt === null) {
+            return false;
+          }
+
+          return (
+            item.nextTriggerAt.getTime() <= now.getTime() ||
+            item.scheduleTargetId === null ||
+            item.scheduleTargetVersion !== item.version
+          );
+        })
+        .sort((left, right) => {
+          const nextAtDelta =
+            (left.nextTriggerAt?.getTime() ?? Number.POSITIVE_INFINITY) -
+            (right.nextTriggerAt?.getTime() ?? Number.POSITIVE_INFINITY);
+          if (nextAtDelta !== 0) {
+            return nextAtDelta;
+          }
+
+          return left.updatedAt.getTime() - right.updatedAt.getTime();
+        })
+        .slice(0, limit)
+        .map(cloneReminder);
+    },
+    findById: async ({ reminderId }) => {
+      for (const record of byKey.values()) {
+        if (record.id === reminderId) {
+          return cloneReminder(record);
+        }
+      }
+
+      return null;
+    },
     findByIdForUser: async ({ reminderId, userId }) => {
       const found = byKey.get(key(userId, reminderId));
       return found ? cloneReminder(found) : null;
@@ -163,6 +213,10 @@ const createReminderHarness = (): ReturnType<typeof createRemindersService> => {
         nextTriggerAt: input.nextTriggerAt,
         lastFiredAt: input.lastFiredAt,
         lastAcknowledgedAt: input.lastAcknowledgedAt,
+        scheduleProvider: input.scheduleProvider,
+        scheduleTargetId: input.scheduleTargetId,
+        scheduleTargetVersion: input.scheduleTargetVersion,
+        scheduleTargetFireAt: input.scheduleTargetFireAt,
         version: input.version,
         createdAt: input.createdAt,
         updatedAt: input.updatedAt,
@@ -178,6 +232,46 @@ const createReminderHarness = (): ReturnType<typeof createRemindersService> => {
       }
 
       const next = applyPatch(cloneReminder(current), patch);
+      byKey.set(key(userId, reminderId), cloneReminder(next));
+      return cloneReminder(next);
+    },
+    advanceAfterDelivery: async ({
+      reminderId,
+      userId,
+      occurrenceAt,
+      expectedVersion,
+      nextTriggerAt,
+      scheduleStatus,
+      runNow,
+    }) => {
+      const current = byKey.get(key(userId, reminderId));
+      if (!current) {
+        return null;
+      }
+
+      const currentOccurrence = current.snoozedUntil ?? current.nextTriggerAt ?? current.triggerAt;
+      if (
+        current.version !== expectedVersion ||
+        !current.active ||
+        currentOccurrence.getTime() !== occurrenceAt.getTime()
+      ) {
+        return null;
+      }
+
+      const next: ReminderRecord = {
+        ...current,
+        lastFiredAt: occurrenceAt,
+        nextTriggerAt,
+        scheduleStatus,
+        scheduleProvider: null,
+        scheduleTargetId: null,
+        scheduleTargetVersion: null,
+        scheduleTargetFireAt: null,
+        updatedAt:
+          current.updatedAt.getTime() > runNow.getTime() ? current.updatedAt : runNow,
+        snoozedUntil: null,
+      };
+
       byKey.set(key(userId, reminderId), cloneReminder(next));
       return cloneReminder(next);
     },
@@ -218,31 +312,7 @@ const startServer = async () => {
     }),
   });
 
-  const server = await new Promise<Server>((resolve, reject) => {
-    const running = app.listen(0, '127.0.0.1', () => resolve(running));
-    running.once('error', reject);
-  });
-
-  const address = server.address();
-  if (!address || typeof address === 'string') {
-    throw new Error('Expected TCP server address');
-  }
-
-  return {
-    baseUrl: `http://127.0.0.1:${address.port}`,
-    close: async () => {
-      await new Promise<void>((resolve, reject) => {
-        server.close((error) => {
-          if (error) {
-            reject(error);
-            return;
-          }
-
-          resolve();
-        });
-      });
-    },
-  };
+  return await startHttpTestServer(app);
 };
 
 const createAccessToken = async (userId: string): Promise<string> => {

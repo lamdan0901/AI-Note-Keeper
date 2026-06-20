@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import type { AuthConfig } from '../../config.js';
-import { readAuthConfig } from '../../config.js';
+import type { AuthConfig, ReminderSchedulerConfig } from '../../config.js';
+import { readAuthConfig, readReminderSchedulerConfig } from '../../config.js';
 import { createTokenFactory } from '../../auth/tokens.js';
 
 const baseConfig: AuthConfig = {
@@ -75,4 +75,43 @@ test('auth config env overrides default access token lifetime', () => {
   } as NodeJS.ProcessEnv);
 
   assert.equal(config.JWT_ACCESS_TTL_SECONDS, 120);
+});
+
+test('production scheduler config requires QStash credentials for qstash provider', () => {
+  assert.throws(
+    () =>
+      readReminderSchedulerConfig({
+        NODE_ENV: 'production',
+        REMINDER_SCHEDULER_PROVIDER: 'qstash',
+        REMINDER_SCHEDULER_CALLBACK_BASE_URL: 'https://api.example.test',
+        QSTASH_TOKEN: 'qstash-token',
+        QSTASH_CURRENT_SIGNING_KEY: 'current-signing-key',
+      } as NodeJS.ProcessEnv),
+    /QSTASH_NEXT_SIGNING_KEY is required/i,
+  );
+});
+
+test('qstash scheduler config accepts callback base url token and signing keys', () => {
+  const config = readReminderSchedulerConfig({
+    NODE_ENV: 'production',
+    REMINDER_SCHEDULER_PROVIDER: 'qstash',
+    REMINDER_SCHEDULER_CALLBACK_BASE_URL: 'https://api.example.test',
+    QSTASH_TOKEN: 'qstash-token',
+    QSTASH_CURRENT_SIGNING_KEY: 'current-signing-key',
+    QSTASH_NEXT_SIGNING_KEY: 'next-signing-key',
+  } as NodeJS.ProcessEnv);
+
+  assert.equal(config.REMINDER_SCHEDULER_PROVIDER, 'qstash');
+  assert.equal(config.REMINDER_SCHEDULER_CALLBACK_BASE_URL, 'https://api.example.test');
+  assert.equal(config.QSTASH_TOKEN, 'qstash-token');
+  assert.equal(config.QSTASH_CURRENT_SIGNING_KEY, 'current-signing-key');
+  assert.equal(config.QSTASH_NEXT_SIGNING_KEY, 'next-signing-key');
+});
+
+test('development scheduler config still defaults disabled provider metadata safely', () => {
+  const config = readReminderSchedulerConfig({
+    NODE_ENV: 'development',
+  } as NodeJS.ProcessEnv) as ReminderSchedulerConfig;
+
+  assert.equal(config.REMINDER_SCHEDULER_PROVIDER, 'disabled');
 });

@@ -9,7 +9,17 @@ export type MergeCounts = Readonly<{
   subscriptions: number;
   tokens: number;
   events: number;
+  expensePeriods: number;
+  expenseRows: number;
 }>;
+
+/**
+ * Expense month-collision policy during guest → account merge:
+ * - cloud: account wins — guest expense data is discarded
+ * - local: guest wins — account expense data is replaced by guest
+ * - both: merge — non-colliding months move to account; colliding months append guest rows into the account period
+ */
+export type ExpenseMergeConflictPolicy = 'cloud' | 'local' | 'merge';
 
 export type MergeSummary = Readonly<{
   sourceEmpty: boolean;

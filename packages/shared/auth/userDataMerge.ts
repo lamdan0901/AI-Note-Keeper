@@ -5,6 +5,10 @@ export type MergeCounts = {
   subscriptions: number;
   tokens: number;
   events: number;
+  /** Expense periods (month sheets) owned by the user. */
+  expensePeriods: number;
+  /** Expense rows across all periods (includes soft-deleted). */
+  expenseRows: number;
 };
 
 export type MergeSummary = {

@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import type { Server } from 'node:net';
 import test from 'node:test';
 
 import type { AuthService } from '../../auth/service.js';
@@ -20,6 +19,7 @@ process.env.DATABASE_URL ??= 'postgres://localhost:5432/ai-note-keeper-test';
 
 const { createTokenFactory } = await import('../../auth/tokens.js');
 const { createApiServer } = await import('../../runtime/createApiServer.js');
+const { startHttpTestServer } = await import('../support/http-test-server.js');
 
 const createAuthServiceDouble = (): AuthService => ({
   register: async (input) => ({
@@ -180,12 +180,16 @@ const createSecurityMergeService = (state: SecurityState) => {
       subscriptions: 1,
       tokens: 1,
       events: 1,
+      expensePeriods: 1,
+      expenseRows: 2,
     },
     targetCounts: {
       notes: state.targetNotesByUser.get(toUserId) ?? 1,
       subscriptions: 1,
       tokens: 1,
       events: 1,
+      expensePeriods: 0,
+      expenseRows: 0,
     },
   });
 
@@ -279,31 +283,7 @@ const startServer = async (state: SecurityState) => {
     }),
   });
 
-  const server = await new Promise<Server>((resolve, reject) => {
-    const running = app.listen(0, '127.0.0.1', () => resolve(running));
-    running.once('error', reject);
-  });
-
-  const address = server.address();
-  if (!address || typeof address === 'string') {
-    throw new Error('Expected TCP address');
-  }
-
-  return {
-    baseUrl: `http://127.0.0.1:${address.port}`,
-    close: async () => {
-      await new Promise<void>((resolve, reject) => {
-        server.close((error) => {
-          if (error) {
-            reject(error);
-            return;
-          }
-
-          resolve();
-        });
-      });
-    },
-  };
+  return await startHttpTestServer(app);
 };
 
 const createAccessToken = async (userId: string): Promise<string> => {

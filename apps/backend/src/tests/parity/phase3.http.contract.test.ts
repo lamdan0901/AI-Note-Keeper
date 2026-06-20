@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import type { Server } from 'node:net';
 import test from 'node:test';
 
 import type { AuthService } from '../../auth/service.js';
@@ -11,6 +10,7 @@ import { AppError } from '../../middleware/error-middleware.js';
 import type { NotesService } from '../../notes/service.js';
 import { createApiServer } from '../../runtime/createApiServer.js';
 import type { SubscriptionsService } from '../../subscriptions/service.js';
+import { startHttpTestServer } from '../support/http-test-server.js';
 
 const createAuthServiceDouble = (): AuthService => ({
   register: async (input) => ({
@@ -276,31 +276,9 @@ const startServer = async () => {
     }),
   });
 
-  const server = await new Promise<Server>((resolve, reject) => {
-    const running = app.listen(0, '127.0.0.1', () => resolve(running));
-    running.once('error', reject);
-  });
-
-  const address = server.address();
-  if (!address || typeof address === 'string') {
-    throw new Error('Expected address info from test server');
-  }
-
   return {
-    baseUrl: `http://127.0.0.1:${address.port}`,
+    ...(await startHttpTestServer(app)),
     doubles,
-    close: async () => {
-      await new Promise<void>((resolve, reject) => {
-        server.close((error) => {
-          if (error) {
-            reject(error);
-            return;
-          }
-
-          resolve();
-        });
-      });
-    },
   };
 };
 

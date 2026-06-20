@@ -9,6 +9,7 @@ import {
   reminderCreateBodySchema,
   reminderSnoozeBodySchema,
   reminderUpdateBodySchema,
+  type ReminderRecord,
   type ReminderUpdatePayload,
 } from './contracts.js';
 import { createRemindersService, type RemindersService } from './service.js';
@@ -28,6 +29,27 @@ type ReminderSnoozeBody = z.infer<typeof reminderSnoozeBodySchema>;
 
 const requireUserId = (request: AuthenticatedRequest): string => {
   return request.authUser.userId;
+};
+
+const serializeReminder = (
+  reminder: ReminderRecord | null,
+): Omit<
+  ReminderRecord,
+  'scheduleProvider' | 'scheduleTargetId' | 'scheduleTargetVersion' | 'scheduleTargetFireAt'
+> | null => {
+  if (reminder === null) {
+    return null;
+  }
+
+  const {
+    scheduleProvider: _scheduleProvider,
+    scheduleTargetId: _scheduleTargetId,
+    scheduleTargetVersion: _scheduleTargetVersion,
+    scheduleTargetFireAt: _scheduleTargetFireAt,
+    ...publicReminder
+  } = reminder;
+
+  return publicReminder;
 };
 
 export const createRemindersRoutes = (
@@ -60,7 +82,7 @@ export const createRemindersRoutes = (
         updatedSince: parsedQuery.data.updatedSince,
       });
 
-      response.status(200).json({ reminders });
+      response.status(200).json({ reminders: reminders.map(serializeReminder) });
     }),
   );
 
@@ -73,7 +95,7 @@ export const createRemindersRoutes = (
       const { reminderId } = request.params as z.infer<typeof reminderIdParamsSchema>;
 
       const reminder = await service.getReminder({ userId, reminderId });
-      response.status(200).json({ reminder });
+      response.status(200).json({ reminder: serializeReminder(reminder) });
     }),
   );
 
@@ -90,7 +112,7 @@ export const createRemindersRoutes = (
         userId,
       });
 
-      response.status(200).json({ reminder });
+      response.status(200).json({ reminder: serializeReminder(reminder) });
     }),
   );
 
@@ -118,7 +140,7 @@ export const createRemindersRoutes = (
 
       response.status(200).json({
         updated,
-        reminder,
+        reminder: serializeReminder(reminder),
       });
     }),
   );
@@ -158,7 +180,7 @@ export const createRemindersRoutes = (
 
       response.status(200).json({
         updated: reminder !== null,
-        reminder,
+        reminder: serializeReminder(reminder),
       });
     }),
   );
@@ -187,7 +209,7 @@ export const createRemindersRoutes = (
 
       response.status(200).json({
         updated,
-        reminder,
+        reminder: serializeReminder(reminder),
       });
     }),
   );

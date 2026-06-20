@@ -22,7 +22,10 @@ const createRequest = (): PushDeliveryRequest => {
   };
 };
 
-const createServiceAccountJson = (projectId: string): string => {
+const createServiceAccountJson = (
+  projectId: string,
+  options: Readonly<{ tokenUri?: string }> = {},
+): string => {
   const { privateKey } = generateKeyPairSync('rsa', {
     modulusLength: 2048,
   });
@@ -31,7 +34,7 @@ const createServiceAccountJson = (projectId: string): string => {
     project_id: projectId,
     client_email: `test-${Date.now()}@${projectId}.iam.gserviceaccount.com`,
     private_key: privateKey.export({ type: 'pkcs8', format: 'pem' }).toString(),
-    token_uri: 'https://oauth2.googleapis.com/token',
+    token_uri: options.tokenUri ?? 'https://oauth2.googleapis.com/token',
   });
 };
 
@@ -75,6 +78,54 @@ const createEnvRestorer = (): (() => void) => {
   };
 };
 
+const createProviderWithFetch = (fetchImplementation: typeof globalThis.fetch) => {
+  return createFcmPushProvider({ fetch: fetchImplementation });
+};
+
+test('FCM provider uses injected fetch instead of global fetch', async () => {
+  const restoreEnv = createEnvRestorer();
+  resetFcmProviderAuthCacheForTests();
+
+  process.env.FIREBASE_PROJECT_ID = 'test-project';
+  process.env.FIREBASE_SERVICE_ACCOUNT = createServiceAccountJson('test-project', {
+    tokenUri: 'https://unused.invalid/token',
+  });
+
+  const injectedFetch = (async (input, _init) => {
+    const url = getUrl(input);
+    if (url === 'https://unused.invalid/token') {
+      return new Response(
+        JSON.stringify({
+          access_token: 'access-token-1',
+          expires_in: 3600,
+        }),
+        {
+          status: 200,
+          headers: {
+            'content-type': 'application/json',
+          },
+        },
+      );
+    }
+
+    return new Response(JSON.stringify({ name: 'projects/test/messages/1' }), {
+      status: 200,
+      headers: {
+        'content-type': 'application/json',
+      },
+    });
+  }) as typeof globalThis.fetch;
+
+  try {
+    const provider = createProviderWithFetch(injectedFetch);
+    const response = await provider.sendToToken(createRequest());
+
+    assert.equal(response.ok, true);
+  } finally {
+    restoreEnv();
+  }
+});
+
 test('FCM provider returns explicit configuration error when service account is missing', async () => {
   const restoreEnv = createEnvRestorer();
   resetFcmProviderAuthCacheForTests();
@@ -99,13 +150,12 @@ test('FCM provider returns explicit configuration error when service account is 
 
 test('FCM provider classifies timed-out requests as transient timeout failures', async () => {
   const restoreEnv = createEnvRestorer();
-  const previousFetch = globalThis.fetch;
   resetFcmProviderAuthCacheForTests();
 
   process.env.FIREBASE_PROJECT_ID = 'test-project';
   process.env.FIREBASE_SERVICE_ACCOUNT = createServiceAccountJson('test-project');
 
-  globalThis.fetch = (async (input) => {
+  const fetchDouble = (async (input) => {
     const url = getUrl(input);
     if (url === 'https://oauth2.googleapis.com/token') {
       return new Response(
@@ -128,7 +178,7 @@ test('FCM provider classifies timed-out requests as transient timeout failures',
   }) as typeof globalThis.fetch;
 
   try {
-    const provider = createFcmPushProvider();
+    const provider = createProviderWithFetch(fetchDouble);
     const response = await provider.sendToToken(createRequest());
 
     assert.equal(response.ok, false);
@@ -139,20 +189,18 @@ test('FCM provider classifies timed-out requests as transient timeout failures',
     assert.equal(response.statusCode, 504);
     assert.equal(response.errorCode, 'FCM_TIMEOUT');
   } finally {
-    globalThis.fetch = previousFetch;
     restoreEnv();
   }
 });
 
 test('FCM provider classifies OAuth 503 failures as transient auth unavailability', async () => {
   const restoreEnv = createEnvRestorer();
-  const previousFetch = globalThis.fetch;
   resetFcmProviderAuthCacheForTests();
 
   process.env.FIREBASE_PROJECT_ID = 'test-project';
   process.env.FIREBASE_SERVICE_ACCOUNT = createServiceAccountJson('test-project');
 
-  globalThis.fetch = (async () => {
+  const fetchDouble = (async () => {
     return new Response(
       JSON.stringify({
         error: 'server_error',
@@ -168,7 +216,7 @@ test('FCM provider classifies OAuth 503 failures as transient auth unavailabilit
   }) as typeof globalThis.fetch;
 
   try {
-    const provider = createFcmPushProvider();
+    const provider = createProviderWithFetch(fetchDouble);
     const response = await provider.sendToToken(createRequest());
 
     assert.equal(response.ok, false);
@@ -179,20 +227,18 @@ test('FCM provider classifies OAuth 503 failures as transient auth unavailabilit
     assert.equal(response.statusCode, 503);
     assert.equal(response.errorCode, 'FCM_AUTH_UNAVAILABLE');
   } finally {
-    globalThis.fetch = previousFetch;
     restoreEnv();
   }
 });
 
 test('FCM provider preserves OAuth 429 as transient retryable auth failure', async () => {
   const restoreEnv = createEnvRestorer();
-  const previousFetch = globalThis.fetch;
   resetFcmProviderAuthCacheForTests();
 
   process.env.FIREBASE_PROJECT_ID = 'test-project';
   process.env.FIREBASE_SERVICE_ACCOUNT = createServiceAccountJson('test-project');
 
-  globalThis.fetch = (async () => {
+  const fetchDouble = (async () => {
     return new Response(
       JSON.stringify({
         error: 'rate_limited',
@@ -208,7 +254,7 @@ test('FCM provider preserves OAuth 429 as transient retryable auth failure', asy
   }) as typeof globalThis.fetch;
 
   try {
-    const provider = createFcmPushProvider();
+    const provider = createProviderWithFetch(fetchDouble);
     const response = await provider.sendToToken(createRequest());
 
     assert.equal(response.ok, false);
@@ -219,20 +265,18 @@ test('FCM provider preserves OAuth 429 as transient retryable auth failure', asy
     assert.equal(response.statusCode, 429);
     assert.equal(response.errorCode, 'FCM_AUTH_UNAVAILABLE');
   } finally {
-    globalThis.fetch = previousFetch;
     restoreEnv();
   }
 });
 
 test('FCM provider keeps OAuth 400 invalid_grant as terminal auth failure with sanitized message', async () => {
   const restoreEnv = createEnvRestorer();
-  const previousFetch = globalThis.fetch;
   resetFcmProviderAuthCacheForTests();
 
   process.env.FIREBASE_PROJECT_ID = 'test-project';
   process.env.FIREBASE_SERVICE_ACCOUNT = createServiceAccountJson('test-project');
 
-  globalThis.fetch = (async () => {
+  const fetchDouble = (async () => {
     return new Response(
       JSON.stringify({
         error: 'invalid_grant',
@@ -248,7 +292,7 @@ test('FCM provider keeps OAuth 400 invalid_grant as terminal auth failure with s
   }) as typeof globalThis.fetch;
 
   try {
-    const provider = createFcmPushProvider();
+    const provider = createProviderWithFetch(fetchDouble);
     const response = await provider.sendToToken(createRequest());
 
     assert.equal(response.ok, false);
@@ -260,20 +304,18 @@ test('FCM provider keeps OAuth 400 invalid_grant as terminal auth failure with s
     assert.equal(response.errorCode, 'FCM_AUTH_FAILED');
     assert.equal(response.message, 'invalid_grant: invalid JWT signature');
   } finally {
-    globalThis.fetch = previousFetch;
     restoreEnv();
   }
 });
 
 test('FCM provider maps HTTP v1 UNREGISTERED to cleanup signal', async () => {
   const restoreEnv = createEnvRestorer();
-  const previousFetch = globalThis.fetch;
   resetFcmProviderAuthCacheForTests();
 
   process.env.FIREBASE_PROJECT_ID = 'test-project';
   process.env.FIREBASE_SERVICE_ACCOUNT = createServiceAccountJson('test-project');
 
-  globalThis.fetch = (async (input) => {
+  const fetchDouble = (async (input) => {
     const url = getUrl(input);
     if (url === 'https://oauth2.googleapis.com/token') {
       return new Response(
@@ -314,7 +356,7 @@ test('FCM provider maps HTTP v1 UNREGISTERED to cleanup signal', async () => {
   }) as typeof globalThis.fetch;
 
   try {
-    const provider = createFcmPushProvider();
+    const provider = createProviderWithFetch(fetchDouble);
     const response = await provider.sendToToken(createRequest());
 
     assert.equal(response.ok, false);
@@ -325,14 +367,12 @@ test('FCM provider maps HTTP v1 UNREGISTERED to cleanup signal', async () => {
     assert.equal(response.statusCode, 404);
     assert.equal(response.errorCode, 'UNREGISTERED');
   } finally {
-    globalThis.fetch = previousFetch;
     restoreEnv();
   }
 });
 
 test('FCM provider serializes trigger payload with reminderId, noteId, and eventId fields', async () => {
   const restoreEnv = createEnvRestorer();
-  const previousFetch = globalThis.fetch;
   resetFcmProviderAuthCacheForTests();
 
   process.env.FIREBASE_PROJECT_ID = 'test-project';
@@ -341,7 +381,7 @@ test('FCM provider serializes trigger payload with reminderId, noteId, and event
   let sentBody: string | null = null;
   let sentAuthHeader: string | null = null;
   let sentUrl: string | null = null;
-  globalThis.fetch = (async (input, init) => {
+  const fetchDouble = (async (input, init) => {
     const url = getUrl(input);
     if (url === 'https://oauth2.googleapis.com/token') {
       return new Response(
@@ -370,7 +410,7 @@ test('FCM provider serializes trigger payload with reminderId, noteId, and event
   }) as typeof globalThis.fetch;
 
   try {
-    const provider = createFcmPushProvider();
+    const provider = createProviderWithFetch(fetchDouble);
     const response = await provider.sendToToken(createRequest());
 
     assert.equal(response.ok, true);
@@ -400,7 +440,6 @@ test('FCM provider serializes trigger payload with reminderId, noteId, and event
     assert.equal(payload.message?.data?.id, 'reminder-1');
     assert.equal(payload.message?.data?.eventId, 'event-1');
   } finally {
-    globalThis.fetch = previousFetch;
     restoreEnv();
   }
 });

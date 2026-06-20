@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import type { Server } from 'node:net';
 import test from 'node:test';
 
 import type { AuthService } from '../../auth/service.js';
@@ -24,6 +23,7 @@ process.env.DATABASE_URL ??= 'postgres://localhost:5432/ai-note-keeper-test';
 
 const { createTokenFactory } = await import('../../auth/tokens.js');
 const { createApiServer } = await import('../../runtime/createApiServer.js');
+const { startHttpTestServer } = await import('../support/http-test-server.js');
 
 const createAuthServiceDouble = (): AuthService => ({
   register: async (input) => ({
@@ -197,12 +197,16 @@ const createMergeServiceDouble = (transactionStats: TransactionStats) => {
       subscriptions: 2,
       tokens: 1,
       events: 1,
+      expensePeriods: 2,
+      expenseRows: 6,
     },
     targetCounts: {
       notes: targetNotes,
       subscriptions: 2,
       tokens: 1,
       events: 1,
+      expensePeriods: 1,
+      expenseRows: 4,
     },
   });
 
@@ -273,31 +277,7 @@ const startServer = async (transactionStats: TransactionStats) => {
     }),
   });
 
-  const server = await new Promise<Server>((resolve, reject) => {
-    const running = app.listen(0, '127.0.0.1', () => resolve(running));
-    running.once('error', reject);
-  });
-
-  const address = server.address();
-  if (!address || typeof address === 'string') {
-    throw new Error('Expected TCP address');
-  }
-
-  return {
-    baseUrl: `http://127.0.0.1:${address.port}`,
-    close: async () => {
-      await new Promise<void>((resolve, reject) => {
-        server.close((error) => {
-          if (error) {
-            reject(error);
-            return;
-          }
-
-          resolve();
-        });
-      });
-    },
-  };
+  return await startHttpTestServer(app);
 };
 
 const createAccessToken = async (userId: string): Promise<string> => {
@@ -339,12 +319,16 @@ test('phase-5 parity HTTP: merge preflight returns parity summary and apply enfo
 
     assert.deepEqual(Object.keys(preflightPayload.summary.sourceCounts).sort(), [
       'events',
+      'expensePeriods',
+      'expenseRows',
       'notes',
       'subscriptions',
       'tokens',
     ]);
     assert.deepEqual(Object.keys(preflightPayload.summary.targetCounts).sort(), [
       'events',
+      'expensePeriods',
+      'expenseRows',
       'notes',
       'subscriptions',
       'tokens',

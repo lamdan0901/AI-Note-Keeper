@@ -1,9 +1,75 @@
 import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
 import test from 'node:test';
+import { promisify } from 'node:util';
 
 import { createApiServer } from '../runtime/createApiServer.js';
 import { createInFlightPushJobTracker, createPgBossAdapter } from '../worker/boss-adapter.js';
 import { startWorker } from '../worker/index.js';
+
+process.env.DATABASE_URL ??= 'postgres://localhost:5432/ai-note-keeper-test';
+
+const execFileAsync = promisify(execFile);
+
+const createNoopDispatchResult = (now: Date) => ({
+  cronKey: 'check-reminders',
+  since: now,
+  now,
+  scanned: 0,
+  enqueued: 0,
+  duplicates: 0,
+});
+
+const createNoopSubscriptionDispatchJob = () => ({
+  run: async () => {
+    const now = new Date('2026-06-13T10:03:22.000Z');
+    return createNoopDispatchResult(now);
+  },
+});
+
+const withQstashSchedulerEnv = async (run: () => Promise<void>): Promise<void> => {
+  const originalProvider = process.env.REMINDER_SCHEDULER_PROVIDER;
+  const originalCallbackBaseUrl = process.env.REMINDER_SCHEDULER_CALLBACK_BASE_URL;
+  const originalToken = process.env.QSTASH_TOKEN;
+  const originalCurrentSigningKey = process.env.QSTASH_CURRENT_SIGNING_KEY;
+  const originalNextSigningKey = process.env.QSTASH_NEXT_SIGNING_KEY;
+
+  process.env.REMINDER_SCHEDULER_PROVIDER = 'qstash';
+  process.env.REMINDER_SCHEDULER_CALLBACK_BASE_URL = 'https://api.example.test';
+  process.env.QSTASH_TOKEN = 'qstash-token';
+  process.env.QSTASH_CURRENT_SIGNING_KEY = 'current-signing-key';
+  process.env.QSTASH_NEXT_SIGNING_KEY = 'next-signing-key';
+
+  try {
+    await run();
+  } finally {
+    if (originalProvider === undefined) {
+      delete process.env.REMINDER_SCHEDULER_PROVIDER;
+    } else {
+      process.env.REMINDER_SCHEDULER_PROVIDER = originalProvider;
+    }
+    if (originalCallbackBaseUrl === undefined) {
+      delete process.env.REMINDER_SCHEDULER_CALLBACK_BASE_URL;
+    } else {
+      process.env.REMINDER_SCHEDULER_CALLBACK_BASE_URL = originalCallbackBaseUrl;
+    }
+    if (originalToken === undefined) {
+      delete process.env.QSTASH_TOKEN;
+    } else {
+      process.env.QSTASH_TOKEN = originalToken;
+    }
+    if (originalCurrentSigningKey === undefined) {
+      delete process.env.QSTASH_CURRENT_SIGNING_KEY;
+    } else {
+      process.env.QSTASH_CURRENT_SIGNING_KEY = originalCurrentSigningKey;
+    }
+    if (originalNextSigningKey === undefined) {
+      delete process.env.QSTASH_NEXT_SIGNING_KEY;
+    } else {
+      process.env.QSTASH_NEXT_SIGNING_KEY = originalNextSigningKey;
+    }
+  }
+};
 
 const waitFor = async (
   predicate: () => boolean,
@@ -98,6 +164,13 @@ test('worker boot initializes and shuts down adapter through contract methods', 
 
 test('pg-boss adapter scaffold exposes deterministic lifecycle signatures', async () => {
   const adapter = createPgBossAdapter({
+    dispatchJob: {
+      run: async () => createNoopDispatchResult(new Date('2026-06-13T10:03:22.000Z')),
+    },
+    reminderRepairJob: {
+      run: async () => ({ candidates: 0, executed: 0, scheduled: 0 }),
+    },
+    subscriptionDispatchJob: createNoopSubscriptionDispatchJob(),
     logger: {
       info: (_message: string) => {
         // no-op
@@ -122,7 +195,7 @@ test('pg-boss adapter scaffold exposes deterministic lifecycle signatures', asyn
   assert.equal(stoppedHealth.status, 'stopped');
 });
 
-test('pg-boss adapter aligns recurring dispatch to exact interval boundaries', async () => {
+test('pg-boss adapter aligns recurring reminder repair to exact interval boundaries', async () => {
   let nowMs = Date.parse('2026-04-20T10:03:22.345Z');
   const timeoutQueue: Array<
     Readonly<{ handle: NodeJS.Timeout; delayMs: number; callback: () => void; cleared: boolean }>
@@ -130,7 +203,7 @@ test('pg-boss adapter aligns recurring dispatch to exact interval boundaries', a
 
   const scheduler = {
     setInterval: (_callback: () => void, _ms: number): NodeJS.Timeout => {
-      throw new Error('setInterval should not be used for dispatch scheduling');
+      throw new Error('setInterval should not be used for reminder repair scheduling');
     },
     clearInterval: (_handle: NodeJS.Timeout): void => {
       // no-op
@@ -157,77 +230,257 @@ test('pg-boss adapter aligns recurring dispatch to exact interval boundaries', a
     },
   };
 
-  const runDispatchTimes: string[] = [];
-  const adapter = createPgBossAdapter({
-    dispatchIntervalMs: 60_000,
-    scheduler,
-    now: () => new Date(nowMs),
-    dispatchJob: {
-      run: async () => {
-        const runNow = new Date(nowMs);
-        runDispatchTimes.push(runNow.toISOString());
-        return {
-          cronKey: 'check-reminders',
-          since: runNow,
-          now: runNow,
-          scanned: 0,
-          enqueued: 0,
-          duplicates: 0,
-        };
+  const repairRuns: string[] = [];
+  await withQstashSchedulerEnv(async () => {
+    const adapter = createPgBossAdapter({
+      scheduler,
+      now: () => new Date(nowMs),
+      reminderRepairIntervalMs: 60_000,
+      reminderRepairJob: {
+        run: async () => {
+          const runNow = new Date(nowMs);
+          repairRuns.push(runNow.toISOString());
+          return { candidates: 0, executed: 0, scheduled: 0 };
+        },
       },
-    },
-    logger: {
-      info: (_message: string) => {
-        // no-op
+      subscriptionDispatchJob: createNoopSubscriptionDispatchJob(),
+      logger: {
+        info: (_message: string) => {
+          // no-op
+        },
+        error: (_message: string, _error?: unknown) => {
+          // no-op
+        },
       },
-      error: (_message: string, _error?: unknown) => {
-        // no-op
-      },
-    },
-  });
+    });
 
-  let nextTimeoutIndex = 0;
+    const runNextTimeout = async (): Promise<void> => {
+      const nextTimeout = timeoutQueue.reduce<Readonly<{
+        index: number;
+        item: (typeof timeoutQueue)[number];
+      }> | null>((best, item, index) => {
+        if (item.cleared) {
+          return best;
+        }
 
-  const runNextTimeout = async (): Promise<void> => {
-    while (nextTimeoutIndex < timeoutQueue.length && timeoutQueue[nextTimeoutIndex].cleared) {
-      nextTimeoutIndex += 1;
-    }
+        if (best === null || item.delayMs < best.item.delayMs) {
+          return { index, item };
+        }
 
-    assert.ok(nextTimeoutIndex < timeoutQueue.length);
-    const next = timeoutQueue[nextTimeoutIndex];
-    timeoutQueue[nextTimeoutIndex] = {
-      ...next,
-      cleared: true,
+        return best;
+      }, null);
+
+      assert.ok(nextTimeout);
+      const next = nextTimeout.item;
+      timeoutQueue[nextTimeout.index] = {
+        ...next,
+        cleared: true,
+      };
+
+      nowMs += next.delayMs;
+      next.callback();
+      await Promise.resolve();
+      await Promise.resolve();
     };
-    nextTimeoutIndex += 1;
 
-    nowMs += next.delayMs;
-    next.callback();
-    await Promise.resolve();
-    await Promise.resolve();
-  };
+    await adapter.start();
 
-  await adapter.start();
+    assert.equal(repairRuns.length, 1);
+    assert.equal(repairRuns[0], '2026-04-20T10:03:22.345Z');
+    assert.equal(
+      timeoutQueue.some((item) => item.delayMs === 37_655),
+      true,
+    );
 
-  assert.equal(runDispatchTimes.length, 1);
-  assert.equal(runDispatchTimes[0], '2026-04-20T10:03:22.345Z');
-  assert.equal(timeoutQueue.length, 1);
-  assert.equal(timeoutQueue[0].delayMs, 37_655);
+    await runNextTimeout();
+    assert.equal(repairRuns[1], '2026-04-20T10:04:00.000Z');
+    assert.equal(timeoutQueue.filter((item) => item.delayMs === 60_000).length >= 1, true);
 
-  await runNextTimeout();
-  assert.equal(runDispatchTimes[1], '2026-04-20T10:04:00.000Z');
-  assert.equal(timeoutQueue.length, 2);
-  assert.equal(timeoutQueue[1].delayMs, 60_000);
+    await runNextTimeout();
+    assert.equal(repairRuns[2], '2026-04-20T10:05:00.000Z');
+    assert.equal(timeoutQueue.filter((item) => item.delayMs === 60_000).length >= 2, true);
 
-  await runNextTimeout();
-  assert.equal(runDispatchTimes[2], '2026-04-20T10:05:00.000Z');
-  assert.equal(timeoutQueue.length, 3);
-  assert.equal(timeoutQueue[2].delayMs, 60_000);
-
-  await adapter.stop();
+    await adapter.stop();
+  });
 });
 
-test('pg-boss adapter stop does not re-arm dispatch timer after in-flight timed run completes', async () => {
+test('pg-boss adapter runs reminder repair on coarse interval when qstash scheduler is enabled', async () => {
+  const nowMs = Date.parse('2026-06-13T10:03:22.000Z');
+  const timeoutQueue: Array<
+    Readonly<{ delayMs: number; callback: () => void; handle: NodeJS.Timeout; cleared: boolean }>
+  > = [];
+  const repairRuns: string[] = [];
+  const dispatchRuns: string[] = [];
+  const originalProvider = process.env.REMINDER_SCHEDULER_PROVIDER;
+  const originalCallbackBaseUrl = process.env.REMINDER_SCHEDULER_CALLBACK_BASE_URL;
+  const originalToken = process.env.QSTASH_TOKEN;
+  const originalCurrentSigningKey = process.env.QSTASH_CURRENT_SIGNING_KEY;
+  const originalNextSigningKey = process.env.QSTASH_NEXT_SIGNING_KEY;
+  const scheduler = {
+    setInterval: (_callback: () => void, _ms: number): NodeJS.Timeout => {
+      throw new Error('setInterval should not be used');
+    },
+    clearInterval: (_handle: NodeJS.Timeout): void => undefined,
+    setTimeout: (callback: () => void, delayMs: number): NodeJS.Timeout => {
+      const handle = { id: timeoutQueue.length + 1 } as unknown as NodeJS.Timeout;
+      timeoutQueue.push({ delayMs, callback, handle, cleared: false });
+      return handle;
+    },
+    clearTimeout: (handle: NodeJS.Timeout): void => {
+      const index = timeoutQueue.findIndex((item) => item.handle === handle);
+      if (index >= 0) {
+        timeoutQueue[index] = { ...timeoutQueue[index], cleared: true };
+      }
+    },
+  };
+
+  process.env.REMINDER_SCHEDULER_PROVIDER = 'qstash';
+  process.env.REMINDER_SCHEDULER_CALLBACK_BASE_URL = 'https://api.example.test';
+  try {
+    process.env.QSTASH_TOKEN = 'qstash-token';
+    process.env.QSTASH_CURRENT_SIGNING_KEY = 'current-signing-key';
+    process.env.QSTASH_NEXT_SIGNING_KEY = 'next-signing-key';
+    const adapter = createPgBossAdapter({
+      scheduler,
+      now: () => new Date(nowMs),
+      reminderRepairIntervalMs: 15 * 60 * 1000,
+      reminderRepairJob: {
+        run: async () => {
+          repairRuns.push(new Date(nowMs).toISOString());
+          return { candidates: 0, executed: 0, scheduled: 0 };
+        },
+      },
+      dispatchJob: {
+        run: async () => {
+          dispatchRuns.push(new Date(nowMs).toISOString());
+          return {
+            cronKey: 'check-reminders',
+            since: new Date(nowMs),
+            now: new Date(nowMs),
+            scanned: 0,
+            enqueued: 0,
+            duplicates: 0,
+          };
+        },
+      },
+      subscriptionDispatchJob: createNoopSubscriptionDispatchJob(),
+      logger: { info: () => undefined, error: () => undefined },
+    });
+
+    await adapter.start();
+    await Promise.resolve();
+    assert.deepEqual(repairRuns, ['2026-06-13T10:03:22.000Z']);
+    assert.deepEqual(dispatchRuns, []);
+    assert.equal((await adapter.health()).details?.dispatchMode, 'scheduler-repair');
+    await adapter.stop();
+  } finally {
+    if (originalProvider === undefined) {
+      delete process.env.REMINDER_SCHEDULER_PROVIDER;
+    } else {
+      process.env.REMINDER_SCHEDULER_PROVIDER = originalProvider;
+    }
+    if (originalCallbackBaseUrl === undefined) {
+      delete process.env.REMINDER_SCHEDULER_CALLBACK_BASE_URL;
+    } else {
+      process.env.REMINDER_SCHEDULER_CALLBACK_BASE_URL = originalCallbackBaseUrl;
+    }
+    if (originalToken === undefined) {
+      delete process.env.QSTASH_TOKEN;
+    } else {
+      process.env.QSTASH_TOKEN = originalToken;
+    }
+    if (originalCurrentSigningKey === undefined) {
+      delete process.env.QSTASH_CURRENT_SIGNING_KEY;
+    } else {
+      process.env.QSTASH_CURRENT_SIGNING_KEY = originalCurrentSigningKey;
+    }
+    if (originalNextSigningKey === undefined) {
+      delete process.env.QSTASH_NEXT_SIGNING_KEY;
+    } else {
+      process.env.QSTASH_NEXT_SIGNING_KEY = originalNextSigningKey;
+    }
+  }
+});
+
+test('pg-boss adapter preserves legacy dispatch mode when scheduler provider is disabled', async () => {
+  const nowMs = Date.parse('2026-06-13T10:03:22.000Z');
+  const repairRuns: string[] = [];
+  const dispatchRuns: string[] = [];
+  const originalProvider = process.env.REMINDER_SCHEDULER_PROVIDER;
+  const originalCallbackBaseUrl = process.env.REMINDER_SCHEDULER_CALLBACK_BASE_URL;
+  const originalToken = process.env.QSTASH_TOKEN;
+  const originalCurrentSigningKey = process.env.QSTASH_CURRENT_SIGNING_KEY;
+  const originalNextSigningKey = process.env.QSTASH_NEXT_SIGNING_KEY;
+
+  process.env.REMINDER_SCHEDULER_PROVIDER = 'disabled';
+  delete process.env.REMINDER_SCHEDULER_CALLBACK_BASE_URL;
+  delete process.env.QSTASH_TOKEN;
+  delete process.env.QSTASH_CURRENT_SIGNING_KEY;
+  delete process.env.QSTASH_NEXT_SIGNING_KEY;
+
+  try {
+    const adapter = createPgBossAdapter({
+      now: () => new Date(nowMs),
+      reminderRepairIntervalMs: 15 * 60 * 1000,
+      reminderRepairJob: {
+        run: async () => {
+          repairRuns.push(new Date(nowMs).toISOString());
+          return { candidates: 0, executed: 0, scheduled: 0 };
+        },
+      },
+      dispatchJob: {
+        run: async () => {
+          dispatchRuns.push(new Date(nowMs).toISOString());
+          return {
+            cronKey: 'check-reminders',
+            since: new Date(nowMs),
+            now: new Date(nowMs),
+            scanned: 0,
+            enqueued: 0,
+            duplicates: 0,
+          };
+        },
+      },
+      subscriptionDispatchJob: createNoopSubscriptionDispatchJob(),
+      logger: { info: () => undefined, error: () => undefined },
+    });
+
+    await adapter.start();
+    await Promise.resolve();
+    assert.deepEqual(dispatchRuns, ['2026-06-13T10:03:22.000Z']);
+    assert.deepEqual(repairRuns, []);
+    assert.equal((await adapter.health()).details?.dispatchMode, 'legacy-dispatch');
+    await adapter.stop();
+  } finally {
+    if (originalProvider === undefined) {
+      delete process.env.REMINDER_SCHEDULER_PROVIDER;
+    } else {
+      process.env.REMINDER_SCHEDULER_PROVIDER = originalProvider;
+    }
+    if (originalCallbackBaseUrl === undefined) {
+      delete process.env.REMINDER_SCHEDULER_CALLBACK_BASE_URL;
+    } else {
+      process.env.REMINDER_SCHEDULER_CALLBACK_BASE_URL = originalCallbackBaseUrl;
+    }
+    if (originalToken === undefined) {
+      delete process.env.QSTASH_TOKEN;
+    } else {
+      process.env.QSTASH_TOKEN = originalToken;
+    }
+    if (originalCurrentSigningKey === undefined) {
+      delete process.env.QSTASH_CURRENT_SIGNING_KEY;
+    } else {
+      process.env.QSTASH_CURRENT_SIGNING_KEY = originalCurrentSigningKey;
+    }
+    if (originalNextSigningKey === undefined) {
+      delete process.env.QSTASH_NEXT_SIGNING_KEY;
+    } else {
+      process.env.QSTASH_NEXT_SIGNING_KEY = originalNextSigningKey;
+    }
+  }
+});
+
+test('pg-boss adapter stop does not re-arm reminder repair timer after in-flight timed run completes', async () => {
   let nowMs = Date.parse('2026-04-20T10:03:22.345Z');
   const timeoutQueue: Array<
     Readonly<{ handle: NodeJS.Timeout; delayMs: number; callback: () => void; cleared: boolean }>
@@ -235,7 +488,7 @@ test('pg-boss adapter stop does not re-arm dispatch timer after in-flight timed 
 
   const scheduler = {
     setInterval: (_callback: () => void, _ms: number): NodeJS.Timeout => {
-      throw new Error('setInterval should not be used for dispatch scheduling');
+      throw new Error('setInterval should not be used for reminder repair scheduling');
     },
     clearInterval: (_handle: NodeJS.Timeout): void => {
       // no-op
@@ -270,304 +523,56 @@ test('pg-boss adapter stop does not re-arm dispatch timer after in-flight timed 
     releaseTimedRun = resolve;
   });
 
-  const adapter = createPgBossAdapter({
-    dispatchIntervalMs: 60_000,
-    scheduler,
-    now: () => new Date(nowMs),
-    dispatchJob: {
-      run: async () => {
-        runCount += 1;
-        const runNow = new Date(nowMs);
+  await withQstashSchedulerEnv(async () => {
+    const adapter = createPgBossAdapter({
+      scheduler,
+      now: () => new Date(nowMs),
+      reminderRepairIntervalMs: 60_000,
+      reminderRepairJob: {
+        run: async () => {
+          runCount += 1;
+          // Block the first timeout-triggered cycle so stop() races with in-flight repair.
+          if (runCount === 2) {
+            await timedRunGate;
+          }
 
-        // Block the first timeout-triggered cycle so stop() races with in-flight dispatch.
-        if (runCount === 2) {
-          await timedRunGate;
-        }
-
-        return {
-          cronKey: 'check-reminders',
-          since: runNow,
-          now: runNow,
-          scanned: 0,
-          enqueued: 0,
-          duplicates: 0,
-        };
-      },
-    },
-    logger: {
-      info: (_message: string) => {
-        // no-op
-      },
-      error: (_message: string, _error?: unknown) => {
-        // no-op
-      },
-    },
-  });
-
-  await adapter.start();
-  assert.equal(runCount, 1);
-
-  const firstTimeout = timeoutQueue.find((item) => !item.cleared);
-  assert.ok(firstTimeout);
-  nowMs += firstTimeout.delayMs;
-
-  const firstTimeoutIndex = timeoutQueue.findIndex((item) => item === firstTimeout);
-  timeoutQueue[firstTimeoutIndex] = {
-    ...firstTimeout,
-    cleared: true,
-  };
-  firstTimeout.callback();
-
-  await waitFor(() => runCount >= 2, 500);
-
-  const stopPromise = adapter.stop();
-  releaseTimedRun();
-  await stopPromise;
-
-  const pendingTimeouts = timeoutQueue.filter((item) => !item.cleared);
-  assert.equal(pendingTimeouts.length, 0);
-});
-
-test('pg-boss adapter stop prevents new push jobs after shutdown resolves', async () => {
-  const now = new Date('2026-04-20T10:00:00.000Z');
-  let handledCount = 0;
-  let releaseFirstPush: () => void = () => {
-    // initialized for strict mode
-  };
-  const firstPushGate = new Promise<void>((resolve) => {
-    releaseFirstPush = resolve;
-  });
-
-  const adapter = createPgBossAdapter({
-    dispatchIntervalMs: 60_000,
-    maxConcurrentPushDispatches: 1,
-    scanner: {
-      scanDueReminders: async () => ({
-        since: now,
-        now,
-        reminders: [
-          {
-            noteId: 'note-1',
-            userId: 'user-1',
-            triggerTime: now,
-          },
-          {
-            noteId: 'note-2',
-            userId: 'user-1',
-            triggerTime: now,
-          },
-        ],
-      }),
-    },
-    cronStateRepository: {
-      getLastCheckedAt: async () => null,
-      upsertLastCheckedAt: async () => undefined,
-    },
-    deviceTokensRepository: {
-      listUserIdsWithTokens: async () => ['user-1'],
-      listByUserId: async () => [
-        {
-          id: 'token-1',
-          userId: 'user-1',
-          deviceId: 'device-1',
-          fcmToken: 'fcm-token-1',
-          platform: 'android',
-          updatedAt: now,
-          createdAt: now,
+          return { candidates: 0, executed: 0, scheduled: 0 };
         },
-      ],
-      deleteByDeviceIdForUser: async () => false,
-    },
-    pushJobHandler: {
-      handle: async (job) => {
-        handledCount += 1;
-
-        if (handledCount === 1) {
-          await firstPushGate;
-        }
-
-        return {
-          processed: job.tokens.length,
-          delivered: job.tokens.length,
-          retriesScheduled: 0,
-          unregisteredRemoved: 0,
-          terminalFailures: 0,
-        };
       },
-    },
-    logger: {
-      info: (_message: string) => {
-        // no-op
-      },
-      error: (_message: string, _error?: unknown) => {
-        // no-op
-      },
-    },
-  });
-
-  await adapter.start();
-  await waitFor(() => handledCount >= 1, 500);
-
-  const stopPromise = adapter.stop();
-  releaseFirstPush();
-  await stopPromise;
-
-  const handledCountAtStop = handledCount;
-  await Promise.resolve();
-  await Promise.resolve();
-
-  assert.ok(handledCountAtStop >= 1);
-  assert.equal(handledCount, handledCountAtStop);
-});
-
-test('pg-boss adapter dispatches due reminders into push handler with resolved device tokens', async () => {
-  const now = new Date('2026-04-20T10:00:00.000Z');
-  const handledJobs: Array<
-    Readonly<{
-      userId: string;
-      reminderId: string;
-      changeEventId: string;
-      tokens: ReadonlyArray<Readonly<{ deviceId: string; fcmToken: string }>>;
-    }>
-  > = [];
-
-  const adapter = createPgBossAdapter({
-    dispatchIntervalMs: 10,
-    scanner: {
-      scanDueReminders: async () => ({
-        since: now,
-        now,
-        reminders: [
-          {
-            noteId: 'note-1',
-            userId: 'user-1',
-            triggerTime: now,
-          },
-        ],
-      }),
-    },
-    cronStateRepository: {
-      getLastCheckedAt: async () => null,
-      upsertLastCheckedAt: async () => undefined,
-    },
-    deviceTokensRepository: {
-      listUserIdsWithTokens: async () => ['user-1'],
-      listByUserId: async () => [
-        {
-          id: 'token-1',
-          userId: 'user-1',
-          deviceId: 'device-1',
-          fcmToken: 'fcm-token-1',
-          platform: 'android',
-          updatedAt: now,
-          createdAt: now,
+      subscriptionDispatchJob: createNoopSubscriptionDispatchJob(),
+      logger: {
+        info: (_message: string) => {
+          // no-op
         },
-      ],
-      deleteByDeviceIdForUser: async () => false,
-    },
-    pushJobHandler: {
-      handle: async (job) => {
-        handledJobs.push({
-          userId: job.userId,
-          reminderId: job.reminderId,
-          changeEventId: job.changeEventId,
-          tokens: job.tokens,
-        });
+        error: (_message: string, _error?: unknown) => {
+          // no-op
+        },
+      },
+    });
 
-        return {
-          processed: job.tokens.length,
-          delivered: job.tokens.length,
-          retriesScheduled: 0,
-          unregisteredRemoved: 0,
-          terminalFailures: 0,
-        };
-      },
-    },
-    logger: {
-      info: (_message: string) => {
-        // no-op
-      },
-      error: (_message: string, _error?: unknown) => {
-        // no-op
-      },
-    },
+    await adapter.start();
+    assert.equal(runCount, 1);
+
+    const firstTimeout = timeoutQueue.find((item) => !item.cleared);
+    assert.ok(firstTimeout);
+    nowMs += firstTimeout.delayMs;
+
+    const firstTimeoutIndex = timeoutQueue.findIndex((item) => item === firstTimeout);
+    timeoutQueue[firstTimeoutIndex] = {
+      ...firstTimeout,
+      cleared: true,
+    };
+    firstTimeout.callback();
+
+    await waitFor(() => runCount >= 2, 500);
+
+    const stopPromise = adapter.stop();
+    releaseTimedRun();
+    await stopPromise;
+
+    const pendingTimeouts = timeoutQueue.filter((item) => !item.cleared);
+    assert.equal(pendingTimeouts.length, 0);
   });
-
-  await adapter.start();
-  await waitFor(() => handledJobs.length >= 1, 500);
-  await adapter.stop();
-
-  assert.ok(handledJobs.length >= 1);
-  assert.equal(handledJobs[0].userId, 'user-1');
-  assert.equal(handledJobs[0].reminderId, 'note-1');
-  assert.equal(handledJobs[0].changeEventId, 'note-1-1776679200000');
-  assert.deepEqual(handledJobs[0].tokens, [{ deviceId: 'device-1', fcmToken: 'fcm-token-1' }]);
-});
-
-test('pg-boss adapter logs fired reminder enqueue detail with trigger time and note text', async () => {
-  const now = new Date('2026-04-20T10:00:00.000Z');
-  const infoLogs: string[] = [];
-
-  const adapter = createPgBossAdapter({
-    dispatchIntervalMs: 10,
-    scanner: {
-      scanDueReminders: async () => ({
-        since: now,
-        now,
-        reminders: [
-          {
-            noteId: 'note-1',
-            userId: 'user-1',
-            triggerTime: now,
-            title: 'Doctor checkup',
-            body: 'Bring blood test results',
-          },
-        ],
-      }),
-    },
-    cronStateRepository: {
-      getLastCheckedAt: async () => null,
-      upsertLastCheckedAt: async () => undefined,
-    },
-    deviceTokensRepository: {
-      listUserIdsWithTokens: async () => ['user-1'],
-      listByUserId: async () => [],
-      deleteByDeviceIdForUser: async () => false,
-    },
-    pushJobHandler: {
-      handle: async () => ({
-        processed: 0,
-        delivered: 0,
-        retriesScheduled: 0,
-        unregisteredRemoved: 0,
-        terminalFailures: 0,
-      }),
-    },
-    logger: {
-      info: (message: string) => {
-        infoLogs.push(message);
-      },
-      error: (_message: string, _error?: unknown) => {
-        // no-op
-      },
-    },
-  });
-
-  await adapter.start();
-  await waitFor(
-    () => infoLogs.some((message) => message.includes('[worker] fired reminder enqueue')),
-    500,
-  );
-  await adapter.stop();
-
-  const firedLog = infoLogs.find((message) => message.includes('[worker] fired reminder enqueue'));
-  assert.ok(firedLog);
-  assert.match(firedLog, /status=enqueued/);
-  assert.match(firedLog, /noteId=note-1/);
-  assert.match(firedLog, /event=note-1-1776679200000/);
-  assert.match(firedLog, /triggerTime=2026-04-20T10:00:00.000Z/);
-  assert.match(firedLog, /title="Doctor checkup"/);
-  assert.match(firedLog, /body="Bring blood test results"/);
 });
 
 test('API and worker runtime scaffolds can be initialized independently', async () => {
@@ -586,6 +591,23 @@ test('API and worker runtime scaffolds can be initialized independently', async 
   assert.equal(typeof api.listen, 'function');
 
   const worker = await startWorker({
+    adapter: createPgBossAdapter({
+      dispatchJob: {
+        run: async () => createNoopDispatchResult(new Date('2026-06-13T10:03:22.000Z')),
+      },
+      reminderRepairJob: {
+        run: async () => ({ candidates: 0, executed: 0, scheduled: 0 }),
+      },
+      subscriptionDispatchJob: createNoopSubscriptionDispatchJob(),
+      logger: {
+        info: (_message: string) => {
+          // no-op
+        },
+        error: (_message: string, _error?: unknown) => {
+          // no-op
+        },
+      },
+    }),
     installSignalHandlers: false,
     logger: {
       info: (_message: string) => {
@@ -599,6 +621,127 @@ test('API and worker runtime scaffolds can be initialized independently', async 
 
   assert.equal(worker.adapterName, 'pg-boss-adapter');
   await worker.shutdown();
+});
+
+test('reminder runtime module can initialize injected runtime without DATABASE_URL', async () => {
+  const runtimeModuleUrl = new URL('../reminders/runtime.js', import.meta.url).href;
+  const result = await execFileAsync(
+    process.execPath,
+    [
+      '--input-type=module',
+      '--eval',
+      `
+        const { createReminderSchedulerRuntime } = await import(${JSON.stringify(runtimeModuleUrl)});
+        const remindersRepository = {
+          listByUser: async () => [],
+          listRepairCandidates: async () => [],
+          findById: async () => null,
+          findByIdForUser: async () => null,
+          create: async (input) => input,
+          patch: async () => null,
+          advanceAfterDelivery: async () => null,
+          deleteByIdForUser: async () => false,
+        };
+        const runtime = createReminderSchedulerRuntime({
+          remindersRepository,
+          deliveriesRepository: {
+            insertPending: async () => ({ inserted: false, delivery: {
+              id: 'delivery-1',
+              reminderId: 'reminder-1',
+              userId: 'user-1',
+              occurrenceAt: new Date('2026-06-13T10:05:00.000Z'),
+              reminderVersion: 1,
+              deliveryKey: 'delivery-1',
+              status: 'pending',
+              providerMessageId: null,
+              attemptCount: 0,
+              createdAt: new Date('2026-06-13T10:00:00.000Z'),
+              sentAt: null,
+              failureReason: null,
+            } }),
+            markSent: async () => undefined,
+            markFailed: async () => undefined,
+            markCanceled: async () => undefined,
+            markStale: async () => undefined,
+          },
+          noteChangeEventsRepository: {
+            isDuplicate: async () => false,
+            appendEvent: async () => undefined,
+          },
+          deviceTokensRepository: {
+            listByUserId: async () => [],
+            listUserIdsWithTokens: async () => [],
+            deleteByDeviceIdForUser: async () => false,
+          },
+          pushProvider: {
+            sendToToken: async () => ({ ok: true }),
+          },
+          schedulerConfig: {
+            REMINDER_SCHEDULER_PROVIDER: 'disabled',
+          },
+        });
+        if (runtime.schedulerCallbacksEnabled !== false) {
+          throw new Error('Expected disabled scheduler callbacks');
+        }
+      `,
+    ],
+    {
+      env: Object.fromEntries(
+        Object.entries(process.env).filter(([key]) => key !== 'DATABASE_URL'),
+      ),
+    },
+  );
+
+  assert.equal(result.stderr, '');
+});
+
+test('pg-boss adapter can start with injected jobs without DATABASE_URL', async () => {
+  const workerModuleUrl = new URL('../worker/boss-adapter.js', import.meta.url).href;
+  const result = await execFileAsync(
+    process.execPath,
+    [
+      '--input-type=module',
+      '--eval',
+      `
+        const { createPgBossAdapter } = await import(${JSON.stringify(workerModuleUrl)});
+        const adapter = createPgBossAdapter({
+          dispatchJob: {
+            run: async () => ({
+              cronKey: 'check-reminders',
+              since: new Date('2026-06-13T10:03:22.000Z'),
+              now: new Date('2026-06-13T10:03:22.000Z'),
+              scanned: 0,
+              enqueued: 0,
+              duplicates: 0,
+            }),
+          },
+          reminderRepairJob: {
+            run: async () => ({ candidates: 0, executed: 0, scheduled: 0 }),
+          },
+          subscriptionDispatchJob: {
+            run: async () => ({
+              cronKey: 'subscription-reminders',
+              since: new Date('2026-06-13T10:03:22.000Z'),
+              now: new Date('2026-06-13T10:03:22.000Z'),
+              scanned: 0,
+              enqueued: 0,
+              duplicates: 0,
+            }),
+          },
+          logger: { info: () => undefined, error: () => undefined },
+        });
+        await adapter.start();
+        await adapter.stop();
+      `,
+    ],
+    {
+      env: Object.fromEntries(
+        Object.entries(process.env).filter(([key]) => key !== 'DATABASE_URL'),
+      ),
+    },
+  );
+
+  assert.equal(result.stderr, '');
 });
 
 test('api server emits cors headers only for allowed origins', async () => {

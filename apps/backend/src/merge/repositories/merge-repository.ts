@@ -75,12 +75,46 @@ export type MergeEventRecord = Readonly<{
   payloadHash: string;
 }>;
 
+export type MergeExpenseSettingsRecord = Readonly<{
+  userId: string;
+  defaultSchema: Record<string, unknown>;
+  seedRows: unknown;
+  updatedAt: Date;
+}>;
+
+export type MergeExpensePeriodRecord = Readonly<{
+  id: string;
+  userId: string;
+  year: number;
+  month: number;
+  schema: Record<string, unknown>;
+  createdAt: Date;
+  updatedAt: Date;
+}>;
+
+export type MergeExpenseRowRecord = Readonly<{
+  id: string;
+  periodId: string;
+  userId: string;
+  position: number;
+  cells: Record<string, unknown>;
+  deletedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}>;
+
 export type MergeSnapshot = Readonly<{
   notes: ReadonlyArray<MergeNoteRecord>;
   subscriptions: ReadonlyArray<MergeSubscriptionRecord>;
   tokens: ReadonlyArray<MergeTokenRecord>;
   events: ReadonlyArray<MergeEventRecord>;
+  expenseSettings: MergeExpenseSettingsRecord | null;
+  expensePeriods: ReadonlyArray<MergeExpensePeriodRecord>;
+  expenseRows: ReadonlyArray<MergeExpenseRowRecord>;
 }>;
+
+export const expensePeriodMonthKey = (period: Readonly<{ year: number; month: number }>): string =>
+  `${period.year}-${period.month}`;
 
 export type MergeUserRecord = Readonly<{
   id: string;
@@ -219,6 +253,34 @@ type MergeEventRow = Readonly<{
   payload_hash: string;
 }>;
 
+type MergeExpenseSettingsRow = Readonly<{
+  user_id: string;
+  default_schema: Record<string, unknown>;
+  seed_rows: unknown;
+  updated_at: Date;
+}>;
+
+type MergeExpensePeriodRow = Readonly<{
+  id: string;
+  user_id: string;
+  year: number;
+  month: number;
+  schema: Record<string, unknown>;
+  created_at: Date;
+  updated_at: Date;
+}>;
+
+type MergeExpenseRowRow = Readonly<{
+  id: string;
+  period_id: string;
+  user_id: string;
+  position: number;
+  cells: Record<string, unknown>;
+  deleted_at: Date | null;
+  created_at: Date;
+  updated_at: Date;
+}>;
+
 const toAttemptRecord = (row: MergeAttemptRow): MigrationAttemptRecord => {
   return {
     id: row.id,
@@ -317,51 +379,262 @@ const toEventRecord = (row: MergeEventRow): MergeEventRecord => {
   };
 };
 
-const readSnapshot = async (db: DbQueryClient, userId: string): Promise<MergeSnapshot> => {
-  const [notes, subscriptions, tokens, events] = await Promise.all([
-    db.query<MergeNoteRow>(
-      `
-        SELECT *
-        FROM notes
-        WHERE user_id = $1
-        ORDER BY updated_at ASC
-      `,
-      [userId],
-    ),
-    db.query<MergeSubscriptionRow>(
-      `
-        SELECT *
-        FROM subscriptions
-        WHERE user_id = $1
-        ORDER BY updated_at ASC
-      `,
-      [userId],
-    ),
-    db.query<MergeTokenRow>(
-      `
-        SELECT *
-        FROM device_push_tokens
-        WHERE user_id = $1
-        ORDER BY updated_at ASC
-      `,
-      [userId],
-    ),
-    db.query<MergeEventRow>(
-      `
-        SELECT *
-        FROM note_change_events
-        WHERE user_id = $1
-        ORDER BY changed_at ASC
-      `,
-      [userId],
-    ),
+const toExpenseSettingsRecord = (
+  row: MergeExpenseSettingsRow,
+): MergeExpenseSettingsRecord => {
+  return {
+    userId: row.user_id,
+    defaultSchema: row.default_schema,
+    seedRows: row.seed_rows,
+    updatedAt: row.updated_at,
+  };
+};
+
+const toExpensePeriodRecord = (row: MergeExpensePeriodRow): MergeExpensePeriodRecord => {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    year: row.year,
+    month: row.month,
+    schema: row.schema,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+};
+
+const toExpenseRowRecord = (row: MergeExpenseRowRow): MergeExpenseRowRecord => {
+  return {
+    id: row.id,
+    periodId: row.period_id,
+    userId: row.user_id,
+    position: row.position,
+    cells: row.cells,
+    deletedAt: row.deleted_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+};
+
+const deleteTargetExpenseData = async (
+  db: DbQueryClient,
+  targetUserId: string,
+): Promise<void> => {
+  await db.query('DELETE FROM expense_rows WHERE user_id = $1', [targetUserId]);
+  await db.query('DELETE FROM expense_periods WHERE user_id = $1', [targetUserId]);
+  await db.query('DELETE FROM expense_user_settings WHERE user_id = $1', [targetUserId]);
+};
+
+const moveAllSourceExpensesToTarget = async (
+  db: DbQueryClient,
+  sourceUserId: string,
+  targetUserId: string,
+): Promise<void> => {
+  await db.query('UPDATE expense_periods SET user_id = $1 WHERE user_id = $2', [
+    targetUserId,
+    sourceUserId,
   ]);
+  await db.query('UPDATE expense_rows SET user_id = $1 WHERE user_id = $2', [
+    targetUserId,
+    sourceUserId,
+  ]);
+
+  const sourceSettings = await db.query<MergeExpenseSettingsRow>(
+    `
+      SELECT *
+      FROM expense_user_settings
+      WHERE user_id = $1
+      LIMIT 1
+    `,
+    [sourceUserId],
+  );
+
+  if (sourceSettings.rows.length === 0) {
+    return;
+  }
+
+  const settings = sourceSettings.rows[0];
+  await db.query(
+    `
+      INSERT INTO expense_user_settings (user_id, default_schema, seed_rows, updated_at)
+      VALUES ($1, $2, $3, $4)
+      ON CONFLICT (user_id) DO UPDATE
+      SET default_schema = EXCLUDED.default_schema,
+          seed_rows = EXCLUDED.seed_rows,
+          updated_at = EXCLUDED.updated_at
+    `,
+    [targetUserId, settings.default_schema, settings.seed_rows, settings.updated_at],
+  );
+  await db.query('DELETE FROM expense_user_settings WHERE user_id = $1', [sourceUserId]);
+};
+
+const mergeExpenseRowsIntoTargetPeriod = async (
+  db: DbQueryClient,
+  input: Readonly<{
+    sourcePeriodId: string;
+    targetPeriodId: string;
+    targetUserId: string;
+  }>,
+): Promise<void> => {
+  const maxPositionResult = await db.query<{ max_position: number | null }>(
+    `
+      SELECT MAX(position) AS max_position
+      FROM expense_rows
+      WHERE period_id = $1
+    `,
+    [input.targetPeriodId],
+  );
+
+  const maxPosition = maxPositionResult.rows[0]?.max_position ?? -1;
+
+  await db.query(
+    `
+      WITH ordered_source_rows AS (
+        SELECT
+          id,
+          ROW_NUMBER() OVER (ORDER BY position ASC, created_at ASC) - 1 AS row_offset
+        FROM expense_rows
+        WHERE period_id = $1
+      )
+      UPDATE expense_rows AS rows
+      SET period_id = $2,
+          user_id = $3,
+          position = $4 + ordered_source_rows.row_offset
+      FROM ordered_source_rows
+      WHERE rows.id = ordered_source_rows.id
+    `,
+    [input.sourcePeriodId, input.targetPeriodId, input.targetUserId, maxPosition + 1],
+  );
+};
+
+const mergeSourceExpensesIntoTarget = async (
+  db: DbQueryClient,
+  input: Readonly<{
+    source: MergeSnapshot;
+    target: MergeSnapshot;
+    sourceUserId: string;
+    targetUserId: string;
+  }>,
+): Promise<void> => {
+  const targetPeriodByMonth = new Map(
+    input.target.expensePeriods.map((period) => [expensePeriodMonthKey(period), period]),
+  );
+
+  for (const sourcePeriod of input.source.expensePeriods) {
+    const monthKey = expensePeriodMonthKey(sourcePeriod);
+    const targetPeriod = targetPeriodByMonth.get(monthKey);
+
+    if (!targetPeriod) {
+      await db.query('UPDATE expense_periods SET user_id = $1 WHERE id = $2', [
+        input.targetUserId,
+        sourcePeriod.id,
+      ]);
+      await db.query('UPDATE expense_rows SET user_id = $1 WHERE period_id = $2', [
+        input.targetUserId,
+        sourcePeriod.id,
+      ]);
+      continue;
+    }
+
+    await mergeExpenseRowsIntoTargetPeriod(db, {
+      sourcePeriodId: sourcePeriod.id,
+      targetPeriodId: targetPeriod.id,
+      targetUserId: input.targetUserId,
+    });
+    await db.query('DELETE FROM expense_periods WHERE id = $1', [sourcePeriod.id]);
+  }
+
+  if (input.target.expenseSettings === null && input.source.expenseSettings !== null) {
+    const settings = input.source.expenseSettings;
+    await db.query(
+      `
+        INSERT INTO expense_user_settings (user_id, default_schema, seed_rows, updated_at)
+        VALUES ($1, $2, $3, $4)
+      `,
+      [input.targetUserId, settings.defaultSchema, settings.seedRows, settings.updatedAt],
+    );
+    await db.query('DELETE FROM expense_user_settings WHERE user_id = $1', [input.sourceUserId]);
+  }
+};
+
+const readSnapshot = async (db: DbQueryClient, userId: string): Promise<MergeSnapshot> => {
+  const [notes, subscriptions, tokens, events, expenseSettings, expensePeriods, expenseRows] =
+    await Promise.all([
+      db.query<MergeNoteRow>(
+        `
+          SELECT *
+          FROM notes
+          WHERE user_id = $1
+          ORDER BY updated_at ASC
+        `,
+        [userId],
+      ),
+      db.query<MergeSubscriptionRow>(
+        `
+          SELECT *
+          FROM subscriptions
+          WHERE user_id = $1
+          ORDER BY updated_at ASC
+        `,
+        [userId],
+      ),
+      db.query<MergeTokenRow>(
+        `
+          SELECT *
+          FROM device_push_tokens
+          WHERE user_id = $1
+          ORDER BY updated_at ASC
+        `,
+        [userId],
+      ),
+      db.query<MergeEventRow>(
+        `
+          SELECT *
+          FROM note_change_events
+          WHERE user_id = $1
+          ORDER BY changed_at ASC
+        `,
+        [userId],
+      ),
+      db.query<MergeExpenseSettingsRow>(
+        `
+          SELECT *
+          FROM expense_user_settings
+          WHERE user_id = $1
+          LIMIT 1
+        `,
+        [userId],
+      ),
+      db.query<MergeExpensePeriodRow>(
+        `
+          SELECT *
+          FROM expense_periods
+          WHERE user_id = $1
+          ORDER BY year DESC, month DESC
+        `,
+        [userId],
+      ),
+      db.query<MergeExpenseRowRow>(
+        `
+          SELECT *
+          FROM expense_rows
+          WHERE user_id = $1
+          ORDER BY period_id ASC, position ASC
+        `,
+        [userId],
+      ),
+    ]);
 
   return {
     notes: notes.rows.map(toNoteRecord),
     subscriptions: subscriptions.rows.map(toSubscriptionRecord),
     tokens: tokens.rows.map(toTokenRecord),
     events: events.rows.map(toEventRecord),
+    expenseSettings:
+      expenseSettings.rows.length > 0
+        ? toExpenseSettingsRecord(expenseSettings.rows[0])
+        : null,
+    expensePeriods: expensePeriods.rows.map(toExpensePeriodRecord),
+    expenseRows: expenseRows.rows.map(toExpenseRowRecord),
   };
 };
 
@@ -431,6 +704,7 @@ const createTransactionApi = (db: DbQueryClient): MergeRepositoryTransaction => 
     },
 
     replaceTargetWithSource: async ({ sourceUserId, targetUserId }) => {
+      await deleteTargetExpenseData(db, targetUserId);
       await db.query('DELETE FROM device_push_tokens WHERE user_id = $1', [targetUserId]);
       await db.query('DELETE FROM subscriptions WHERE user_id = $1', [targetUserId]);
       await db.query('DELETE FROM notes WHERE user_id = $1', [targetUserId]);
@@ -451,6 +725,7 @@ const createTransactionApi = (db: DbQueryClient): MergeRepositoryTransaction => 
         targetUserId,
         sourceUserId,
       ]);
+      await moveAllSourceExpensesToTarget(db, sourceUserId, targetUserId);
     },
 
     mergeSourceIntoTarget: async ({
@@ -593,6 +868,13 @@ const createTransactionApi = (db: DbQueryClient): MergeRepositoryTransaction => 
           );
         }
       }
+
+      await mergeSourceExpensesIntoTarget(db, {
+        source,
+        target,
+        sourceUserId,
+        targetUserId,
+      });
     },
   };
 };
