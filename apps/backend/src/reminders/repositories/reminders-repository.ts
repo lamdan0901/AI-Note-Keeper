@@ -11,6 +11,8 @@ type ReminderRow = Readonly<{
   id: string;
   user_id: string;
   title: string | null;
+  content: string | null;
+  content_type: string | null;
   trigger_at: Date;
   done: boolean | null;
   repeat_rule: string | null;
@@ -68,6 +70,8 @@ const toDomain = (row: ReminderRow): ReminderRecord => {
     id: row.id,
     userId: row.user_id,
     title: row.title,
+    content: row.content,
+    contentType: row.content_type,
     triggerAt: row.trigger_at,
     done: row.done,
     repeatRule: row.repeat_rule,

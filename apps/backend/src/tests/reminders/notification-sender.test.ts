@@ -71,7 +71,11 @@ test('notification sender sends backend push to each registered token', async ()
   });
 
   const result = await sender.sendReminderNotification({
-    reminder,
+    reminder: {
+      ...reminder,
+      content: 'Bring photos',
+      contentType: null,
+    } as ReminderRecord,
     deliveryKey: 'delivery-key',
     attempt: 0,
   });
@@ -83,6 +87,48 @@ test('notification sender sends backend push to each registered token', async ()
     ['device-1', 'device-2'],
   );
   assert.equal(requests[0]?.title, 'Doctor');
+  assert.equal(requests[0]?.body, 'Bring photos');
+  assert.equal(requests[1]?.body, 'Bring photos');
+});
+
+test('notification sender uses note description when the reminder has no title', async () => {
+  const requests: PushDeliveryRequest[] = [];
+  const sender = createReminderNotificationSender({
+    deviceTokensRepository: {
+      listByUserId: async () => [
+        {
+          id: 't1',
+          userId: 'user-1',
+          deviceId: 'device-1',
+          fcmToken: 'fcm-1',
+          platform: 'android',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ],
+    } as Pick<DeviceTokensRepository, 'listByUserId'>,
+    pushDeliveryService: {
+      deliverToToken: async (request) => {
+        requests.push(request);
+        return { classification: 'delivered' } satisfies PushDeliveryResult;
+      },
+    } satisfies PushDeliveryService,
+  });
+
+  const result = await sender.sendReminderNotification({
+    reminder: {
+      ...reminder,
+      title: null,
+      content: 'Bring photos',
+      contentType: null,
+    } as ReminderRecord,
+    deliveryKey: 'delivery-key',
+    attempt: 0,
+  });
+
+  assert.equal(result.status, 'sent');
+  assert.equal(requests[0]?.title, 'Bring photos');
+  assert.equal(requests[0]?.body, '');
 });
 
 test('notification sender returns failed when there are no device tokens', async () => {

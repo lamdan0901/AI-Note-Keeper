@@ -100,6 +100,8 @@ export type ReminderRecord = Readonly<{
   id: string;
   userId: string;
   title: string | null;
+  content?: string | null;
+  contentType?: string | null;
   triggerAt: Date;
   done: boolean | null;
   repeatRule: string | null;

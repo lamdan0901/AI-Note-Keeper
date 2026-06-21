@@ -205,10 +205,7 @@ export const handleFcmMessage = async (remoteMessage: FcmRemoteMessage): Promise
   // Defensive fallback: if the server sent the legacy placeholder, look up the
   // note locally and render real text. Covers older backend builds and any
   // future case where the push payload is missing the note fields.
-  if (
-    !isSubscriptionNotification &&
-    (isLegacyPlaceholder(title, body) || (!titleText && !bodyText))
-  ) {
+  if (!isSubscriptionNotification && (isLegacyPlaceholder(title, body) || bodyText.length === 0)) {
     const resolved = await resolveNotificationTextFromNote(reminderId, title, body);
     title = resolved.title;
     body = resolved.body;

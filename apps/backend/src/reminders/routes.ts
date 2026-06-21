@@ -26,6 +26,15 @@ type ReminderCreateBody = z.infer<typeof reminderCreateBodySchema>;
 type ReminderUpdateBody = z.infer<typeof reminderUpdateBodySchema>;
 type ReminderAckBody = z.infer<typeof reminderAckBodySchema>;
 type ReminderSnoozeBody = z.infer<typeof reminderSnoozeBodySchema>;
+type PublicReminderRecord = Omit<
+  ReminderRecord,
+  | 'scheduleProvider'
+  | 'scheduleTargetId'
+  | 'scheduleTargetVersion'
+  | 'scheduleTargetFireAt'
+  | 'content'
+  | 'contentType'
+>;
 
 const requireUserId = (request: AuthenticatedRequest): string => {
   return request.authUser.userId;
@@ -33,10 +42,7 @@ const requireUserId = (request: AuthenticatedRequest): string => {
 
 const serializeReminder = (
   reminder: ReminderRecord | null,
-): Omit<
-  ReminderRecord,
-  'scheduleProvider' | 'scheduleTargetId' | 'scheduleTargetVersion' | 'scheduleTargetFireAt'
-> | null => {
+): PublicReminderRecord | null => {
   if (reminder === null) {
     return null;
   }
@@ -46,10 +52,12 @@ const serializeReminder = (
     scheduleTargetId: _scheduleTargetId,
     scheduleTargetVersion: _scheduleTargetVersion,
     scheduleTargetFireAt: _scheduleTargetFireAt,
+    content: _content,
+    contentType: _contentType,
     ...publicReminder
   } = reminder;
 
-  return publicReminder;
+  return publicReminder as PublicReminderRecord;
 };
 
 export const createRemindersRoutes = (

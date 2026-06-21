@@ -1,6 +1,7 @@
 import type { DeviceTokensRepository } from '../device-tokens/repositories/device-tokens-repository.js';
 import type { PushDeliveryService } from '../jobs/push/contracts.js';
 import type { ReminderRecord } from './contracts.js';
+import { renderReminderNotificationText } from './notification-text.js';
 
 export type ReminderNotificationSendResult = Readonly<{
   status: 'sent' | 'failed';
@@ -16,11 +17,6 @@ export type ReminderNotificationSender = Readonly<{
   ) => Promise<ReminderNotificationSendResult>;
 }>;
 
-const renderReminderTitle = (reminder: ReminderRecord): string => {
-  const title = (reminder.title ?? '').trim();
-  return title.length > 0 ? title : 'Reminder';
-};
-
 export const createReminderNotificationSender = (
   deps: Readonly<{
     deviceTokensRepository: Pick<DeviceTokensRepository, 'listByUserId'>;
@@ -28,6 +24,7 @@ export const createReminderNotificationSender = (
   }>,
 ): ReminderNotificationSender => ({
   sendReminderNotification: async ({ reminder, deliveryKey, attempt }) => {
+    const text = renderReminderNotificationText(reminder);
     const tokens = await deps.deviceTokensRepository.listByUserId(reminder.userId);
     if (tokens.length === 0) {
       return { status: 'failed', delivered: 0, failed: 0, reason: 'no_device_tokens' };
@@ -48,8 +45,8 @@ export const createReminderNotificationSender = (
           deviceId: token.deviceId,
           fcmToken: token.fcmToken,
         },
-        title: renderReminderTitle(reminder),
-        body: '',
+        title: text.title,
+        body: text.body,
       });
 
       if (result.classification === 'delivered') {

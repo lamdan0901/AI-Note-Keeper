@@ -4,6 +4,7 @@ import type { SQLiteDatabase } from 'expo-sqlite/next';
 const showNow = jest.fn();
 const scheduleNotificationAsync = jest.fn(async () => 'expo-id');
 const getDb = jest.fn<() => Promise<SQLiteDatabase>>();
+const getNoteById = jest.fn(async () => null);
 const hasNotificationSentWithin = jest.fn(async () => false);
 const recordNotificationSent = jest.fn(
   async (_db: SQLiteDatabase, _reminderId: string, _eventId: string, _source: string) => undefined,
@@ -44,7 +45,7 @@ jest.mock('../../src/db/bootstrap', () => ({
 }));
 
 jest.mock('../../src/db/notesRepo', () => ({
-  getNoteById: jest.fn(async () => null),
+  getNoteById,
   upsertNote: jest.fn(async () => undefined),
   deleteNote: jest.fn(async () => undefined),
 }));
@@ -70,6 +71,7 @@ describe('FCM reminder trigger delivery', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     getDb.mockResolvedValue(mockDb);
+    getNoteById.mockResolvedValue(null);
     hasNotificationSentWithin.mockResolvedValue(false);
   });
 
@@ -94,5 +96,33 @@ describe('FCM reminder trigger delivery', () => {
     );
     expect(scheduleNotificationAsync).not.toHaveBeenCalled();
     expect(recordNotificationSent).toHaveBeenCalledWith(mockDb, 'note-1', 'note-1-123', 'fcm');
+  });
+
+  it('rebuilds missing FCM body text from the local note before showing the notification', async () => {
+    getNoteById.mockResolvedValue({
+      id: 'note-1',
+      title: 'Renew passport',
+      content: 'Bring photos',
+      contentType: null,
+    } as never);
+
+    await handleFcmMessage({
+      messageId: 'message-2',
+      data: {
+        type: 'trigger_reminder',
+        reminderId: 'note-1',
+        eventId: 'note-1-124',
+        title: 'Renew passport',
+        body: '',
+      },
+    });
+
+    expect(showNow).toHaveBeenCalledTimes(1);
+    expect(showNow).toHaveBeenCalledWith(
+      'note-1',
+      'Renew passport',
+      'Bring photos',
+      'note-1-124',
+    );
   });
 });
