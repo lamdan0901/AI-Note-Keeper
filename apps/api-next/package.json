@@ -1,0 +1,22 @@
+{
+  "name": "@ai-note-keeper/api-next",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "dev": "next dev --webpack -p 3001",
+    "build": "next build",
+    "start": "next start -p 3001",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test tests && tsx --test tests/pool-error-handling.test.ts tests/compose-services.test.ts tests/dependency-gate.test.ts tests/http-errors.test.ts tests/http-validate.test.ts tests/with-api-handler.test.ts tests/cors.test.ts tests/auth-transport.test.ts tests/health-contract.test.ts tests/phase-0-exit.test.ts"
+  },
+  "dependencies": {
+    "next": "16.2.9",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "tsx": "^4.21.0",
+    "@types/react": "^19",
+    "typescript": "^5"
+  }
+}

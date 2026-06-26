@@ -39,5 +39,5 @@ TypeScript (React for web, React Native/Expo for Android): follow standard TypeS
 
 <!-- MANUAL ADDITIONS START -->
 
-- Don't run build android to verify changes. just run lint, test (if needed) and typecheck
+- Don't run build to verify changes. just run lint, test (if needed) and typecheck
 <!-- MANUAL ADDITIONS END -->
