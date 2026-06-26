@@ -2,6 +2,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { AddressInfo } from "node:net";
 import { NextRequest } from "next/server";
 
+import { GET as sampleHandler } from "../../app/api/sample/route";
 import { GET as healthLiveHandler } from "../../app/health/live/route";
 import { GET as healthReadyHandler } from "../../app/health/ready/route";
 import type { RouteContext } from "../../src/http/types";
@@ -32,6 +33,7 @@ export type StartNextTestServerOptions = Readonly<{
 const defaultRoutes: ReadonlyArray<RouteRegistration> = [
   { method: "GET", pathname: "/health/live", handler: healthLiveHandler },
   { method: "GET", pathname: "/health/ready", handler: healthReadyHandler },
+  { method: "GET", pathname: "/api/sample", handler: sampleHandler },
 ];
 
 const buildRouteKey = (method: string, pathname: string): string => {
@@ -161,7 +163,7 @@ const waitForServerReady = async (
 export const startNextTestServer = async (
   options: StartNextTestServerOptions = {},
 ): Promise<NextTestServer> => {
-  const routes = options.routes ?? defaultRoutes;
+  const routes = [...defaultRoutes, ...(options.routes ?? [])];
   const routeMap = buildRouteMap(routes);
   const readyTimeoutMs = options.readyTimeoutMs ?? 5_000;
   const readyProbePath = options.readyProbePath ?? "/health/live";
@@ -242,4 +244,8 @@ export const getHealthLive = (server: NextTestServer): Promise<Response> => {
 
 export const getHealthReady = (server: NextTestServer): Promise<Response> => {
   return server.fetch("/health/ready");
+};
+
+export const getSample = (server: NextTestServer): Promise<Response> => {
+  return server.fetch("/api/sample");
 };

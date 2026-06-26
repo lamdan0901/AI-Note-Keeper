@@ -3,10 +3,14 @@ import type { z } from "zod";
 
 import { AppError } from "@backend/middleware/error-middleware";
 
+import {
+  isAuthHandlerResult,
+  toAuthHandlerResponse,
+} from "@/http/auth/post-handler";
 import { parseCookies } from "@/http/auth/transport";
 import { applyCorsHeaders, handleCorsPreflight } from "@/http/cors";
 import { toErrorResponse } from "@/http/errors";
-import type { RequestContext, RouteContext } from "@/http/types";
+import type { PostHandlerHook, RequestContext, RouteContext } from "@/http/types";
 import { parseOrThrow } from "@/http/validate";
 import { assertHealthyDependencies } from "@/server/dependency-gate";
 
@@ -17,11 +21,6 @@ type ValidationSchemas = Readonly<{
 }>;
 
 export type ApiMiddleware = (ctx: RequestContext) => void | Promise<void>;
-
-export type PostHandlerHook = (
-  ctx: RequestContext,
-  response: NextResponse,
-) => NextResponse | void | Promise<NextResponse | void>;
 
 export type ApiHandlerResult =
   | unknown
@@ -204,13 +203,17 @@ export const withApiHandler = (
 
       const result = await handler(ctx);
 
-      let response =
-        result instanceof AppError
-          ? toErrorResponse(result, request)
-          : toSuccessResponse(result);
+      let response: NextResponse;
+      if (result instanceof AppError) {
+        response = toErrorResponse(result, request);
+      } else if (isAuthHandlerResult(result)) {
+        response = toAuthHandlerResponse(result);
+      } else {
+        response = toSuccessResponse(result);
+      }
 
       if (options?.postHandler) {
-        const modified = await options.postHandler(ctx, response);
+        const modified = await options.postHandler(ctx, response, result);
         if (modified) {
           response = modified;
         }

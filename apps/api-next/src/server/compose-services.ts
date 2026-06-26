@@ -79,3 +79,11 @@ export const getComposedServices = (): ComposedServices => {
   return composedServices;
 };
 
+export const setComposedServicesForTests = (services: ComposedServices): void => {
+  composedServices = services;
+};
+
+export const resetComposedServicesForTests = (): void => {
+  composedServices = null;
+};
+

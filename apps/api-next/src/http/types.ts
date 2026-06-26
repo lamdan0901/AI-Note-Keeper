@@ -1,4 +1,4 @@
-import type { NextRequest } from "next/server";
+import type { NextRequest, NextResponse } from "next/server";
 
 export type RequestContext = Readonly<{
   request: NextRequest;
@@ -16,3 +16,9 @@ export type RequestContext = Readonly<{
 export type RouteContext = Readonly<{
   params?: Promise<Readonly<Record<string, string>>> | Readonly<Record<string, string>>;
 }>;
+
+export type PostHandlerHook = (
+  ctx: RequestContext,
+  response: NextResponse,
+  result?: unknown,
+) => NextResponse | void | Promise<NextResponse | void>;

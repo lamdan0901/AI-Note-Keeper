@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start -p 3001",
     "typecheck": "tsc --noEmit",
-    "test": "node --test tests && tsx --test tests/pool-error-handling.test.ts tests/compose-services.test.ts tests/dependency-gate.test.ts tests/http-errors.test.ts tests/http-validate.test.ts tests/with-api-handler.test.ts tests/cors.test.ts tests/auth-transport.test.ts tests/health-contract.test.ts tests/phase-0-exit.test.ts"
+    "test": "node --test tests && tsx --test tests/pool-error-handling.test.ts tests/compose-services.test.ts tests/dependency-gate.test.ts tests/dependency-gate-api.test.ts tests/http-errors.test.ts tests/http-validate.test.ts tests/with-api-handler.test.ts tests/cors.test.ts tests/auth-transport.test.ts tests/auth-rate-limit.test.ts tests/auth-shared.test.ts tests/auth-handlers.test.ts tests/auth-post-handler.test.ts tests/auth-test-harness.test.ts tests/auth-register-login-routes.test.ts tests/sample-route.test.ts tests/health-contract.test.ts tests/phase-0-exit.test.ts"
   },
   "dependencies": {
     "next": "16.2.9",
