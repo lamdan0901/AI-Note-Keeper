@@ -14,6 +14,11 @@ import {
 } from "@backend/reminders/runtime";
 import type { ScheduledTaskExecutor } from "@backend/reminders/scheduled-task-executor";
 import type { RemindersService } from "@backend/reminders/service";
+
+import {
+  createComposedReminderRepairJob,
+  type ReminderRepairJob,
+} from "@/server/reminder-repair";
 import {
   createSubscriptionsService,
   type SubscriptionsService,
@@ -35,6 +40,7 @@ export type ComposedServices = Readonly<{
   aiRateLimiter: AiRateLimiter;
   reminderScheduledTaskExecutor?: ScheduledTaskExecutor;
   reminderQstashVerifierConfig?: QstashVerifierConfig;
+  reminderRepairJob?: ReminderRepairJob;
 }>;
 
 export { createReadinessProbe, ensureApiNextStartup, runInitialStartupChecks } from "@/server/startup";
@@ -65,6 +71,9 @@ export const composeServices = (): ComposedServices => {
       : undefined,
     reminderQstashVerifierConfig: reminderRuntime.schedulerCallbacksEnabled
       ? (reminderRuntime.qstashVerifierConfig ?? undefined)
+      : undefined,
+    reminderRepairJob: reminderRuntime.schedulerCallbacksEnabled
+      ? createComposedReminderRepairJob(reminderRuntime)
       : undefined,
   };
 };

@@ -60,3 +60,136 @@ npm run dev
 ```
 
 Listens on [http://localhost:3001](http://localhost:3001).
+
+## Staging QStash end-to-end verification
+
+Use this runbook to confirm the Phase 3 reminders pipeline: create → QStash schedule → signed callback → executor → next occurrence (recurring) or completion (one-time). Copy the checklist into PR #5 when merging Phase 3.
+
+**Prerequisites**
+
+- Postgres reachable with the same `DATABASE_URL` as `apps/backend`
+- Upstash QStash project with signing keys
+- api-next exposed on a **public HTTPS** origin (deployed staging host, or local tunnel — QStash cannot POST to `localhost`)
+
+### 1. Configure environment
+
+Copy `apps/api-next/.env.example` to `.env.local` and set:
+
+| Variable | Value |
+|----------|-------|
+| `REMINDER_SCHEDULER_PROVIDER` | `qstash` |
+| `REMINDER_SCHEDULER_CALLBACK_BASE_URL` | Public HTTPS base of api-next (no trailing path) |
+| `QSTASH_TOKEN` | Upstash QStash token |
+| `QSTASH_CURRENT_SIGNING_KEY` | Current signing key from Upstash console |
+| `QSTASH_NEXT_SIGNING_KEY` | Next signing key from Upstash console |
+
+Runtime builds the callback URL as:
+
+```text
+{REMINDER_SCHEDULER_CALLBACK_BASE_URL}/internal/reminders/scheduled-task
+```
+
+With `REMINDER_SCHEDULER_PROVIDER=disabled` (local default), that internal route returns **404** — expected for CRUD-only dev.
+
+### 2. Expose api-next (local staging-like flow)
+
+```bash
+# Terminal 1 — api-next with qstash provider
+npm run dev:api-next
+
+# Terminal 2 — tunnel (pick one)
+ngrok http 3001
+# cloudflared tunnel --url http://localhost:3001
+```
+
+Set `REMINDER_SCHEDULER_CALLBACK_BASE_URL` to the tunnel HTTPS origin (e.g. `https://abc123.ngrok-free.app`), restart api-next, and confirm:
+
+```bash
+curl -s -o /dev/null -w "%{http_code}" -X POST \
+  "$REMINDER_SCHEDULER_CALLBACK_BASE_URL/internal/reminders/scheduled-task"
+# Expect 401 (route mounted, signature missing) — not 404
+```
+
+### 3. Obtain a bearer token
+
+```bash
+curl -s -X POST http://localhost:3001/api/auth/login \
+  -H "Content-Type: application/json" \
+  -H "x-client-platform: web" \
+  -H "Origin: http://localhost:5173" \
+  -d '{"username":"alice","password":"password-123"}' | jq -r .accessToken
+```
+
+Export as `ACCESS_TOKEN` for the steps below.
+
+### 4. Create a one-time reminder (near-future fire)
+
+```bash
+TRIGGER_MS=$(($(date +%s) * 1000 + 120000))  # ~2 minutes from now
+
+curl -s -X POST http://localhost:3001/api/reminders \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{\"id\":\"e2e-smoke-once\",\"title\":\"QStash smoke\",\"triggerAt\":$TRIGGER_MS,\"active\":true,\"timezone\":\"UTC\"}" | jq .
+```
+
+**Expect:** `200` with `{ "reminder": { ... } }`. Scheduler metadata (`scheduleProvider`, `scheduleTargetId`, etc.) is stripped from the response.
+
+### 5. Confirm QStash received the schedule
+
+In the [Upstash QStash console](https://console.upstash.com/qstash), verify a new message targeting:
+
+```text
+{REMINDER_SCHEDULER_CALLBACK_BASE_URL}/internal/reminders/scheduled-task
+```
+
+Delivery should be scheduled for roughly the `triggerAt` you set.
+
+### 6. Confirm callback execution
+
+After the scheduled time:
+
+1. **Upstash:** delivery status `DELIVERED` (HTTP 200 from api-next).
+2. **api-next logs:** no `Invalid QStash signature` / auth errors on the internal route.
+3. **Reminder state** — re-fetch:
+
+```bash
+curl -s http://localhost:3001/api/reminders/e2e-smoke-once \
+  -H "Authorization: Bearer $ACCESS_TOKEN" | jq .
+```
+
+**One-time reminder expect:** `nextTriggerAt` is `null` (no successor). `lastFiredAt` updated.
+
+### 7. Recurring reminder — successor scheduled
+
+```bash
+TRIGGER_MS=$(($(date +%s) * 1000 + 120000))
+
+curl -s -X POST http://localhost:3001/api/reminders \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{\"id\":\"e2e-smoke-daily\",\"title\":\"QStash recurring\",\"triggerAt\":$TRIGGER_MS,\"active\":true,\"timezone\":\"UTC\",\"repeat\":{\"kind\":\"daily\",\"interval\":1},\"startAt\":$TRIGGER_MS}" | jq .
+```
+
+After the first fire:
+
+- `GET /api/reminders/e2e-smoke-daily` shows `nextTriggerAt` advanced to the next daily occurrence.
+- Upstash shows a **new** scheduled message for the successor (see integration test `schedule:reminder-1:1` pattern in `tests/reminders-scheduler-integration.test.ts`).
+
+### 8. Negative checks (optional)
+
+| Check | Command / action | Expect |
+|-------|------------------|--------|
+| Internal route hidden when disabled | `REMINDER_SCHEDULER_PROVIDER=disabled`, POST internal path | `404` |
+| Missing signature | POST internal path without `Upstash-Signature` | `401` `Invalid QStash signature` |
+| Idempotent replay | Same QStash payload delivered twice | Second response `{ "status": "duplicate" }` or `{ "status": "stale" }` |
+
+### Automated coverage (no tunnel)
+
+These tests mock QStash and do not require a public callback URL:
+
+```bash
+npm run test:api-next -- tests/internal-routes.test.ts tests/reminders-scheduler-integration.test.ts
+```
+
+Use this runbook for staging/tunnel E2E; use the tests above for CI and local iteration.

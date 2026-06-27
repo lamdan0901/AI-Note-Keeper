@@ -42,7 +42,7 @@ export type WithApiHandlerOptions = Readonly<{
   cors?: boolean;
 }>;
 
-const METHODS_WITHOUT_BODY = new Set(["GET", "HEAD", "OPTIONS"]);
+const METHODS_WITHOUT_BODY = new Set(["GET", "HEAD", "OPTIONS", "DELETE"]);
 
 const resolveClientIp = (request: NextRequest): string | null => {
   const forwardedFor = request.headers.get("x-forwarded-for");

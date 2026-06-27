@@ -2,6 +2,10 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { AddressInfo } from "node:net";
 import { NextRequest } from "next/server";
 
+import { AppError } from "@backend/middleware/error-middleware";
+
+import { toErrorResponse } from "../../src/http/errors";
+
 import { GET as sampleHandler } from "../../app/api/sample/route";
 import { GET as healthLiveHandler } from "../../app/health/live/route";
 import { GET as healthReadyHandler } from "../../app/health/ready/route";
@@ -18,6 +22,8 @@ export type RouteRegistration = Readonly<{
   handler: RouteHandler;
   /** Dynamic segment pattern (e.g. `/api/notes/:noteId/restore`). */
   pattern?: string;
+  /** Preserve exact raw request body bytes (for QStash signature verification etc.). */
+  rawBody?: boolean;
 }>;
 
 export type NextTestServer = Readonly<{
@@ -45,6 +51,7 @@ const buildRouteKey = (method: string, pathname: string): string => {
 type ResolvedRoute = Readonly<{
   handler: RouteHandler;
   params: Readonly<Record<string, string>>;
+  rawBody?: boolean;
 }>;
 
 const isDynamicSegment = (segment: string): boolean => {
@@ -95,6 +102,19 @@ const buildRouteMap = (
   return map;
 };
 
+// Track rawBody intent for direct (non-pattern) routes by key.
+const buildRawBodyDirectMap = (
+  routes: ReadonlyArray<RouteRegistration>,
+): ReadonlyMap<string, boolean> => {
+  const map = new Map<string, boolean>();
+  for (const route of routes) {
+    if (!route.pattern && route.rawBody) {
+      map.set(buildRouteKey(route.method, route.pathname), true);
+    }
+  }
+  return map;
+};
+
 const buildPatternRoutes = (
   routes: ReadonlyArray<RouteRegistration>,
 ): ReadonlyArray<RouteRegistration> => {
@@ -121,6 +141,8 @@ const readRequestBody = async (request: IncomingMessage): Promise<Buffer | undef
 const toNextRequest = async (
   incoming: IncomingMessage,
   baseUrl: string,
+  /** When true, body is passed as the original text string to preserve byte-for-byte fidelity (e.g. QStash signatures). */
+  preserveRawBody = false,
 ): Promise<NextRequest> => {
   const url = new URL(incoming.url ?? "/", baseUrl);
   const headers = new Headers();
@@ -141,11 +163,16 @@ const toNextRequest = async (
   }
 
   const body = await readRequestBody(incoming);
+  const rawBodyText = body ? body.toString("utf8") : undefined;
+
+  // Use the original string when raw preservation is requested.
+  // This avoids any Uint8Array round-tripping that could affect signature verification.
+  const bodyInit = preserveRawBody && rawBodyText !== undefined ? rawBodyText : rawBodyText !== undefined ? new Uint8Array(body!) : undefined;
 
   return new NextRequest(url, {
     method: incoming.method,
     headers,
-    body: body ? new Uint8Array(body) : undefined,
+    body: bodyInit,
   });
 };
 
@@ -169,6 +196,7 @@ const resolveRoute = (
   const normalizedMethod = method.toUpperCase();
   const direct = routeMap.get(buildRouteKey(normalizedMethod, pathname));
   if (direct) {
+    // Direct routes don't have rawBody flag attached here; caller can fall back to registration scan if needed.
     return { handler: direct, params: {} };
   }
 
@@ -179,7 +207,7 @@ const resolveRoute = (
 
     const params = matchRoutePattern(route.pattern, pathname);
     if (params) {
-      return { handler: route.handler, params };
+      return { handler: route.handler, params, rawBody: route.rawBody };
     }
   }
 
@@ -227,6 +255,7 @@ export const startNextTestServer = async (
 ): Promise<NextTestServer> => {
   const routes = [...defaultRoutes, ...(options.routes ?? [])];
   const routeMap = buildRouteMap(routes);
+  const rawBodyDirectMap = buildRawBodyDirectMap(routes);
   const patternRoutes = buildPatternRoutes(routes);
   const readyTimeoutMs = options.readyTimeoutMs ?? 5_000;
   const readyProbePath = options.readyProbePath ?? "/health/live";
@@ -250,12 +279,20 @@ export const startNextTestServer = async (
           );
 
           if (!resolved) {
-            nodeResponse.statusCode = 404;
-            nodeResponse.end();
+            const notFoundResponse = toErrorResponse(
+              new AppError({ code: "not_found" }),
+              new NextRequest(requestUrl, { method: incoming.method ?? "GET" }),
+            );
+            await writeResponse(nodeResponse, notFoundResponse);
             return;
           }
 
-          const request = await toNextRequest(incoming, baseUrl);
+          const directRaw = rawBodyDirectMap.get(
+            buildRouteKey((incoming.method ?? "GET").toUpperCase(), requestUrl.pathname),
+          );
+          const wantsRaw = resolved.rawBody === true || directRaw === true;
+
+          const request = await toNextRequest(incoming, baseUrl, wantsRaw);
           const response = await resolved.handler(request, {
             params: Promise.resolve(resolved.params),
           });
@@ -315,3 +352,18 @@ export const getHealthReady = (server: NextTestServer): Promise<Response> => {
 export const getSample = (server: NextTestServer): Promise<Response> => {
   return server.fetch("/api/sample");
 };
+
+/**
+ * Helper for registering the internal QStash scheduled-task route (and similar raw-body routes).
+ * Pass this in the `routes` array to startNextTestServer.
+ */
+export const createInternalRawRoute = (
+  method: string,
+  pathname: string,
+  handler: RouteHandler,
+): RouteRegistration => ({
+  method,
+  pathname,
+  handler,
+  rawBody: true,
+});
