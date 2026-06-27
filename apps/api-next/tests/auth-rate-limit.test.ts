@@ -6,7 +6,7 @@ import { NextRequest } from "next/server";
 import { AppError } from "@backend/middleware/error-middleware";
 
 import { createAuthRateLimiter } from "../src/http/auth/rate-limit";
-import type { RequestContext } from "../src/http/types";
+import { EMPTY_ROUTE_CONTEXT, type RequestContext } from "../src/http/types";
 import { withApiHandler } from "../src/http/with-api-handler";
 
 const createContext = (clientIp: string | null): RequestContext => {
@@ -103,10 +103,10 @@ test("withApiHandler maps rate limit middleware to 429 response", async () => {
     headers: { "x-forwarded-for": "198.51.100.12" },
   });
 
-  const firstResponse = await handler(request);
+  const firstResponse = await handler(request, EMPTY_ROUTE_CONTEXT);
   assert.equal(firstResponse.status, 200);
 
-  const secondResponse = await handler(request);
+  const secondResponse = await handler(request, EMPTY_ROUTE_CONTEXT);
   const payload = (await secondResponse.json()) as Record<string, unknown>;
 
   assert.equal(secondResponse.status, 429);

@@ -8,6 +8,7 @@ import {
   handleCorsPreflight,
   resolveEffectiveAllowedOrigins,
 } from "../src/http/cors";
+import { EMPTY_ROUTE_CONTEXT } from "../src/http/types";
 import { withApiHandler } from "../src/http/with-api-handler";
 
 const restoreEnv = (
@@ -149,7 +150,7 @@ test("withApiHandler applies CORS headers on successful responses", async () => 
     const request = new NextRequest("http://localhost:3001/api/sample", {
       headers: { Origin: "http://localhost:5173" },
     });
-    const response = await handler(request);
+    const response = await handler(request, EMPTY_ROUTE_CONTEXT);
 
     assert.equal(response.status, 200);
     assert.equal(response.headers.get("access-control-allow-origin"), "http://localhost:5173");
@@ -178,7 +179,7 @@ test("withApiHandler short-circuits OPTIONS preflight before handler", async () 
         "Access-Control-Request-Method": "POST",
       },
     });
-    const response = await handler(request);
+    const response = await handler(request, EMPTY_ROUTE_CONTEXT);
 
     assert.equal(handlerInvoked, false);
     assert.equal(response.status, 204);

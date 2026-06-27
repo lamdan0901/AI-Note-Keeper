@@ -54,6 +54,28 @@ describe('notes express api transport', () => {
     expect(fetchSpy.mock.calls[1]?.[0]).toBe('http://localhost:3000/api/notes/sync');
   });
 
+  it('only changes host via VITE_API_BASE_URL at api-next cutover', async () => {
+    vi.stubEnv('VITE_API_BASE_URL', 'http://localhost:3001');
+
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ notes: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      );
+
+    const client = createWebApiClient({
+      getAccessToken: () => 'token',
+      refreshAccessToken: async () => 'token',
+    });
+
+    await client.requestJson('/api/notes');
+
+    expect(fetchSpy.mock.calls[0]?.[0]).toBe('http://localhost:3001/api/notes');
+  });
+
   it('locks polling interval at 30 seconds', () => {
     expect(NOTES_POLL_INTERVAL_MS).toBe(30_000);
   });

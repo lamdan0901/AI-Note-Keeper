@@ -11,7 +11,7 @@ import {
   resetPoolErrorStateForTests,
   type PoolErrorEventTarget,
 } from "../src/db/pool";
-import type { RequestContext } from "../src/http/types";
+import { EMPTY_ROUTE_CONTEXT, type RequestContext } from "../src/http/types";
 import { withApiHandler } from "../src/http/with-api-handler";
 
 const createMockPool = (): PoolErrorEventTarget & Readonly<{ emit: (error: Error) => void }> => {
@@ -37,7 +37,7 @@ const readJson = async (response: Response): Promise<Record<string, unknown>> =>
 test("withApiHandler returns JSON 200 for plain object results", async () => {
   const handler = withApiHandler(async () => ({ ok: true, count: 2 }));
   const request = new NextRequest("http://localhost:3001/api/sample");
-  const response = await handler(request);
+  const response = await handler(request, EMPTY_ROUTE_CONTEXT);
   const payload = await readJson(response);
 
   assert.equal(response.status, 200);
@@ -49,7 +49,7 @@ test("withApiHandler maps thrown AppError to error response", async () => {
     throw new AppError({ code: "forbidden", message: "Denied" });
   });
   const request = new NextRequest("http://localhost:3001/api/sample");
-  const response = await handler(request);
+  const response = await handler(request, EMPTY_ROUTE_CONTEXT);
   const payload = await readJson(response);
 
   assert.equal(response.status, 403);
@@ -63,7 +63,7 @@ test("withApiHandler maps thrown AppError to error response", async () => {
 test("withApiHandler maps returned AppError to error response", async () => {
   const handler = withApiHandler(async () => new AppError({ code: "not_found" }));
   const request = new NextRequest("http://localhost:3001/api/missing");
-  const response = await handler(request);
+  const response = await handler(request, EMPTY_ROUTE_CONTEXT);
   const payload = await readJson(response);
 
   assert.equal(response.status, 404);
@@ -101,7 +101,7 @@ test("withApiHandler parses cookies from Cookie header", async () => {
       cookie: "ank_refresh_token=refresh-token; other=value",
     },
   });
-  const response = await handler(request);
+  const response = await handler(request, EMPTY_ROUTE_CONTEXT);
   const payload = await readJson(response);
 
   assert.deepStrictEqual(capturedCookies, {
@@ -125,7 +125,7 @@ test("withApiHandler exposes forwarded proto and client IP on context", async ()
       "x-forwarded-for": "203.0.113.10, 10.0.0.1",
     },
   });
-  await handler(request);
+  await handler(request, EMPTY_ROUTE_CONTEXT);
 
   assert.equal(capturedContext?.forwardedProto, "https");
   assert.equal(capturedContext?.clientIp, "203.0.113.10");
@@ -146,7 +146,7 @@ test("withApiHandler runs optional validation before handler", async () => {
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ amount: 7 }),
   });
-  const validResponse = await handler(validRequest);
+  const validResponse = await handler(validRequest, EMPTY_ROUTE_CONTEXT);
   const validPayload = await readJson(validResponse);
 
   assert.equal(validResponse.status, 200);
@@ -157,7 +157,7 @@ test("withApiHandler runs optional validation before handler", async () => {
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ amount: -1 }),
   });
-  const invalidResponse = await handler(invalidRequest);
+  const invalidResponse = await handler(invalidRequest, EMPTY_ROUTE_CONTEXT);
   const invalidPayload = await readJson(invalidResponse);
 
   assert.equal(invalidResponse.status, 400);
@@ -169,7 +169,7 @@ test("withApiHandler passes through NextResponse results", async () => {
     NextResponse.json({ custom: true }, { status: 201 }),
   );
   const request = new NextRequest("http://localhost:3001/api/sample");
-  const response = await handler(request);
+  const response = await handler(request, EMPTY_ROUTE_CONTEXT);
   const payload = await readJson(response);
 
   assert.equal(response.status, 201);
@@ -197,9 +197,101 @@ test("withApiHandler runs middleware chain before handler", async () => {
   );
 
   const request = new NextRequest("http://localhost:3001/api/sample");
-  await handler(request);
+  await handler(request, EMPTY_ROUTE_CONTEXT);
 
   assert.deepStrictEqual(order, ["mw-1", "mw-2", "handler"]);
+});
+
+test("withApiHandler applies context returned by enriching middleware", async () => {
+  let capturedAuthUser: RequestContext["authUser"];
+
+  const handler = withApiHandler(
+    async (ctx) => {
+      capturedAuthUser = ctx.authUser;
+      return { userId: ctx.authUser?.userId ?? null };
+    },
+    {
+      middleware: [
+        (ctx) => ({
+          ...ctx,
+          authUser: {
+            userId: "user-123",
+            username: "test-user",
+          },
+        }),
+      ],
+    },
+  );
+
+  const request = new NextRequest("http://localhost:3001/api/notes");
+  const response = await handler(request, EMPTY_ROUTE_CONTEXT);
+  const payload = await readJson(response);
+
+  assert.deepStrictEqual(capturedAuthUser, {
+    userId: "user-123",
+    username: "test-user",
+  });
+  assert.deepStrictEqual(payload, { userId: "user-123" });
+});
+
+test("withApiHandler chains enriching middleware immutably", async () => {
+  let capturedAuthUser: RequestContext["authUser"];
+
+  const handler = withApiHandler(
+    async (ctx) => {
+      capturedAuthUser = ctx.authUser;
+      return { ok: true };
+    },
+    {
+      middleware: [
+        (ctx) => ({
+          ...ctx,
+          authUser: {
+            userId: "user-123",
+            username: "first",
+          },
+        }),
+        (ctx) => ({
+          ...ctx,
+          authUser: {
+            userId: ctx.authUser?.userId ?? "missing",
+            username: "second",
+          },
+        }),
+      ],
+    },
+  );
+
+  const request = new NextRequest("http://localhost:3001/api/notes");
+  await handler(request, EMPTY_ROUTE_CONTEXT);
+
+  assert.deepStrictEqual(capturedAuthUser, {
+    userId: "user-123",
+    username: "second",
+  });
+});
+
+test("withApiHandler leaves context unchanged when middleware returns void", async () => {
+  let capturedAuthUser: RequestContext["authUser"];
+
+  const handler = withApiHandler(
+    async (ctx) => {
+      capturedAuthUser = ctx.authUser;
+      return { ok: true };
+    },
+    {
+      middleware: [
+        async () => {
+          // side-effect-only middleware (e.g. rate limiter)
+        },
+      ],
+    },
+  );
+
+  const request = new NextRequest("http://localhost:3001/api/auth/login");
+  await handler(request, EMPTY_ROUTE_CONTEXT);
+
+  assert.equal(capturedAuthUser, undefined);
 });
 
 test("withApiHandler returns 500 internal when requireHealthyDependencies and pool is degraded", async () => {
@@ -212,7 +304,7 @@ test("withApiHandler returns 500 internal when requireHealthyDependencies and po
     cors: false,
   });
   const request = new NextRequest("http://localhost:3001/api/sample");
-  const response = await handler(request);
+  const response = await handler(request, EMPTY_ROUTE_CONTEXT);
   const payload = await readJson(response);
 
   assert.equal(response.status, 500);
@@ -232,7 +324,7 @@ test("withApiHandler without requireHealthyDependencies serves traffic when pool
     cors: false,
   });
   const request = new NextRequest("http://localhost:3001/health/live");
-  const response = await handler(request);
+  const response = await handler(request, EMPTY_ROUTE_CONTEXT);
   const payload = await readJson(response);
 
   assert.equal(response.status, 200);

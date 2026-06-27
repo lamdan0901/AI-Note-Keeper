@@ -11,6 +11,7 @@ import {
   resetPoolErrorStateForTests,
   type PoolErrorEventTarget,
 } from "../src/db/pool";
+import { EMPTY_ROUTE_CONTEXT } from "../src/http/types";
 import { withApiHandler } from "../src/http/with-api-handler";
 import { createReadinessProbe } from "../src/server/compose-services";
 import { assertHealthyDependencies } from "../src/server/dependency-gate";
@@ -69,12 +70,16 @@ test("degraded dependencies keep health handlers online and fail gated API handl
 
   const healthyApiResponse = await gatedApiHandler(
     new NextRequest("http://localhost:3001/api/sample"),
+    EMPTY_ROUTE_CONTEXT,
   );
   assert.equal(healthyApiResponse.status, 200);
 
   mockPool.emit(new Error("idle client connection lost"));
 
-  const liveResponse = await liveHandler(new NextRequest("http://localhost:3001/health/live"));
+  const liveResponse = await liveHandler(
+    new NextRequest("http://localhost:3001/health/live"),
+    EMPTY_ROUTE_CONTEXT,
+  );
   const livePayload = await readJson(liveResponse);
   assert.equal(liveResponse.status, 200);
   assert.deepStrictEqual(livePayload, {
@@ -89,6 +94,7 @@ test("degraded dependencies keep health handlers online and fail gated API handl
 
   const degradedApiResponse = await gatedApiHandler(
     new NextRequest("http://localhost:3001/api/sample"),
+    EMPTY_ROUTE_CONTEXT,
   );
   const degradedApiPayload = await readJson(degradedApiResponse);
   assert.equal(degradedApiResponse.status, 500);

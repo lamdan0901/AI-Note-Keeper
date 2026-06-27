@@ -10,7 +10,7 @@ import {
   createAuthPostHandler,
   isAuthHandlerResult,
 } from "../src/http/auth/post-handler";
-import type { RequestContext } from "../src/http/types";
+import { EMPTY_ROUTE_CONTEXT, type RequestContext } from "../src/http/types";
 import { withApiHandler } from "../src/http/with-api-handler";
 
 const createTokenPair = () =>
@@ -113,7 +113,7 @@ test("withApiHandler and createAuthPostHandler set cookie while preserving JSON 
     method: "POST",
     headers: { origin: "http://localhost:5173" },
   });
-  const response = await handler(request);
+  const response = await handler(request, EMPTY_ROUTE_CONTEXT);
   const payload = (await response.json()) as Record<string, unknown>;
   const setCookie = response.headers.get("set-cookie");
 
@@ -139,7 +139,7 @@ test("withApiHandler and createAuthPostHandler clear cookie on logout result", a
     method: "POST",
     headers: { origin: "http://localhost:5173" },
   });
-  const response = await handler(request);
+  const response = await handler(request, EMPTY_ROUTE_CONTEXT);
   const setCookie = response.headers.get("set-cookie");
 
   assert.equal(response.status, 204);
@@ -189,7 +189,7 @@ test("withApiHandler wires auth handlers end-to-end with cookie transport", asyn
     },
     body: JSON.stringify({ username: "bob", password: "password123" }),
   });
-  const loginResponse = await loginHandler(loginRequest);
+  const loginResponse = await loginHandler(loginRequest, EMPTY_ROUTE_CONTEXT);
   const loginPayload = (await loginResponse.json()) as Record<string, unknown>;
 
   assert.equal(loginResponse.status, 200);
@@ -204,7 +204,7 @@ test("withApiHandler wires auth handlers end-to-end with cookie transport", asyn
     },
     body: JSON.stringify({ refreshToken: "refresh-token-value" }),
   });
-  const logoutResponse = await logoutHandler(logoutRequest);
+  const logoutResponse = await logoutHandler(logoutRequest, EMPTY_ROUTE_CONTEXT);
 
   assert.equal(logoutResponse.status, 204);
   assert.ok(logoutResponse.headers.get("set-cookie")?.includes("Max-Age=0"));

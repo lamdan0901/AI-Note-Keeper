@@ -16,6 +16,8 @@ export type RouteRegistration = Readonly<{
   method: string;
   pathname: string;
   handler: RouteHandler;
+  /** Dynamic segment pattern (e.g. `/api/notes/:noteId/restore`). */
+  pattern?: string;
 }>;
 
 export type NextTestServer = Readonly<{
@@ -40,16 +42,63 @@ const buildRouteKey = (method: string, pathname: string): string => {
   return `${method.toUpperCase()} ${pathname}`;
 };
 
+type ResolvedRoute = Readonly<{
+  handler: RouteHandler;
+  params: Readonly<Record<string, string>>;
+}>;
+
+const isDynamicSegment = (segment: string): boolean => {
+  return segment.startsWith(":") && segment.length > 1;
+};
+
+const matchRoutePattern = (
+  pattern: string,
+  pathname: string,
+): Readonly<Record<string, string>> | null => {
+  const patternSegments = pattern.split("/").filter((segment) => segment.length > 0);
+  const pathSegments = pathname.split("/").filter((segment) => segment.length > 0);
+
+  if (patternSegments.length !== pathSegments.length) {
+    return null;
+  }
+
+  const params: Record<string, string> = {};
+
+  for (let index = 0; index < patternSegments.length; index += 1) {
+    const patternSegment = patternSegments[index];
+    const pathSegment = pathSegments[index];
+
+    if (isDynamicSegment(patternSegment)) {
+      params[patternSegment.slice(1)] = pathSegment;
+      continue;
+    }
+
+    if (patternSegment !== pathSegment) {
+      return null;
+    }
+  }
+
+  return params;
+};
+
 const buildRouteMap = (
   routes: ReadonlyArray<RouteRegistration>,
 ): ReadonlyMap<string, RouteHandler> => {
   const map = new Map<string, RouteHandler>();
 
   for (const route of routes) {
-    map.set(buildRouteKey(route.method, route.pathname), route.handler);
+    if (!route.pattern) {
+      map.set(buildRouteKey(route.method, route.pathname), route.handler);
+    }
   }
 
   return map;
+};
+
+const buildPatternRoutes = (
+  routes: ReadonlyArray<RouteRegistration>,
+): ReadonlyArray<RouteRegistration> => {
+  return routes.filter((route) => route.pattern !== undefined);
 };
 
 const readRequestBody = async (request: IncomingMessage): Promise<Buffer | undefined> => {
@@ -111,18 +160,31 @@ const writeResponse = async (nodeResponse: ServerResponse, response: Response): 
   nodeResponse.end(body);
 };
 
-const resolveRouteHandler = (
+const resolveRoute = (
   routeMap: ReadonlyMap<string, RouteHandler>,
+  patternRoutes: ReadonlyArray<RouteRegistration>,
   method: string,
   pathname: string,
-): RouteHandler | undefined => {
-  const direct = routeMap.get(buildRouteKey(method, pathname));
+): ResolvedRoute | undefined => {
+  const normalizedMethod = method.toUpperCase();
+  const direct = routeMap.get(buildRouteKey(normalizedMethod, pathname));
   if (direct) {
-    return direct;
+    return { handler: direct, params: {} };
   }
 
-  if (method.toUpperCase() === "OPTIONS") {
-    return routeMap.get(buildRouteKey("GET", pathname));
+  for (const route of patternRoutes) {
+    if (route.method.toUpperCase() !== normalizedMethod || !route.pattern) {
+      continue;
+    }
+
+    const params = matchRoutePattern(route.pattern, pathname);
+    if (params) {
+      return { handler: route.handler, params };
+    }
+  }
+
+  if (normalizedMethod === "OPTIONS") {
+    return resolveRoute(routeMap, patternRoutes, "GET", pathname);
   }
 
   return undefined;
@@ -165,6 +227,7 @@ export const startNextTestServer = async (
 ): Promise<NextTestServer> => {
   const routes = [...defaultRoutes, ...(options.routes ?? [])];
   const routeMap = buildRouteMap(routes);
+  const patternRoutes = buildPatternRoutes(routes);
   const readyTimeoutMs = options.readyTimeoutMs ?? 5_000;
   const readyProbePath = options.readyProbePath ?? "/health/live";
 
@@ -179,20 +242,23 @@ export const startNextTestServer = async (
 
           const baseUrl = `http://127.0.0.1:${address.port}`;
           const requestUrl = new URL(incoming.url ?? "/", baseUrl);
-          const handler = resolveRouteHandler(
+          const resolved = resolveRoute(
             routeMap,
+            patternRoutes,
             incoming.method ?? "GET",
             requestUrl.pathname,
           );
 
-          if (!handler) {
+          if (!resolved) {
             nodeResponse.statusCode = 404;
             nodeResponse.end();
             return;
           }
 
           const request = await toNextRequest(incoming, baseUrl);
-          const response = await handler(request);
+          const response = await resolved.handler(request, {
+            params: Promise.resolve(resolved.params),
+          });
           await writeResponse(nodeResponse, response);
         } catch (error) {
           nodeResponse.statusCode = 500;

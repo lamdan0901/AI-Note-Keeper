@@ -11,6 +11,7 @@ import {
   shouldUseCookieTransport,
   writeAuthTransport,
 } from "../src/http/auth/transport";
+import { EMPTY_ROUTE_CONTEXT } from "../src/http/types";
 import { withApiHandler } from "../src/http/with-api-handler";
 
 const originalNodeEnv = process.env.NODE_ENV;
@@ -136,7 +137,7 @@ test("withApiHandler postHandler can apply auth transport cookies", async () => 
   const request = new NextRequest("http://localhost:3001/api/auth/login", {
     headers: { origin: "http://localhost:5173" },
   });
-  const response = await handler(request);
+  const response = await handler(request, EMPTY_ROUTE_CONTEXT);
   const setCookie = response.headers.get("set-cookie");
 
   assert.equal(response.status, 200);

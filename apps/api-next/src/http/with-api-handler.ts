@@ -20,7 +20,9 @@ type ValidationSchemas = Readonly<{
   query?: z.ZodType<unknown>;
 }>;
 
-export type ApiMiddleware = (ctx: RequestContext) => void | Promise<void>;
+export type ApiMiddleware = (
+  ctx: RequestContext,
+) => void | RequestContext | Promise<void | RequestContext>;
 
 export type ApiHandlerResult =
   | unknown
@@ -79,18 +81,9 @@ const parseJsonBody = async (request: NextRequest): Promise<unknown> => {
 };
 
 const resolveRouteParams = async (
-  routeContext?: RouteContext,
+  routeContext: RouteContext,
 ): Promise<Readonly<Record<string, string>>> => {
-  if (!routeContext?.params) {
-    return {};
-  }
-
-  const params = routeContext.params;
-  if (params instanceof Promise) {
-    return await params;
-  }
-
-  return params;
+  return await routeContext.params;
 };
 
 const applyValidation = (
@@ -129,7 +122,7 @@ const applyValidation = (
 
 const buildRequestContext = async (
   request: NextRequest,
-  routeContext?: RouteContext,
+  routeContext: RouteContext,
 ): Promise<RequestContext> => {
   const params = await resolveRouteParams(routeContext);
   const body = await parseJsonBody(request);
@@ -167,7 +160,10 @@ const toSuccessResponse = (result: ApiHandlerResult): NextResponse => {
 export const withApiHandler = (
   handler: ApiHandler,
   options?: WithApiHandlerOptions,
-): ((request: NextRequest, routeContext?: RouteContext) => Promise<NextResponse>) => {
+): ((
+  request: NextRequest,
+  routeContext: RouteContext,
+) => Promise<NextResponse>) => {
   return async (request, routeContext) => {
     const corsEnabled = options?.cors ?? true;
 
@@ -194,7 +190,10 @@ export const withApiHandler = (
       let ctx = await buildRequestContext(request, routeContext);
 
       for (const middleware of options?.middleware ?? []) {
-        await middleware(ctx);
+        const updated = await middleware(ctx);
+        if (updated) {
+          ctx = updated;
+        }
       }
 
       if (options?.validation) {
