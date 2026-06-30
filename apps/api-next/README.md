@@ -63,7 +63,7 @@ Listens on [http://localhost:3001](http://localhost:3001).
 
 ## Worker-less local development (Phase 5+)
 
-After Phase 5, the pg-boss worker (`dev:backend:worker`) is **optional** for local development. api-next cron routes and QStash callbacks replace the remaining worker jobs (subscription dispatch, push retry, repair). The legacy Express + worker stack (`dev:backend:all`) remains available until Phase 6 client cutover — unchanged.
+After Phase 5, the pg-boss worker (`dev:backend:worker`) is **optional** for local CRUD and per-reminder QStash flows. QStash callbacks on api-next handle reminder fires and push retry. Batch maintenance (repair + subscription dispatch) still uses the **Express worker** unless you trigger `/cron/*` manually — no platform cron is configured on api-next. The legacy Express + worker stack (`dev:backend:all`) remains available until Phase 6 client cutover.
 
 See also: [migration plan § Worker-less local dev](../../docs/2026-06-26-api-next-migration-plan.md#worker-less-local-development-phase-5) and task 5.1 audit matrix in [phase-5-tasks](../../docs/2026-06-26-api-next-migration-phase-5-tasks.md#task-51-audit--worker-coverage--worker-less-dev-matrix).
 
@@ -92,12 +92,12 @@ Copy `apps/api-next/.env.example` → `apps/api-next/.env.local` and align Postg
 |------|----------|----------------|-------|
 | API + auth only | `npm run dev:api-next` with `REMINDER_SCHEDULER_PROVIDER=disabled` | **No** | Default in `.env.example`. CRUD, auth, merge work; internal + cron routes return **404** (expected). |
 | Web + api-next | `npm run dev:api-next:full` | **No** | Same scheduler behavior as api-only; web talks to port 3001. |
-| Full scheduler E2E | `npm run dev:api-next` + tunnel + `REMINDER_SCHEDULER_PROVIDER=qstash` + QStash envs | **No** | Per-reminder fire, repair cron, subscription dispatch, push retry — all via api-next. See § Staging QStash below. |
+| Full scheduler E2E | `npm run dev:api-next` + tunnel + `REMINDER_SCHEDULER_PROVIDER=qstash` + QStash envs | **No** for per-reminder fires | Per-reminder fire + push retry via QStash on api-next. Maintenance sweeps need worker or manual `/cron/*`. See § Staging QStash below. |
 | Legacy Express parity | `npm run dev:backend:all` | **Yes** | Express API + worker on port **3000** until Phase 6 cutover. |
 
-### Manual cron triggers (local)
+### Manual maintenance triggers (local)
 
-Maintenance cron routes require `CRON_SECRET` (Bearer) or the Vercel cron header. Set `CRON_SECRET` in `apps/api-next/.env.local`, restart api-next, then:
+Maintenance routes (`/cron/*`) require `Authorization: Bearer ${CRON_SECRET}`. No platform cron is configured — use the Express worker for automatic repair/subscription dispatch, or trigger manually. Set `CRON_SECRET` in `apps/api-next/.env.local`, restart api-next, then:
 
 ```bash
 # Subscription reminder scan + push enqueue
@@ -109,14 +109,7 @@ curl -s -X POST http://localhost:3001/cron/reminders-repair \
   -H "Authorization: Bearer $CRON_SECRET" | jq .
 ```
 
-Without `CRON_SECRET`, simulate a platform cron invocation in dev:
-
-```bash
-curl -s -X POST http://localhost:3001/cron/reminders-repair \
-  -H "x-vercel-cron: 1" | jq .
-```
-
-`GET` is also supported on both cron paths (same auth).
+`GET` is also supported on both paths (same auth).
 
 ### Env quick reference
 
@@ -125,7 +118,7 @@ curl -s -X POST http://localhost:3001/cron/reminders-repair \
 | `REMINDER_SCHEDULER_PROVIDER` | `disabled` | `qstash` |
 | `REMINDER_SCHEDULER_CALLBACK_BASE_URL` | omit | required (public HTTPS; tunnel for local E2E) |
 | `QSTASH_TOKEN`, signing keys | omit | required |
-| `CRON_SECRET` | omit unless testing cron | required for manual cron triggers (or use `x-vercel-cron: 1` in dev) |
+| `CRON_SECRET` | omit unless testing maintenance routes | required for manual `/cron/*` triggers |
 
 ## Staging QStash end-to-end verification
 
@@ -264,7 +257,7 @@ Use this runbook for staging/tunnel E2E; use the tests above for CI and local it
 
 Use this runbook before Phase 6 cutover to confirm api-next maintenance paths replace the pg-boss worker. Copy the monitoring checklist into PR #8 when completing task 5.18.
 
-**Goal:** api-next + Postgres + QStash + Vercel Cron run for **24 hours** with the worker process stopped (scale to zero). No functional regressions vs the worker-backed staging baseline.
+**Goal:** api-next + Postgres + QStash run for **24 hours** with per-reminder delivery verified. Maintenance (repair + subscription dispatch) is handled by the **Express worker** unless you trigger `/cron/*` manually — no platform cron is configured on api-next.
 
 ### Prerequisites
 
@@ -272,7 +265,7 @@ Use this runbook before Phase 6 cutover to confirm api-next maintenance paths re
 - Staging Postgres reachable (`DATABASE_URL` shared with `apps/backend`)
 - Upstash QStash project with signing keys
 - api-next deployed to a **public HTTPS** staging origin (Vercel or equivalent)
-- `CRON_SECRET` set in staging env (for manual smoke; Vercel Cron uses `x-vercel-cron: 1`)
+- `CRON_SECRET` set in staging env (optional — for manual `/cron/*` smoke only)
 
 ### 1. Deploy api-next to staging
 
@@ -314,16 +307,9 @@ curl -s -o /dev/null -w "%{http_code}" -X POST \
   "$STAGING_BASE/cron/reminders-repair"
 ```
 
-### 2. Configure Vercel Cron
+### 2. Maintenance routes (optional manual smoke)
 
-`apps/api-next/vercel.json` defines platform cron schedules:
-
-| Path | Schedule | Purpose |
-|------|----------|---------|
-| `/cron/reminders-repair` | `*/15 * * * *` | Drift recovery every 15 minutes |
-| `/cron/subscriptions-dispatch` | `0 0 * * *` | Subscription reminder scan at UTC midnight |
-
-Confirm jobs appear in the Vercel project → **Cron Jobs** tab after deploy. Manual trigger (optional):
+`/cron/reminders-repair` and `/cron/subscriptions-dispatch` remain available for manual invocation with `CRON_SECRET`. Automatic maintenance uses the **Express worker** (same as pre-migration).
 
 ```bash
 curl -s -X POST "$STAGING_BASE/cron/reminders-repair" \
@@ -333,43 +319,32 @@ curl -s -X POST "$STAGING_BASE/cron/subscriptions-dispatch" \
   -H "Authorization: Bearer $CRON_SECRET" | jq .
 ```
 
-**Repair cron expect:** JSON summary from `reminderRepairJob.run()` (scanned/repaired counts).
+**Repair expect:** JSON summary from `reminderRepairJob.run()` (`candidates`, `executed`, `scheduled`).
 
-**Subscription dispatch expect:** `SubscriptionReminderDispatchRunResult`:
+**Subscription dispatch expect:** `SubscriptionReminderDispatchRunResult` (`cronKey`: `check-subscription-reminders`) with `scanned` / `enqueued` / `duplicates`.
 
-```json
-{
-  "cronKey": "check-subscription-reminders",
-  "since": "...",
-  "now": "...",
-  "scanned": 0,
-  "enqueued": 0,
-  "duplicates": 0
-}
-```
+### 3. Worker for maintenance
 
-### 3. Stop the worker
+Keep the pg-boss **worker** running for repair (~15 min) and subscription dispatch (daily UTC midnight). api-next handles per-reminder QStash callbacks and push retry; the worker handles batch maintenance sweeps.
 
-Scale the pg-boss worker process to **zero** (or stop the worker container/service). Keep Express API running if staging clients still use port 3000 — api-next handles maintenance regardless.
+Confirm worker is processing:
 
-Record baseline timestamp and confirm worker is not processing:
-
-- No `[worker]` repair/subscription log lines after stop
-- `pgboss` job polling idle (if observable)
+- `[worker] reminder repair completed` log lines within repair interval
+- `[worker] subscription reminder dispatch completed` after UTC midnight
 
 ### 4. Monitor for 24 hours
 
 | Window | Check | Pass criteria |
 |--------|-------|---------------|
 | T+0–2h | Create one-time reminder (~5 min fire) | QStash `DELIVERED` → push notification received |
-| T+0–2h | Repair cron | Vercel Cron logs or manual POST returns `200` + summary JSON every ≤15 min |
+| T+0–2h | Repair job | Worker repair log lines within ≤15 min (or manual POST to `/cron/reminders-repair` returns `200`) |
 | T+0–24h | Recurring reminder | After fire, `nextTriggerAt` advanced; new QStash message scheduled |
-| UTC midnight | Subscription dispatch cron | Cron invocation `200`; `scanned`/`enqueued` sensible; `duplicates` stable on replay |
+| UTC midnight | Subscription dispatch | Worker dispatch log lines; `scanned`/`enqueued` sensible |
 | T+0–24h | Push retry (induced 429) | Register device token; trigger transient FCM failure; QStash delayed message to `/internal/push/retry` delivers within retry window |
 
 **Log sources**
 
-- Vercel → Functions / Cron execution logs for `/cron/*`
+- Worker logs → repair and subscription dispatch cycles
 - Upstash QStash console → delivery status for scheduled-task and push/retry callbacks
 - api-next function logs → no repeated `Invalid QStash signature` or `Invalid cron authorization`
 
@@ -381,17 +356,7 @@ Record baseline timestamp and confirm worker is not processing:
 
 ### 5. Rollback drill (< 15 minutes)
 
-Run once during the 24h window (or immediately after) to prove recovery path:
-
-1. **Pause Vercel Cron** — disable `reminders-repair` and `subscriptions-dispatch` jobs in Vercel dashboard (prevents duplicate maintenance with worker).
-2. **Scale worker up** — restart worker service (`npm run dev:backend:worker` locally; redeploy/scale staging worker in prod).
-3. **Verify worker health** — worker logs show `[worker] runtime started`; repair interval and subscription dispatch timer active.
-4. **Confirm maintenance resumed** — worker repair/subscription log lines within one interval; optional manual repair cron on api-next returns `200` but is no longer the primary path.
-5. **Re-enable Vercel Cron** — after rollback drill completes, re-enable crons and scale worker back to zero to continue the 24h test.
-
-**Target:** steps 1–4 complete in under 15 minutes.
-
-If api-next internal routes fail catastrophically (not just cron), keep worker running and leave Vercel Cron disabled until routes are fixed. Per-reminder QStash callbacks still target api-next in `qstash` mode — Express worker does not replace Phase 3 scheduled-task delivery.
+If api-next QStash callbacks fail, point `REMINDER_SCHEDULER_CALLBACK_BASE_URL` back at Express and keep the worker running until api-next routes are fixed. Per-reminder delivery uses QStash callbacks — the worker does not replace `/internal/reminders/scheduled-task` delivery in `qstash` mode.
 
 ### Automated coverage (no staging deploy)
 
@@ -401,3 +366,156 @@ npm run test:api-next -- tests/readme-runbook.test.mjs
 ```
 
 Use this runbook for staging 24h verification; use parity tests for CI gates.
+
+## Cutover readiness (Phase 6)
+
+Before shifting client traffic from Express (`:3000`) to api-next, complete the **cutover readiness checklist** in [Phase 6 tasks § 6.1](../../docs/2026-06-26-api-next-migration-phase-6-tasks.md#cutover-readiness-checklist-task-61).
+
+**Prerequisite gates (must pass before production deploy — task 6.3):**
+
+| Gate | Command / action |
+|------|------------------|
+| Parity suite | `npm run test:parity:next` |
+| api-next tests | `npm run test:api-next` |
+| 24h staging without worker | § Staging verification: 24h without worker (task 5.18) |
+| Staging HTTPS smoke | Health 200; `POST /internal/*` and `POST /cron/*` return **401** (not 404) |
+
+---
+
+## Client cutover (Phase 6)
+
+Shifts web and mobile traffic from Express to api-next via cohort rollout (`shadow → pilot → ramp → full`). **No client source changes** — only deployment env vars on Vercel (web), EAS / Expo (mobile), and Vercel (api-next).
+
+The cutover gate functions in `apps/web/src/config/cutover.ts` and `apps/mobile/src/config/cutover.ts` (`evaluateCutoverGate`, `evaluateWebCohortTransition`, `evaluateMobileCohortTransition`) provide **objective evidence** for manual go/no-go decisions. They are not runtime traffic routers. Actual traffic is driven solely by the `*BASE_URL` env vars below.
+
+### Relative API paths (unchanged at cutover)
+
+Web and mobile service modules call **relative** `/api/*` paths (e.g. `/api/notes`, `/api/auth/login`). The HTTP client prepends the configured host from `VITE_API_BASE_URL` / `EXPO_PUBLIC_API_BASE_URL` (data) or `VITE_AUTH_API_BASE_URL` / `EXPO_PUBLIC_AUTH_API_URL` (auth). **Only the host env vars change at cutover** — path strings in source stay the same.
+
+### Cohort → traffic mapping
+
+| Cohort | Web / mobile traffic | api-next role | Express API |
+|--------|----------------------|---------------|-------------|
+| `shadow` | Prod → Express | Parity tests + shadow monitoring only | Running |
+| `pilot` | Staging → api-next; prod → Express | Serves staging clients | Running (prod) |
+| `ramp` | Prod → api-next | Primary backend | Running (rollback standby) |
+| `full` | Prod → api-next | Sole HTTP API | **Stopped** |
+
+### Deployment surfaces
+
+| Surface | Platform | Env configuration |
+|---------|----------|-------------------|
+| Web client | Vercel project (`apps/web`) | Settings → Environment Variables (per Preview / Production) |
+| Mobile client | EAS / Expo (`apps/mobile`) | `eas.json` build profiles + EAS Secrets; `preview` / `production` channels |
+| api-next | Vercel project (`apps/api-next`) | Settings → Environment Variables; Root Directory = `apps/api-next` |
+| QStash callbacks | Upstash console + api-next env | `REMINDER_SCHEDULER_CALLBACK_BASE_URL` on api-next (canonical name — not `QSTASH_CALLBACK_BASE_URL`) |
+| Maintenance sweeps | Express worker | Repair + subscription dispatch (no platform cron on api-next) |
+
+### URL placeholders
+
+Replace `.example.com` hosts with your real staging and production origins before cutover.
+
+| Role | Staging placeholder | Production placeholder |
+|------|---------------------|------------------------|
+| api-next (public HTTPS) | `https://api-next-staging.example.com` | `https://api-next.example.com` |
+| Express API (rollback) | `https://express-api-staging.example.com` | `https://express-api.example.com` |
+| Web origin (CORS) | `https://web-staging.example.com` | `https://web.example.com` |
+
+Callback URLs built at runtime on api-next:
+
+```text
+{REMINDER_SCHEDULER_CALLBACK_BASE_URL}/internal/reminders/scheduled-task
+{REMINDER_SCHEDULER_CALLBACK_BASE_URL}/internal/push/retry
+```
+
+### Environment matrix by cohort
+
+#### `shadow` — production clients on Express
+
+Production web and mobile keep Express hosts. api-next is deployed (task 6.3) for parity CI and monitoring only.
+
+| Surface | Variable | Value |
+|---------|----------|-------|
+| Web data API | `VITE_API_BASE_URL` | `https://express-api.example.com` |
+| Web auth API | `VITE_AUTH_API_BASE_URL` | `https://express-api.example.com` |
+| Web cohort | `VITE_CUTOVER_COHORT` | `shadow` |
+| Mobile data API | `EXPO_PUBLIC_API_BASE_URL` | `https://express-api.example.com` |
+| Mobile auth API | `EXPO_PUBLIC_AUTH_API_URL` | `https://express-api.example.com` |
+| Mobile cohort | `EXPO_PUBLIC_CUTOVER_COHORT` | `shadow` |
+| api-next callbacks | `REMINDER_SCHEDULER_CALLBACK_BASE_URL` | `https://api-next.example.com` (production public base) |
+| QStash | `QSTASH_TOKEN`, `QSTASH_CURRENT_SIGNING_KEY`, `QSTASH_NEXT_SIGNING_KEY` | Production keys |
+| Cron auth | `CRON_SECRET` | Production secret |
+| CORS | `CORS_ALLOWED_ORIGINS` | `https://web.example.com` |
+
+#### `pilot` — staging clients on api-next
+
+Staging web + mobile point at api-next; **production** client env stays on Express (shadow values above).
+
+| Surface | Variable | Staging (pilot) |
+|---------|----------|-----------------|
+| Web data API | `VITE_API_BASE_URL` | `https://api-next-staging.example.com` |
+| Web auth API | `VITE_AUTH_API_BASE_URL` | `https://api-next-staging.example.com` |
+| Web cohort | `VITE_CUTOVER_COHORT` | `pilot` |
+| Web gates | `VITE_CUTOVER_REQUIRE_PARITY`, `VITE_CUTOVER_REQUIRE_SLO`, `VITE_CUTOVER_REQUIRE_ROLLBACK_DRILL` | `true` |
+| Mobile data API | `EXPO_PUBLIC_API_BASE_URL` | `https://api-next-staging.example.com` |
+| Mobile auth API | `EXPO_PUBLIC_AUTH_API_URL` | `https://api-next-staging.example.com` |
+| Mobile cohort | `EXPO_PUBLIC_CUTOVER_COHORT` | `pilot` |
+| Mobile gates | `EXPO_PUBLIC_CUTOVER_REQUIRE_PARITY`, `EXPO_PUBLIC_CUTOVER_REQUIRE_SLO`, `EXPO_PUBLIC_CUTOVER_REQUIRE_ROLLBACK_DRILL` | `true` |
+| api-next callbacks | `REMINDER_SCHEDULER_CALLBACK_BASE_URL` | `https://api-next-staging.example.com` |
+| QStash | `QSTASH_TOKEN`, signing keys | Staging project or shared |
+| Cron auth | `CRON_SECRET` | Staging secret |
+| CORS | `CORS_ALLOWED_ORIGINS` | `https://web-staging.example.com` |
+
+**Auth vs data base URLs:** `VITE_AUTH_API_BASE_URL` and `EXPO_PUBLIC_AUTH_API_URL` are separate env vars from the data base URL. At cutover they typically match the api-next host, but keep both set explicitly — web auth (`apps/web/src/auth/httpClient.ts`) and mobile transport (`apps/mobile/src/api/httpClient.ts`) read the auth-specific names.
+
+#### `ramp` — production clients on api-next
+
+| Surface | Variable | Production (ramp) |
+|---------|----------|-------------------|
+| Web data API | `VITE_API_BASE_URL` | `https://api-next.example.com` |
+| Web auth API | `VITE_AUTH_API_BASE_URL` | `https://api-next.example.com` |
+| Web cohort | `VITE_CUTOVER_COHORT` | `ramp` |
+| Mobile data API | `EXPO_PUBLIC_API_BASE_URL` | `https://api-next.example.com` |
+| Mobile auth API | `EXPO_PUBLIC_AUTH_API_URL` | `https://api-next.example.com` |
+| Mobile cohort | `EXPO_PUBLIC_CUTOVER_COHORT` | `ramp` |
+| api-next callbacks | `REMINDER_SCHEDULER_CALLBACK_BASE_URL` | `https://api-next.example.com` |
+| QStash | `QSTASH_TOKEN`, signing keys | Production keys |
+| Cron auth | `CRON_SECRET` | Production secret |
+| CORS | `CORS_ALLOWED_ORIGINS` | `https://web.example.com` |
+
+Express API remains deployable for rollback during `ramp`. Observe stability for **7 calendar days** (`REQUIRED_STABILITY_DAYS` in `apps/backend/src/decommission/contracts.ts`) before advancing to `full`.
+
+#### `full` — Express API stopped
+
+Same production env as `ramp` for client and api-next URLs; set `VITE_CUTOVER_COHORT` / `EXPO_PUBLIC_CUTOVER_COHORT` to `full`. Stop the Express API process in production (task 6.15); keep migration CLI scripts in `apps/backend`.
+
+### Rollback env snapshot
+
+Before any cohort advance, record the **current** Express URLs in a secure ops doc or password manager. Use these values to revert client traffic in under 15 minutes (task 6.10).
+
+| Surface | Variable | Snapshot (fill before cutover) |
+|---------|----------|--------------------------------|
+| Web data API | `VITE_API_BASE_URL` | _Express production URL_ |
+| Web auth API | `VITE_AUTH_API_BASE_URL` | _Express production URL_ |
+| Mobile data API | `EXPO_PUBLIC_API_BASE_URL` | _Express production URL_ |
+| Mobile auth API | `EXPO_PUBLIC_AUTH_API_URL` | _Express production URL_ |
+
+**Client rollback drill (staging or ramp):**
+
+1. Record start time.
+2. Revert web env `VITE_API_BASE_URL` + `VITE_AUTH_API_BASE_URL` to Express snapshot.
+3. Revert mobile env `EXPO_PUBLIC_API_BASE_URL` + `EXPO_PUBLIC_AUTH_API_URL` to Express snapshot.
+4. Redeploy / reload clients.
+5. Verify: session refresh or re-login succeeds; notes list loads.
+6. Record elapsed time (target **< 15 minutes**).
+
+Distinct from the Phase 5 **worker** rollback drill (maintenance path). This drill validates **client URL** recovery only.
+
+### Local dev CORS defaults (unchanged)
+
+`http://localhost:5173`, `http://127.0.0.1:5173` from `createApiServer.ts` defaults when `CORS_ALLOWED_ORIGINS` is unset in development.
+
+### Related docs
+
+- [Phase 6 tasks](../../docs/2026-06-26-api-next-migration-phase-6-tasks.md) — operational task breakdown
+- [Migration plan](../../docs/2026-06-26-api-next-migration-plan.md) — parent architecture

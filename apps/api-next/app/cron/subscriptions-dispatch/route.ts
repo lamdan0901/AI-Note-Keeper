@@ -6,13 +6,11 @@ import { getComposedServices } from "@/server/compose-services";
 export const runtime = "nodejs";
 
 /**
- * Subscription reminder dispatch cron.
- *
- * Vercel Cron entry (daily at 00:00 UTC): `0 0 * * *` → `/cron/subscriptions-dispatch`
+ * Subscription reminder dispatch maintenance route.
  *
  * Auth (not behind CORS or dependency gate):
- * - Primary: `Authorization: Bearer ${CRON_SECRET}` — set CRON_SECRET in env (see .env.example).
- * - Secondary: `x-vercel-cron: 1` for Vercel Cron scheduled invocations.
+ * - `Authorization: Bearer ${CRON_SECRET}` — set CRON_SECRET in env (see .env.example).
+ * - No platform cron is configured; invoke manually or via Express worker / external scheduler.
  *
  * Returns `SubscriptionReminderDispatchRunResult` from
  * `@backend/jobs/subscriptions/dispatch-due-subscription-reminders`.

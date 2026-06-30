@@ -9,8 +9,8 @@ export const runtime = "nodejs";
  * Reminder repair maintenance cron.
  *
  * Auth (not behind CORS or dependency gate):
- * - Primary: `Authorization: Bearer ${CRON_SECRET}` — set CRON_SECRET in env (see .env.example).
- * - Secondary: `x-vercel-cron: 1` for Vercel Cron scheduled invocations.
+ * - `Authorization: Bearer ${CRON_SECRET}` — set CRON_SECRET in env (see .env.example).
+ * - No platform cron is configured; invoke manually or via Express worker / external scheduler.
  *
  * Returns `{ candidates, executed, scheduled }` from `@backend/reminders/repair-job`.
  */

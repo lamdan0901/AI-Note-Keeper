@@ -28,19 +28,18 @@ const WORKER_LESS_DEV_MARKERS = [
   "/cron/subscriptions-dispatch",
   "/cron/reminders-repair",
   "CRON_SECRET",
-  "x-vercel-cron: 1",
 ];
 
 const STAGING_24H_WITHOUT_WORKER_MARKERS = [
   "Staging verification: 24h without worker (Phase 5)",
   "test:parity:next",
-  "vercel.json",
   "/internal/push/retry",
   "SubscriptionReminderDispatchRunResult",
   "check-subscription-reminders",
   "Rollback drill",
   "15 minutes",
-  "Scale the pg-boss worker",
+  "pg-boss worker",
+  "Worker for maintenance",
   "UTC midnight",
 ];
 
@@ -80,28 +79,3 @@ test("README documents staging 24h without worker verification runbook", async (
   }
 });
 
-test("vercel.json defines maintenance cron schedules", async () => {
-  const vercelPath = path.join(apiNextRoot, "vercel.json");
-  const source = await readFile(vercelPath, "utf8");
-  const config = JSON.parse(source);
-
-  assert.ok(Array.isArray(config.crons), "vercel.json must define crons array");
-
-  const paths = config.crons.map((entry) => entry.path);
-  assert.ok(
-    paths.includes("/cron/reminders-repair"),
-    "vercel.json must schedule /cron/reminders-repair",
-  );
-  assert.ok(
-    paths.includes("/cron/subscriptions-dispatch"),
-    "vercel.json must schedule /cron/subscriptions-dispatch",
-  );
-
-  const repairCron = config.crons.find((entry) => entry.path === "/cron/reminders-repair");
-  assert.equal(repairCron.schedule, "*/15 * * * *");
-
-  const dispatchCron = config.crons.find(
-    (entry) => entry.path === "/cron/subscriptions-dispatch",
-  );
-  assert.equal(dispatchCron.schedule, "0 0 * * *");
-});
