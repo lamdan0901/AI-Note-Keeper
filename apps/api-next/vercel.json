@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/cron/reminders-repair",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/cron/subscriptions-dispatch",
+      "schedule": "0 0 * * *"
+    }
+  ]
+}

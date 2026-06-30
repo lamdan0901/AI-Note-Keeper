@@ -18,7 +18,11 @@
     "build:web": "npm --workspace apps/web run build",
     "build:mobile": "npm --workspace apps/mobile run build",
     "dev:mobile": "npm --workspace apps/mobile run android",
-    "dev:clients": "concurrently -k -n web,mobile -c green,cyan \"npm run dev:web\" \"npm run dev:mobile\""
+    "dev:clients": "concurrently -k -n web,mobile -c green,cyan \"npm run dev:web\" \"npm run dev:mobile\"",
+    "dev:api-next": "npm --workspace apps/api-next run dev",
+    "dev:api-next:full": "concurrently -k -n api-next,web -c blue,green \"npm run dev:api-next\" \"npm run dev:web\"",
+    "test:api-next": "npm --workspace apps/api-next run test",
+    "test:parity:next": "cross-env API_TEST_BASE_URL=http://127.0.0.1:3001 npm --workspace apps/backend run build && cross-env API_TEST_BASE_URL=http://127.0.0.1:3001 node --test apps/backend/dist/tests/parity"
   },
   "dependencies": {
     "expo": "~50.0.0",
@@ -38,6 +42,7 @@
     "@typescript-eslint/parser": "^7.0.0",
     "concurrently": "^9.2.1",
     "convex-test": "^0.0.41",
+    "cross-env": "^7.0.3",
     "eslint": "^8.57.0",
     "eslint-plugin-react": "^7.34.0",
     "eslint-plugin-react-hooks": "^4.6.0",

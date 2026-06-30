@@ -30,6 +30,8 @@ docs/                    # documentation and runbooks
 - `npm run dev`
 - `npm run dev:web`
 - `npm run dev:mobile`
+- `npm run dev:api-next` — Next.js API on port 3001 (worker optional after Phase 5)
+- `npm run dev:api-next:full` — api-next + web without Express worker
 - `npm run build:web`
 - `npm run build:mobile`
 
@@ -39,5 +41,6 @@ TypeScript (React for web, React Native/Expo for Android): follow standard TypeS
 
 <!-- MANUAL ADDITIONS START -->
 
-- Don't run build android to verify changes. just run lint, test (if needed) and typecheck
+- Don't run build to verify changes. just run lint, test (if needed) and typecheck
+- Run tests in **run-once / self-terminated** mode — never watch mode. In this repo, the default `test` scripts already exit: root `npm test` → `jest` (no watch unless you pass `--watch`); `apps/web` → `vitest run`; `apps/api-next` → `node --test` / `tsx --test`; `apps/backend` → `node --test dist/tests`. Prefer those scripts over bare `vitest`, `jest --watch`, `tsx --test --watch`, or `apps/web`'s `test:watch`. Do not leave a test process running in the background. Set `block_until_ms` high enough for the full run; if a test command does not exit, diagnose the hang instead of assuming watch mode.
 <!-- MANUAL ADDITIONS END -->
