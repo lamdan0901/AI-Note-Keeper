@@ -2,6 +2,14 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { createTokenFactory } from "@backend/auth/tokens";
+import type {
+  PushDeliveryRequest,
+  PushDeliveryResult,
+  PushDeliveryService,
+  PushRetryJobPayload,
+  PushRetryScheduler,
+} from "@backend/jobs/push/contracts";
+import { createPushJobHandler } from "@backend/jobs/push/push-job-handler";
 
 import {
   createEmptyMergeTransactionStats,
@@ -147,4 +155,73 @@ test("phase-5 parity HTTP: merge apply supports cloud/local/both and preserves t
   } finally {
     await server.close();
   }
+});
+
+test("phase-5 parity HTTP: push failure path keeps retry and stale-token cleanup semantics with worker doubles", async () => {
+  const scheduledRetries: Array<Readonly<{ delayMs: number; job: PushRetryJobPayload }>> = [];
+  const deletedTokens: Array<Readonly<{ userId: string; deviceId: string }>> = [];
+
+  const deliveryService: PushDeliveryService = {
+    deliverToToken: async (request: PushDeliveryRequest): Promise<PushDeliveryResult> => {
+      if (request.token.deviceId === "retry-device") {
+        return {
+          classification: "transient_failure",
+          statusCode: 429,
+        };
+      }
+
+      if (request.token.deviceId === "stale-device") {
+        return {
+          classification: "unregistered",
+          statusCode: 404,
+          errorCode: "UNREGISTERED",
+        };
+      }
+
+      return {
+        classification: "delivered",
+      };
+    },
+  };
+
+  const retryScheduler: PushRetryScheduler = {
+    scheduleRetry: async ({ delayMs, job }) => {
+      scheduledRetries.push({ delayMs, job });
+    },
+  };
+
+  const handler = createPushJobHandler({
+    deliveryService,
+    deviceTokensRepository: {
+      deleteByDeviceIdForUser: async (input) => {
+        deletedTokens.push(input);
+        return true;
+      },
+    },
+    retryScheduler,
+    terminalFailureRecorder: {
+      record: async () => undefined,
+    },
+  });
+
+  const result = await handler.handle({
+    userId: "user-1",
+    reminderId: "reminder-1",
+    changeEventId: "event-1",
+    attempt: 0,
+    tokens: [
+      { deviceId: "retry-device", fcmToken: "retry-token" },
+      { deviceId: "stale-device", fcmToken: "stale-token" },
+      { deviceId: "ok-device", fcmToken: "ok-token" },
+    ],
+  });
+
+  assert.equal(result.processed, 3);
+  assert.equal(result.delivered, 1);
+  assert.equal(result.retriesScheduled, 1);
+  assert.equal(result.unregisteredRemoved, 1);
+  assert.equal(scheduledRetries.length, 1);
+  assert.equal(scheduledRetries[0]?.delayMs, 30_000);
+  assert.equal(scheduledRetries[0]?.job.token.deviceId, "retry-device");
+  assert.deepEqual(deletedTokens, [{ userId: "user-1", deviceId: "stale-device" }]);
 });

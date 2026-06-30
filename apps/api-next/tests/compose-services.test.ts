@@ -3,9 +3,14 @@ import { test } from "node:test";
 
 import type { ReminderSchedulerRuntime } from "@backend/reminders/runtime";
 
+import type { SubscriptionReminderDispatchJob } from "@backend/jobs/subscriptions/dispatch-due-subscription-reminders";
+
 import {
   composeServices,
   createReadinessProbe,
+  getComposedServices,
+  resetComposedServicesForTests,
+  setComposedServicesForTests,
   type ComposedServices,
 } from "../src/server/compose-services";
 import { createComposedReminderRepairJob } from "../src/server/reminder-repair";
@@ -40,6 +45,10 @@ test("composeServices omits reminder callback wiring when scheduler is disabled"
     assert.equal(services.reminderScheduledTaskExecutor, undefined);
     assert.equal(services.reminderQstashVerifierConfig, undefined);
     assert.equal(services.reminderRepairJob, undefined);
+    assert.equal(services.subscriptionReminderDispatchJob, undefined);
+    assert.equal(services.pushJobHandler, undefined);
+    assert.equal(services.pushRetryScheduler, undefined);
+    assert.equal(services.pushQstashVerifierConfig, undefined);
   } finally {
     if (previousProvider === undefined) {
       delete process.env.REMINDER_SCHEDULER_PROVIDER;
@@ -71,6 +80,17 @@ test("composeServices exposes reminder repair job when qstash scheduler is enabl
     assert.equal(typeof services.reminderRepairJob.run, "function");
     assert.ok(services.reminderScheduledTaskExecutor);
     assert.ok(services.reminderQstashVerifierConfig);
+    assert.ok(services.subscriptionReminderDispatchJob);
+    assert.equal(typeof services.subscriptionReminderDispatchJob.run, "function");
+    assert.ok(services.pushJobHandler);
+    assert.equal(typeof services.pushJobHandler.handle, "function");
+    assert.ok(services.pushRetryScheduler);
+    assert.equal(typeof services.pushRetryScheduler.scheduleRetry, "function");
+    assert.ok(services.pushQstashVerifierConfig);
+    assert.equal(
+      services.pushQstashVerifierConfig.callbackUrl,
+      "https://api.example.test/internal/push/retry",
+    );
   } finally {
     if (previousEnv.provider === undefined) {
       delete process.env.REMINDER_SCHEDULER_PROVIDER;
@@ -174,4 +194,39 @@ test("createReadinessProbe returns a callable readiness function", () => {
   const probe = createReadinessProbe();
 
   assert.equal(typeof probe, "function");
+});
+
+test("setComposedServicesForTests can inject subscriptionReminderDispatchJob double", async () => {
+  resetComposedServicesForTests();
+
+  const dispatchJob: SubscriptionReminderDispatchJob = {
+    run: async () => ({
+      cronKey: "check-subscription-reminders",
+      since: new Date("2026-06-01T00:00:00.000Z"),
+      now: new Date("2026-06-02T00:00:00.000Z"),
+      scanned: 2,
+      enqueued: 1,
+      duplicates: 1,
+    }),
+  };
+
+  const base = composeServices();
+  setComposedServicesForTests({
+    ...base,
+    subscriptionReminderDispatchJob: dispatchJob,
+  });
+
+  const services = getComposedServices();
+  const result = await services.subscriptionReminderDispatchJob?.run();
+
+  assert.deepEqual(result, {
+    cronKey: "check-subscription-reminders",
+    since: new Date("2026-06-01T00:00:00.000Z"),
+    now: new Date("2026-06-02T00:00:00.000Z"),
+    scanned: 2,
+    enqueued: 1,
+    duplicates: 1,
+  });
+
+  resetComposedServicesForTests();
 });

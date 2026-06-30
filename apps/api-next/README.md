@@ -55,11 +55,77 @@ Do not use the Edge runtime; this service depends on Node-only packages (`pg`, `
 
 ```bash
 npm run dev
-# or from repo root (after task 0.2):
+# or from repo root:
 # npm run dev:api-next
 ```
 
 Listens on [http://localhost:3001](http://localhost:3001).
+
+## Worker-less local development (Phase 5+)
+
+After Phase 5, the pg-boss worker (`dev:backend:worker`) is **optional** for local development. api-next cron routes and QStash callbacks replace the remaining worker jobs (subscription dispatch, push retry, repair). The legacy Express + worker stack (`dev:backend:all`) remains available until Phase 6 client cutover — unchanged.
+
+See also: [migration plan § Worker-less local dev](../../docs/2026-06-26-api-next-migration-plan.md#worker-less-local-development-phase-5) and task 5.1 audit matrix in [phase-5-tasks](../../docs/2026-06-26-api-next-migration-phase-5-tasks.md#task-51-audit--worker-coverage--worker-less-dev-matrix).
+
+### Quick start — web + api-next (no worker)
+
+From repo root:
+
+```bash
+npm run dev:api-next:full
+```
+
+This runs api-next (port **3001**) and the Vite web app concurrently — **without** `dev:backend:worker` or Express.
+
+Point the web client at api-next in `apps/web/.env.local`:
+
+```env
+VITE_API_BASE_URL=http://localhost:3001
+VITE_AUTH_API_BASE_URL=http://localhost:3001
+```
+
+Copy `apps/api-next/.env.example` → `apps/api-next/.env.local` and align Postgres/JWT vars with `apps/backend`.
+
+### Dev modes
+
+| Mode | Commands | Worker needed? | Notes |
+|------|----------|----------------|-------|
+| API + auth only | `npm run dev:api-next` with `REMINDER_SCHEDULER_PROVIDER=disabled` | **No** | Default in `.env.example`. CRUD, auth, merge work; internal + cron routes return **404** (expected). |
+| Web + api-next | `npm run dev:api-next:full` | **No** | Same scheduler behavior as api-only; web talks to port 3001. |
+| Full scheduler E2E | `npm run dev:api-next` + tunnel + `REMINDER_SCHEDULER_PROVIDER=qstash` + QStash envs | **No** | Per-reminder fire, repair cron, subscription dispatch, push retry — all via api-next. See § Staging QStash below. |
+| Legacy Express parity | `npm run dev:backend:all` | **Yes** | Express API + worker on port **3000** until Phase 6 cutover. |
+
+### Manual cron triggers (local)
+
+Maintenance cron routes require `CRON_SECRET` (Bearer) or the Vercel cron header. Set `CRON_SECRET` in `apps/api-next/.env.local`, restart api-next, then:
+
+```bash
+# Subscription reminder scan + push enqueue
+curl -s -X POST http://localhost:3001/cron/subscriptions-dispatch \
+  -H "Authorization: Bearer $CRON_SECRET" | jq .
+
+# Reminder repair / drift recovery
+curl -s -X POST http://localhost:3001/cron/reminders-repair \
+  -H "Authorization: Bearer $CRON_SECRET" | jq .
+```
+
+Without `CRON_SECRET`, simulate a platform cron invocation in dev:
+
+```bash
+curl -s -X POST http://localhost:3001/cron/reminders-repair \
+  -H "x-vercel-cron: 1" | jq .
+```
+
+`GET` is also supported on both cron paths (same auth).
+
+### Env quick reference
+
+| Variable | API-only dev | Full scheduler |
+|----------|--------------|----------------|
+| `REMINDER_SCHEDULER_PROVIDER` | `disabled` | `qstash` |
+| `REMINDER_SCHEDULER_CALLBACK_BASE_URL` | omit | required (public HTTPS; tunnel for local E2E) |
+| `QSTASH_TOKEN`, signing keys | omit | required |
+| `CRON_SECRET` | omit unless testing cron | required for manual cron triggers (or use `x-vercel-cron: 1` in dev) |
 
 ## Staging QStash end-to-end verification
 
@@ -193,3 +259,145 @@ npm run test:api-next -- tests/internal-routes.test.ts tests/reminders-scheduler
 ```
 
 Use this runbook for staging/tunnel E2E; use the tests above for CI and local iteration.
+
+## Staging verification: 24h without worker (Phase 5)
+
+Use this runbook before Phase 6 cutover to confirm api-next maintenance paths replace the pg-boss worker. Copy the monitoring checklist into PR #8 when completing task 5.18.
+
+**Goal:** api-next + Postgres + QStash + Vercel Cron run for **24 hours** with the worker process stopped (scale to zero). No functional regressions vs the worker-backed staging baseline.
+
+### Prerequisites
+
+- Task 5.16 green: `npm run test:parity:next` (worker contract scenarios without pg-boss)
+- Staging Postgres reachable (`DATABASE_URL` shared with `apps/backend`)
+- Upstash QStash project with signing keys
+- api-next deployed to a **public HTTPS** staging origin (Vercel or equivalent)
+- `CRON_SECRET` set in staging env (for manual smoke; Vercel Cron uses `x-vercel-cron: 1`)
+
+### 1. Deploy api-next to staging
+
+Set staging environment variables (Vercel project → Settings → Environment Variables):
+
+| Variable | Value |
+|----------|-------|
+| `REMINDER_SCHEDULER_PROVIDER` | `qstash` |
+| `REMINDER_SCHEDULER_CALLBACK_BASE_URL` | Public HTTPS base of api-next (no trailing path) |
+| `QSTASH_TOKEN` | Upstash QStash token |
+| `QSTASH_CURRENT_SIGNING_KEY` | Current signing key |
+| `QSTASH_NEXT_SIGNING_KEY` | Next signing key |
+| `CRON_SECRET` | Strong random secret (manual cron smoke) |
+| `DATABASE_URL` | Staging Postgres connection string |
+| JWT / auth vars | Same as `apps/backend` staging |
+
+Callback URLs built at runtime:
+
+```text
+{REMINDER_SCHEDULER_CALLBACK_BASE_URL}/internal/reminders/scheduled-task
+{REMINDER_SCHEDULER_CALLBACK_BASE_URL}/internal/push/retry
+```
+
+Deploy from monorepo with **Root Directory** = `apps/api-next` (or equivalent build config).
+
+Post-deploy smoke:
+
+```bash
+STAGING_BASE="https://your-api-next-staging.example.com"
+
+# Routes mounted (401 = signature missing, not 404)
+curl -s -o /dev/null -w "%{http_code}" -X POST \
+  "$STAGING_BASE/internal/reminders/scheduled-task"
+curl -s -o /dev/null -w "%{http_code}" -X POST \
+  "$STAGING_BASE/internal/push/retry"
+
+# Cron auth wired (401 without secret)
+curl -s -o /dev/null -w "%{http_code}" -X POST \
+  "$STAGING_BASE/cron/reminders-repair"
+```
+
+### 2. Configure Vercel Cron
+
+`apps/api-next/vercel.json` defines platform cron schedules:
+
+| Path | Schedule | Purpose |
+|------|----------|---------|
+| `/cron/reminders-repair` | `*/15 * * * *` | Drift recovery every 15 minutes |
+| `/cron/subscriptions-dispatch` | `0 0 * * *` | Subscription reminder scan at UTC midnight |
+
+Confirm jobs appear in the Vercel project → **Cron Jobs** tab after deploy. Manual trigger (optional):
+
+```bash
+curl -s -X POST "$STAGING_BASE/cron/reminders-repair" \
+  -H "Authorization: Bearer $CRON_SECRET" | jq .
+
+curl -s -X POST "$STAGING_BASE/cron/subscriptions-dispatch" \
+  -H "Authorization: Bearer $CRON_SECRET" | jq .
+```
+
+**Repair cron expect:** JSON summary from `reminderRepairJob.run()` (scanned/repaired counts).
+
+**Subscription dispatch expect:** `SubscriptionReminderDispatchRunResult`:
+
+```json
+{
+  "cronKey": "check-subscription-reminders",
+  "since": "...",
+  "now": "...",
+  "scanned": 0,
+  "enqueued": 0,
+  "duplicates": 0
+}
+```
+
+### 3. Stop the worker
+
+Scale the pg-boss worker process to **zero** (or stop the worker container/service). Keep Express API running if staging clients still use port 3000 — api-next handles maintenance regardless.
+
+Record baseline timestamp and confirm worker is not processing:
+
+- No `[worker]` repair/subscription log lines after stop
+- `pgboss` job polling idle (if observable)
+
+### 4. Monitor for 24 hours
+
+| Window | Check | Pass criteria |
+|--------|-------|---------------|
+| T+0–2h | Create one-time reminder (~5 min fire) | QStash `DELIVERED` → push notification received |
+| T+0–2h | Repair cron | Vercel Cron logs or manual POST returns `200` + summary JSON every ≤15 min |
+| T+0–24h | Recurring reminder | After fire, `nextTriggerAt` advanced; new QStash message scheduled |
+| UTC midnight | Subscription dispatch cron | Cron invocation `200`; `scanned`/`enqueued` sensible; `duplicates` stable on replay |
+| T+0–24h | Push retry (induced 429) | Register device token; trigger transient FCM failure; QStash delayed message to `/internal/push/retry` delivers within retry window |
+
+**Log sources**
+
+- Vercel → Functions / Cron execution logs for `/cron/*`
+- Upstash QStash console → delivery status for scheduled-task and push/retry callbacks
+- api-next function logs → no repeated `Invalid QStash signature` or `Invalid cron authorization`
+
+**Regression vs worker baseline**
+
+- Reminder fires on schedule (not missed beyond repair cron recovery)
+- Subscription renewal reminders still enqueue and deliver
+- Push retries complete after transient failures (not stuck until process restart)
+
+### 5. Rollback drill (< 15 minutes)
+
+Run once during the 24h window (or immediately after) to prove recovery path:
+
+1. **Pause Vercel Cron** — disable `reminders-repair` and `subscriptions-dispatch` jobs in Vercel dashboard (prevents duplicate maintenance with worker).
+2. **Scale worker up** — restart worker service (`npm run dev:backend:worker` locally; redeploy/scale staging worker in prod).
+3. **Verify worker health** — worker logs show `[worker] runtime started`; repair interval and subscription dispatch timer active.
+4. **Confirm maintenance resumed** — worker repair/subscription log lines within one interval; optional manual repair cron on api-next returns `200` but is no longer the primary path.
+5. **Re-enable Vercel Cron** — after rollback drill completes, re-enable crons and scale worker back to zero to continue the 24h test.
+
+**Target:** steps 1–4 complete in under 15 minutes.
+
+If api-next internal routes fail catastrophically (not just cron), keep worker running and leave Vercel Cron disabled until routes are fixed. Per-reminder QStash callbacks still target api-next in `qstash` mode — Express worker does not replace Phase 3 scheduled-task delivery.
+
+### Automated coverage (no staging deploy)
+
+```bash
+npm run test:parity:next
+npm run test:api-next -- tests/readme-runbook.test.mjs
+```
+
+Use this runbook for staging 24h verification; use parity tests for CI gates.

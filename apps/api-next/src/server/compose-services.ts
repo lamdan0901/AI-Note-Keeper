@@ -8,6 +8,9 @@ import {
 import { createExpensesService, type ExpensesService } from "@backend/expenses/service";
 import { createMergeService, type MergeService } from "@backend/merge/service";
 import { createNotesService, type NotesService } from "@backend/notes/service";
+import type { PushRetryScheduler } from "@backend/jobs/push/contracts";
+import type { PushJobHandler } from "@backend/jobs/push/push-job-handler";
+import type { SubscriptionReminderDispatchJob } from "@backend/jobs/subscriptions/dispatch-due-subscription-reminders";
 import {
   createReminderSchedulerRuntime,
   type QstashVerifierConfig,
@@ -15,6 +18,7 @@ import {
 import type { ScheduledTaskExecutor } from "@backend/reminders/scheduled-task-executor";
 import type { RemindersService } from "@backend/reminders/service";
 
+import { composePushDispatchServices } from "@/server/compose-push-dispatch";
 import {
   createComposedReminderRepairJob,
   type ReminderRepairJob,
@@ -41,6 +45,10 @@ export type ComposedServices = Readonly<{
   reminderScheduledTaskExecutor?: ScheduledTaskExecutor;
   reminderQstashVerifierConfig?: QstashVerifierConfig;
   reminderRepairJob?: ReminderRepairJob;
+  subscriptionReminderDispatchJob?: SubscriptionReminderDispatchJob;
+  pushJobHandler?: PushJobHandler;
+  pushRetryScheduler?: PushRetryScheduler;
+  pushQstashVerifierConfig?: QstashVerifierConfig;
 }>;
 
 export { createReadinessProbe, ensureApiNextStartup, runInitialStartupChecks } from "@/server/startup";
@@ -56,6 +64,10 @@ export const composeServices = (): ComposedServices => {
     schedulerService: reminderRuntime.schedulerService,
   });
 
+  const pushDispatch = reminderRuntime.schedulerCallbacksEnabled
+    ? composePushDispatchServices({ reminderRuntime })
+    : undefined;
+
   return {
     authService: createAuthService(),
     notesService,
@@ -66,15 +78,17 @@ export const composeServices = (): ComposedServices => {
     mergeService: createMergeService(),
     aiService: createAiService(),
     aiRateLimiter: createAiRateLimiter(),
-    reminderScheduledTaskExecutor: reminderRuntime.schedulerCallbacksEnabled
-      ? reminderRuntime.scheduledTaskExecutor
-      : undefined,
+    reminderScheduledTaskExecutor: pushDispatch?.reminderScheduledTaskExecutor,
     reminderQstashVerifierConfig: reminderRuntime.schedulerCallbacksEnabled
       ? (reminderRuntime.qstashVerifierConfig ?? undefined)
       : undefined,
     reminderRepairJob: reminderRuntime.schedulerCallbacksEnabled
       ? createComposedReminderRepairJob(reminderRuntime)
       : undefined,
+    subscriptionReminderDispatchJob: pushDispatch?.subscriptionReminderDispatchJob,
+    pushJobHandler: pushDispatch?.pushJobHandler,
+    pushRetryScheduler: pushDispatch?.pushRetryScheduler,
+    pushQstashVerifierConfig: pushDispatch?.pushQstashVerifierConfig,
   };
 };
 
