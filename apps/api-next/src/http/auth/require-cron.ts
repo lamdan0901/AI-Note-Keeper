@@ -33,10 +33,6 @@ const extractBearerToken = (authorization: string): string | null => {
   return token;
 };
 
-const isVercelCronInvocation = (headers: Headers): boolean => {
-  return headers.get("x-vercel-cron") === "1";
-};
-
 let cronAuthConfigForTests: CronAuthConfig | undefined;
 
 /** Test-only override for cron auth configuration. */
@@ -58,10 +54,9 @@ const resolveCronSecret = (config?: CronAuthConfig): string | undefined => {
 };
 
 /**
- * Authorizes maintenance cron routes.
+ * Authorizes maintenance cron routes (manual or external scheduler invocations).
  *
- * Primary: `Authorization: Bearer ${CRON_SECRET}` (see apps/api-next/.env.example).
- * Secondary: `x-vercel-cron: 1` for Vercel Cron invocations when bearer auth is absent.
+ * Requires `Authorization: Bearer ${CRON_SECRET}` (see apps/api-next/.env.example).
  */
 export const verifyCronAuth = (headers: Headers, config?: CronAuthConfig): void => {
   const cronSecret = resolveCronSecret(config);
@@ -72,10 +67,6 @@ export const verifyCronAuth = (headers: Headers, config?: CronAuthConfig): void 
     if (token && secretsMatch(token, cronSecret)) {
       return;
     }
-  }
-
-  if (isVercelCronInvocation(headers)) {
-    return;
   }
 
   throw toCronAuthError();
