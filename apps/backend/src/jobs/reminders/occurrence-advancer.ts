@@ -1,9 +1,8 @@
-import { createRequire } from 'node:module';
-
 import type { DbQueryClient } from '../../auth/contracts.js';
 import { pool } from '../../db/pool.js';
 import type { ReminderRepeatRule } from '../../reminders/contracts.js';
 import type { DispatchedReminderOccurrence, ReminderOccurrenceAdvancer } from './contracts.js';
+import { loadSharedModule } from '../../shared/load-shared-module.js';
 
 type ComputeNextTrigger = (
   now: number,
@@ -12,8 +11,6 @@ type ComputeNextTrigger = (
   repeat: ReminderRepeatRule | null,
   timezone?: string,
 ) => number | null;
-
-const require = createRequire(import.meta.url);
 
 const fallbackComputeNextTrigger: ComputeNextTrigger = (now, startAt, _baseAtLocal, repeat) => {
   if (!repeat) {
@@ -86,16 +83,12 @@ const fallbackComputeNextTrigger: ComputeNextTrigger = (now, startAt, _baseAtLoc
 };
 
 const loadComputeNextTrigger = (): ComputeNextTrigger => {
-  try {
-    const shared = require('../../../../../packages/shared/utils/recurrence.js') as {
-      computeNextTrigger?: ComputeNextTrigger;
-    };
+  const shared = loadSharedModule<{
+    computeNextTrigger?: ComputeNextTrigger;
+  }>('utils/recurrence.js');
 
-    if (typeof shared.computeNextTrigger === 'function') {
-      return shared.computeNextTrigger;
-    }
-  } catch {
-    // Backend can run before shared package JS artifacts are built.
+  if (typeof shared?.computeNextTrigger === 'function') {
+    return shared.computeNextTrigger;
   }
 
   return fallbackComputeNextTrigger;

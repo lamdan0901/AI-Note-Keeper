@@ -1,5 +1,3 @@
-import { createRequire } from 'node:module';
-
 import type { ReminderRecord, ReminderRepeatRule, ReminderSchedulerPayload } from './contracts.js';
 import type { ReminderNotificationSender } from './notification-sender.js';
 import type { ReminderDeliveriesRepository } from './repositories/reminder-deliveries-repository.js';
@@ -8,6 +6,7 @@ import {
   createReminderDeliveryKey,
   type ReminderSchedulerService,
 } from './scheduler-service.js';
+import { loadSharedModule } from '../shared/load-shared-module.js';
 
 type ComputeNextTrigger = (
   now: number,
@@ -17,18 +16,13 @@ type ComputeNextTrigger = (
   timezone?: string,
 ) => number | null;
 
-const require = createRequire(import.meta.url);
-
 const loadComputeNextTrigger = (): ComputeNextTrigger => {
-  try {
-    const shared = require('../../../../packages/shared/utils/recurrence.js') as {
-      computeNextTrigger?: ComputeNextTrigger;
-    };
-    if (typeof shared.computeNextTrigger === 'function') {
-      return shared.computeNextTrigger;
-    }
-  } catch {
-    // Backend tests and local runs can execute before shared JS artifacts exist.
+  const shared = loadSharedModule<{
+    computeNextTrigger?: ComputeNextTrigger;
+  }>('utils/recurrence.js');
+
+  if (typeof shared?.computeNextTrigger === 'function') {
+    return shared.computeNextTrigger;
   }
 
   return (now, startAt, _baseAtLocal, repeat) => {

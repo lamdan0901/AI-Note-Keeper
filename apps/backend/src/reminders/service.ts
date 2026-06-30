@@ -1,5 +1,3 @@
-import { createRequire } from 'node:module';
-
 import { sha256 } from 'js-sha256';
 
 import { AppError } from '../middleware/error-middleware.js';
@@ -21,6 +19,7 @@ import {
   type ReminderSchedulerService,
 } from './scheduler-service.js';
 import type { RemindersRepository } from './repositories/reminders-repository.js';
+import { loadSharedModule } from '../shared/load-shared-module.js';
 
 type ComputeNextTrigger = (
   now: number,
@@ -29,8 +28,6 @@ type ComputeNextTrigger = (
   repeat: ReminderRepeatRule | null,
   timezone?: string,
 ) => number | null;
-
-const require = createRequire(import.meta.url);
 
 const fallbackComputeNextTrigger: ComputeNextTrigger = (now, startAt, _baseAtLocal, repeat) => {
   if (!repeat) {
@@ -103,16 +100,12 @@ const fallbackComputeNextTrigger: ComputeNextTrigger = (now, startAt, _baseAtLoc
 };
 
 const loadComputeNextTrigger = (): ComputeNextTrigger => {
-  try {
-    const shared = require('../../../../packages/shared/utils/recurrence.js') as {
-      computeNextTrigger?: ComputeNextTrigger;
-    };
+  const shared = loadSharedModule<{
+    computeNextTrigger?: ComputeNextTrigger;
+  }>('utils/recurrence.js');
 
-    if (typeof shared.computeNextTrigger === 'function') {
-      return shared.computeNextTrigger;
-    }
-  } catch {
-    // Fall through to parity-safe local fallback when shared JS artifacts are unavailable.
+  if (typeof shared?.computeNextTrigger === 'function') {
+    return shared.computeNextTrigger;
   }
 
   return fallbackComputeNextTrigger;

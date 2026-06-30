@@ -1,5 +1,3 @@
-import { createRequire } from 'node:module';
-
 import { verifyPassword } from '../auth/passwords.js';
 import { AppError } from '../middleware/error-middleware.js';
 import type {
@@ -19,44 +17,35 @@ import {
   type MergeRepositoryTransaction,
   type MergeSnapshot,
 } from './repositories/merge-repository.js';
-
-const require = createRequire(import.meta.url);
+import { loadSharedModule } from '../shared/load-shared-module.js';
 
 const loadSharedResolveMergeResolution = ():
   | ((summary: MergeSummary) => MergeResolution)
   | null => {
-  try {
-    const shared = require('../../../../packages/shared/auth/userDataMerge.js') as {
-      resolveMergeResolution?: (summary: MergeSummary) => MergeResolution;
-    };
+  const shared = loadSharedModule<{
+    resolveMergeResolution?: (summary: MergeSummary) => MergeResolution;
+  }>('auth/userDataMerge.js');
 
-    return shared.resolveMergeResolution ?? null;
-  } catch {
-    return null;
-  }
+  return shared?.resolveMergeResolution ?? null;
 };
 
 const loadSharedWelcomeConstants = (): Readonly<{
   WELCOME_NOTE_TITLE: string;
   WELCOME_NOTE_CONTENT: string;
 }> | null => {
-  try {
-    const shared = require('../../../../packages/shared/constants/welcomeNote.js') as {
-      WELCOME_NOTE_TITLE?: string;
-      WELCOME_NOTE_CONTENT?: string;
-    };
+  const shared = loadSharedModule<{
+    WELCOME_NOTE_TITLE?: string;
+    WELCOME_NOTE_CONTENT?: string;
+  }>('constants/welcomeNote.js');
 
-    if (!shared.WELCOME_NOTE_TITLE || !shared.WELCOME_NOTE_CONTENT) {
-      return null;
-    }
-
-    return {
-      WELCOME_NOTE_TITLE: shared.WELCOME_NOTE_TITLE,
-      WELCOME_NOTE_CONTENT: shared.WELCOME_NOTE_CONTENT,
-    };
-  } catch {
+  if (!shared?.WELCOME_NOTE_TITLE || !shared.WELCOME_NOTE_CONTENT) {
     return null;
   }
+
+  return {
+    WELCOME_NOTE_TITLE: shared.WELCOME_NOTE_TITLE,
+    WELCOME_NOTE_CONTENT: shared.WELCOME_NOTE_CONTENT,
+  };
 };
 
 const sharedResolveMergeResolution = loadSharedResolveMergeResolution();
