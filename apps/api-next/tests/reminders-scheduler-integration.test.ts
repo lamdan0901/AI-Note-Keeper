@@ -273,3 +273,73 @@ test("repair job backfills missed occurrence after simulated downtime", async ()
     await server.close();
   }
 });
+
+test("weekly weekday reminder schedules the next selected weekday after callback", async () => {
+  const harness = createSchedulerHarness(new Date("2026-06-29T08:30:00.000Z"));
+  const server = await startSchedulerIntegrationTestServer({ harness });
+  const firstOccurrenceMs = Date.parse("2026-06-29T09:00:00.000Z");
+
+  try {
+    await harness.reminderService.createReminder({
+      id: "reminder-weekly-1",
+      userId: SCHEDULER_INTEGRATION_USER_ID,
+      title: "Weekly reminder",
+      triggerAt: firstOccurrenceMs,
+      active: true,
+      timezone: "UTC",
+      repeat: { kind: "weekly", interval: 1, weekdays: [1, 4] },
+      startAt: firstOccurrenceMs,
+      baseAtLocal: "2026-06-29T09:00:00",
+      updatedAt: Date.parse("2026-06-29T08:30:00.000Z"),
+      createdAt: Date.parse("2026-06-29T08:30:00.000Z"),
+    });
+
+    const scheduledReminder = await harness.getReminder(
+      SCHEDULER_INTEGRATION_USER_ID,
+      "reminder-weekly-1",
+    );
+    assert.notEqual(scheduledReminder, null);
+    if (!scheduledReminder?.nextTriggerAt) {
+      throw new Error("Expected scheduled reminder state before weekly callback");
+    }
+
+    assert.equal(
+      scheduledReminder.nextTriggerAt.toISOString(),
+      "2026-06-29T09:00:00.000Z",
+    );
+
+    harness.resetEvents();
+    const response = await postInternalCallback(
+      server,
+      buildScheduledPayload({
+        id: scheduledReminder.id,
+        nextTriggerAt: scheduledReminder.nextTriggerAt,
+        version: scheduledReminder.version,
+      }),
+    );
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { status: "sent" });
+
+    const advancedReminder = await harness.getReminder(
+      SCHEDULER_INTEGRATION_USER_ID,
+      "reminder-weekly-1",
+    );
+    assert.notEqual(advancedReminder, null);
+    assert.equal(
+      advancedReminder?.nextTriggerAt?.toISOString(),
+      "2026-07-02T09:00:00.000Z",
+    );
+    assert.deepEqual(harness.events, [
+      `delivery:${createReminderDeliveryKey({
+        reminderId: "reminder-weekly-1",
+        occurrenceAt: new Date("2026-06-29T09:00:00.000Z"),
+        version: 1,
+      })}`,
+      "send:reminder-weekly-1",
+      "schedule:reminder-weekly-1:1",
+    ]);
+  } finally {
+    await server.close();
+  }
+});

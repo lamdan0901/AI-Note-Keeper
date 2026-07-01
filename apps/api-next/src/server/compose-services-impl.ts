@@ -14,6 +14,7 @@ import type { SubscriptionReminderDispatchJob } from "@backend/jobs/subscription
 import {
   createReminderSchedulerRuntime,
   type QstashVerifierConfig,
+  type ReminderSchedulerRuntime,
 } from "@backend/reminders/runtime";
 import type { ScheduledTaskExecutor } from "@backend/reminders/scheduled-task-executor";
 import type { RemindersService } from "@backend/reminders/service";
@@ -24,13 +25,17 @@ import {
   type ReminderRepairJob,
 } from "@/server/reminder-repair";
 import {
+  createApiNextRemindersService,
+  createApiNextScheduledTaskExecutor,
+} from "@/server/reminder-scheduling";
+import {
   createSubscriptionsService,
   type SubscriptionsService,
 } from "@backend/subscriptions/service";
 
-import { isDependencyDegraded } from "@/server/startup";
+import { createReadinessProbe, isDependencyDegraded } from "@/server/startup";
 
-export { isDependencyDegraded };
+export { createReadinessProbe, isDependencyDegraded };
 
 export type ComposedServices = Readonly<{
   authService: AuthService;
@@ -57,19 +62,34 @@ export type ComposedServices = Readonly<{
  */
 export const composeServices = (): ComposedServices => {
   const reminderRuntime = createReminderSchedulerRuntime();
+  const remindersService = createApiNextRemindersService({
+    remindersRepository: reminderRuntime.remindersRepository,
+    schedulerService: reminderRuntime.schedulerService,
+  });
+  const scheduledTaskExecutor = createApiNextScheduledTaskExecutor({
+    remindersRepository: reminderRuntime.remindersRepository,
+    deliveriesRepository: reminderRuntime.deliveriesRepository,
+    notificationSender: reminderRuntime.notificationSender,
+    schedulerService: reminderRuntime.schedulerService,
+  });
   const notesService = createNotesService({
     remindersRepository: reminderRuntime.remindersRepository,
     schedulerService: reminderRuntime.schedulerService,
   });
+  const apiNextReminderRuntime: ReminderSchedulerRuntime = {
+    ...reminderRuntime,
+    remindersService,
+    scheduledTaskExecutor,
+  };
 
   const pushDispatch = reminderRuntime.schedulerCallbacksEnabled
-    ? composePushDispatchServices({ reminderRuntime })
+    ? composePushDispatchServices({ reminderRuntime: apiNextReminderRuntime })
     : undefined;
 
   return {
     authService: createAuthService(),
     notesService,
-    remindersService: reminderRuntime.remindersService,
+    remindersService,
     subscriptionsService: createSubscriptionsService(),
     expensesService: createExpensesService(),
     deviceTokensService: createDeviceTokensService(),
@@ -81,7 +101,7 @@ export const composeServices = (): ComposedServices => {
       ? (reminderRuntime.qstashVerifierConfig ?? undefined)
       : undefined,
     reminderRepairJob: reminderRuntime.schedulerCallbacksEnabled
-      ? createComposedReminderRepairJob(reminderRuntime)
+      ? createComposedReminderRepairJob(apiNextReminderRuntime)
       : undefined,
     subscriptionReminderDispatchJob: pushDispatch?.subscriptionReminderDispatchJob,
     pushJobHandler: pushDispatch?.pushJobHandler,

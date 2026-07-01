@@ -6,10 +6,6 @@ import {
 import type { PushRetryScheduler } from "@backend/jobs/push/contracts";
 import type { PushJobHandler } from "@backend/jobs/push/push-job-handler";
 import type { SubscriptionReminderDispatchJob } from "@backend/jobs/subscriptions/dispatch-due-subscription-reminders";
-import {
-  createScheduledTaskExecutor,
-  type ScheduledTaskExecutor,
-} from "@backend/reminders/scheduled-task-executor";
 import type { QstashVerifierConfig, ReminderSchedulerRuntime } from "@backend/reminders/runtime";
 
 import {
@@ -19,7 +15,11 @@ import {
   createSubscriptionPushEnqueueBridge,
 } from "@/server/push-dispatch";
 import { createPushRetryCallbackUrl, createQstashPushRetryScheduler } from "@/server/qstash-push-retry-scheduler";
+import {
+  createApiNextScheduledTaskExecutor,
+} from "@/server/reminder-scheduling";
 import { createComposedSubscriptionReminderDispatchJob } from "@/server/subscription-dispatch";
+import type { ScheduledTaskExecutor } from "@backend/reminders/scheduled-task-executor";
 
 export type ComposedPushDispatchServices = Readonly<{
   subscriptionReminderDispatchJob: SubscriptionReminderDispatchJob;
@@ -75,7 +75,7 @@ export const composePushDispatchServices = (
     pushJobHandler,
     deviceTokensRepository,
   });
-  const reminderScheduledTaskExecutor = createScheduledTaskExecutor({
+  const reminderScheduledTaskExecutor = createApiNextScheduledTaskExecutor({
     remindersRepository: reminderRuntime.remindersRepository,
     deliveriesRepository: reminderRuntime.deliveriesRepository,
     notificationSender: retryAwareSender,

@@ -1,71 +1,17 @@
-import { createRequire } from "node:module";
-
 import type { NoteChangeEventsRepository } from "@backend/notes/repositories/note-change-events-repository";
 import type {
   ReminderCreateInput,
   ReminderPatchInput,
   ReminderRecord,
-  ReminderRepeatRule,
 } from "@backend/reminders/contracts";
 import type { RemindersRepository } from "@backend/reminders/repositories/reminders-repository";
-import { createRemindersService } from "@backend/reminders/service";
 
-type ComputeNextTrigger = (
-  now: number,
-  startAt: number,
-  baseAtLocal: string,
-  repeat: ReminderRepeatRule | null,
-  timezone?: string,
-) => number | null;
+import {
+  createApiNextRemindersService,
+} from "../../src/server/reminder-scheduling";
+import { computeNextTrigger } from "../../../../packages/shared/utils/recurrence";
 
-const require = createRequire(import.meta.url);
-
-const fallbackComputeNextTrigger: ComputeNextTrigger = (now, startAt, _baseAtLocal, repeat) => {
-  if (!repeat) {
-    return startAt > now ? startAt : null;
-  }
-
-  const toNextByStep = (stepMs: number): number | null => {
-    if (!Number.isFinite(stepMs) || stepMs <= 0) {
-      return null;
-    }
-
-    if (startAt > now) {
-      return startAt;
-    }
-
-    const elapsed = now - startAt;
-    const steps = Math.floor(elapsed / stepMs) + 1;
-    return startAt + steps * stepMs;
-  };
-
-  if (repeat.kind === "daily") {
-    return toNextByStep(repeat.interval * 24 * 60 * 60 * 1000);
-  }
-
-  if (repeat.kind === "weekly") {
-    return toNextByStep(repeat.interval * 7 * 24 * 60 * 60 * 1000);
-  }
-
-  return null;
-};
-
-const loadComputeNextTrigger = (): ComputeNextTrigger => {
-  try {
-    const recurrenceModule = require("../../../../../packages/shared/utils/recurrence.js") as {
-      computeNextTrigger?: ComputeNextTrigger;
-    };
-    if (typeof recurrenceModule.computeNextTrigger === "function") {
-      return recurrenceModule.computeNextTrigger;
-    }
-  } catch {
-    // Fall back when shared JS artifacts are unavailable in local/backend-only test runs.
-  }
-
-  return fallbackComputeNextTrigger;
-};
-
-export const computeNextTrigger = loadComputeNextTrigger();
+export { computeNextTrigger };
 
 const cloneReminder = (value: ReminderRecord): ReminderRecord => ({
   ...value,
@@ -126,7 +72,7 @@ const applyPatch = (current: ReminderRecord, patch: ReminderPatchInput): Reminde
 });
 
 export type Phase4RemindersParityHarness = Readonly<{
-  remindersService: ReturnType<typeof createRemindersService>;
+  remindersService: ReturnType<typeof createApiNextRemindersService>;
   setNow: (nextMs: number) => void;
   getEventAppendCount: () => number;
   getReminderHookCount: () => number;
@@ -299,7 +245,7 @@ export const createPhase4RemindersParityHarness = (): Phase4RemindersParityHarne
     },
   };
 
-  const remindersService = createRemindersService({
+  const remindersService = createApiNextRemindersService({
     remindersRepository,
     noteChangeEventsRepository,
     now: () => new Date(nowMs),

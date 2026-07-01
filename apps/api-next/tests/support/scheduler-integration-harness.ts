@@ -17,51 +17,15 @@ import {
   createReminderDeliveryKey,
   createReminderSchedulerService,
 } from "@backend/reminders/scheduler-service";
-import { createScheduledTaskExecutor } from "@backend/reminders/scheduled-task-executor";
-import { createRemindersService } from "@backend/reminders/service";
+
+import {
+  createApiNextRemindersService,
+  createApiNextScheduledTaskExecutor,
+} from "../../src/server/reminder-scheduling";
 
 export const SCHEDULER_INTEGRATION_USER_ID = "user-1";
 
-type ComputeNextTrigger = (
-  now: number,
-  startAt: number,
-  baseAtLocal: string,
-  repeat: ReminderRepeatRule | null,
-  timezone?: string,
-) => number | null;
-
 type EventLog = string[];
-
-const computeNext: ComputeNextTrigger = (now, startAt, _baseAtLocal, repeat) => {
-  if (!repeat) {
-    return startAt > now ? startAt : null;
-  }
-
-  const dayMs = 24 * 60 * 60 * 1000;
-  const weekMs = 7 * dayMs;
-  const toNext = (stepMs: number): number | null => {
-    if (!Number.isFinite(stepMs) || stepMs <= 0) {
-      return null;
-    }
-
-    if (startAt > now) {
-      return startAt;
-    }
-
-    const steps = Math.floor((now - startAt) / stepMs) + 1;
-    return startAt + steps * stepMs;
-  };
-
-  if (repeat.kind === "daily") {
-    return toNext(repeat.interval * dayMs);
-  }
-
-  if (repeat.kind === "weekly") {
-    return toNext(repeat.interval * weekMs);
-  }
-
-  return null;
-};
 
 const cloneReminder = (value: ReminderRecord): ReminderRecord => ({
   ...value,
@@ -149,8 +113,8 @@ const createChangeEventsRepository = (): NoteChangeEventsRepository => {
 export type SchedulerHarness = Readonly<{
   events: EventLog;
   remindersRepository: RemindersRepository;
-  reminderService: ReturnType<typeof createRemindersService>;
-  scheduledTaskExecutor: ReturnType<typeof createScheduledTaskExecutor>;
+  reminderService: ReturnType<typeof createApiNextRemindersService>;
+  scheduledTaskExecutor: ReturnType<typeof createApiNextScheduledTaskExecutor>;
   repairJob: ReturnType<typeof createReminderRepairJob>;
   deliveries: Map<string, ReminderDeliveryRecord>;
   getReminder: (userId: string, reminderId: string) => Promise<ReminderRecord | null>;
@@ -479,7 +443,7 @@ export const createSchedulerHarness = (initialNow: Date): SchedulerHarness => {
     now: () => new Date(now.getTime()),
   });
 
-  const scheduledTaskExecutor = createScheduledTaskExecutor({
+  const scheduledTaskExecutor = createApiNextScheduledTaskExecutor({
     remindersRepository,
     deliveriesRepository,
     notificationSender: {
@@ -494,7 +458,6 @@ export const createSchedulerHarness = (initialNow: Date): SchedulerHarness => {
       },
     },
     schedulerService,
-    computeNext,
     now: () => new Date(now.getTime()),
   });
 
@@ -505,12 +468,11 @@ export const createSchedulerHarness = (initialNow: Date): SchedulerHarness => {
     now: () => new Date(now.getTime()),
   });
 
-  const reminderService = createRemindersService({
+  const reminderService = createApiNextRemindersService({
     remindersRepository,
     noteChangeEventsRepository: createChangeEventsRepository(),
     schedulerService,
     now: () => new Date(now.getTime()),
-    computeNext,
   });
 
   return {
