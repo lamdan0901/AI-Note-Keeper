@@ -14,7 +14,7 @@ export const runtime = "nodejs";
 
 const createRowHandler = withApiHandler(
   async (ctx) => {
-    const handler = createCreateRowHandler(getComposedServices().expensesService);
+    const handler = createCreateRowHandler((await getComposedServices()).expensesService);
     const result = await handler(toAuthenticatedContext(ctx));
     return NextResponse.json(result, { status: 201 });
   },

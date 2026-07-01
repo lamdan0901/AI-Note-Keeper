@@ -16,7 +16,7 @@ export const runtime = "nodejs";
  * `@backend/jobs/subscriptions/dispatch-due-subscription-reminders`.
  */
 const runSubscriptionsDispatchCron = async (request: NextRequest): Promise<NextResponse> => {
-  const dispatchJob = getComposedServices().subscriptionReminderDispatchJob;
+  const dispatchJob = (await getComposedServices()).subscriptionReminderDispatchJob;
 
   if (!dispatchJob) {
     return NextResponse.json(

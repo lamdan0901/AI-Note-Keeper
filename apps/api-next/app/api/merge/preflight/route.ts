@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 
 const preflightHandler = withApiHandler(
   async (ctx) => {
-    const handler = createMergePreflightHandler(getComposedServices().mergeService);
+    const handler = createMergePreflightHandler((await getComposedServices()).mergeService);
     return handler(toAuthenticatedContext(ctx));
   },
   {

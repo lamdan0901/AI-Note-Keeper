@@ -17,7 +17,7 @@ import {
   composeServices,
   resetComposedServicesForTests,
   setComposedServicesForTests,
-} from "../src/server/compose-services";
+} from "../src/server/compose-services-impl";
 import {
   startNextTestServer,
   type NextTestServer,

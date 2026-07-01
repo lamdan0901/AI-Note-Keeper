@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 
 const restoreSubscriptionHandler = withApiHandler(
   async (ctx) => {
-    const handler = createRestoreSubscriptionHandler(getComposedServices().subscriptionsService);
+    const handler = createRestoreSubscriptionHandler((await getComposedServices()).subscriptionsService);
     return handler(toAuthenticatedContext(ctx));
   },
   {

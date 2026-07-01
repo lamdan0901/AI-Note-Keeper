@@ -10,7 +10,7 @@ export const runtime = "nodejs";
 
 const getSettingsHandler = withApiHandler(
   async (ctx) => {
-    const handler = createGetSettingsHandler(getComposedServices().expensesService);
+    const handler = createGetSettingsHandler((await getComposedServices()).expensesService);
     return handler(toAuthenticatedContext(ctx));
   },
   {
@@ -22,7 +22,7 @@ const getSettingsHandler = withApiHandler(
 
 const updateSettingsHandler = withApiHandler(
   async (ctx) => {
-    const handler = createUpdateSettingsHandler(getComposedServices().expensesService);
+    const handler = createUpdateSettingsHandler((await getComposedServices()).expensesService);
     return handler(toAuthenticatedContext(ctx));
   },
   {

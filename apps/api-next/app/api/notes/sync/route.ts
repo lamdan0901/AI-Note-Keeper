@@ -8,7 +8,7 @@ export const runtime = "nodejs";
 
 const syncNotesHandler = withApiHandler(
   async (ctx) => {
-    const handler = createSyncNotesHandler(getComposedServices().notesService);
+    const handler = createSyncNotesHandler((await getComposedServices()).notesService);
     return handler(toAuthenticatedContext(ctx));
   },
   {

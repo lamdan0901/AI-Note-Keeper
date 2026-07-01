@@ -10,7 +10,7 @@ export const runtime = "nodejs";
 
 const listHandler = withApiHandler(
   async (ctx) => {
-    const handler = createListRemindersHandler(getComposedServices().remindersService);
+    const handler = createListRemindersHandler((await getComposedServices()).remindersService);
     return handler(toAuthenticatedContext(ctx));
   },
   {
@@ -23,7 +23,7 @@ const listHandler = withApiHandler(
 
 const createHandler = withApiHandler(
   async (ctx) => {
-    const handler = createCreateReminderHandler(getComposedServices().remindersService);
+    const handler = createCreateReminderHandler((await getComposedServices()).remindersService);
     return handler(toAuthenticatedContext(ctx));
   },
   {

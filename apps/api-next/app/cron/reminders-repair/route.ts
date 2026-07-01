@@ -15,7 +15,7 @@ export const runtime = "nodejs";
  * Returns `{ candidates, executed, scheduled }` from `@backend/reminders/repair-job`.
  */
 const runRemindersRepairCron = async (request: NextRequest): Promise<NextResponse> => {
-  const repairJob = getComposedServices().reminderRepairJob;
+  const repairJob = (await getComposedServices()).reminderRepairJob;
 
   if (!repairJob) {
     return NextResponse.json(

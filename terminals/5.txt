@@ -1,0 +1,24 @@
+---
+pid: 6908
+cwd: "C:\Users\AndersonHo\Desktop\mine\AI-Note-Keeper"
+command: "Set-Location \"C:\\Users\\AndersonHo\\Desktop\\mine\\AI-Note-Keeper\\apps\\api-next\"; $env:NODE_ENV=\"production\"; $env:PORT=\"3011\"; npm run start 2>&1"
+started_at: 2026-07-01T04:10:36.537Z
+running_for_ms: 305004   
+---
+
+> @ai-note-keeper/api-next@0.0.0 start
+> next start -p 3001
+
+▲ Next.js 16.2.9
+- Local:         http://localhost:3001
+- Network:       http://10.84.0.196:3001
+✓ Ready in 132ms
+❌ Failed to parse environment variables:
+{ _errors: [], DATABASE_URL: { _errors: [ 'Invalid input' ] } }
+npm error Lifecycle script `start` failed with error:
+npm error code 1
+npm error path C:\Users\AndersonHo\Desktop\mine\AI-Note-Keeper\apps\api-next
+npm error workspace @ai-note-keeper/api-next@0.0.0
+npm error location C:\Users\AndersonHo\Desktop\mine\AI-Note-Keeper\apps\api-next
+npm error command failed
+npm error command C:\Windows\system32\cmd.exe /d /s /c next start -p 3001

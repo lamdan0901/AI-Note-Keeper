@@ -12,7 +12,7 @@ export const runtime = "nodejs";
 
 const snoozeReminderHandler = withApiHandler(
   async (ctx) => {
-    const handler = createSnoozeReminderHandler(getComposedServices().remindersService);
+    const handler = createSnoozeReminderHandler((await getComposedServices()).remindersService);
     return handler(toAuthenticatedContext(ctx));
   },
   {

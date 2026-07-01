@@ -8,7 +8,7 @@ export const runtime = "nodejs";
 
 const trashNoteHandler = withApiHandler(
   async (ctx) => {
-    const handler = createTrashNoteHandler(getComposedServices().notesService);
+    const handler = createTrashNoteHandler((await getComposedServices()).notesService);
     return handler(toAuthenticatedContext(ctx));
   },
   {

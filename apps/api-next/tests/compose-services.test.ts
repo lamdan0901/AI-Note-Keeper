@@ -5,14 +5,14 @@ import type { ReminderSchedulerRuntime } from "@backend/reminders/runtime";
 
 import type { SubscriptionReminderDispatchJob } from "@backend/jobs/subscriptions/dispatch-due-subscription-reminders";
 
+import { createReadinessProbe } from "../src/server/compose-services";
 import {
   composeServices,
-  createReadinessProbe,
   getComposedServices,
   resetComposedServicesForTests,
   setComposedServicesForTests,
   type ComposedServices,
-} from "../src/server/compose-services";
+} from "../src/server/compose-services-impl";
 import { createComposedReminderRepairJob } from "../src/server/reminder-repair";
 
 const requiredServiceKeys: Array<keyof ComposedServices> = [

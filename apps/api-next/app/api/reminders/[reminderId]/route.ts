@@ -14,7 +14,7 @@ export const runtime = "nodejs";
 
 const getReminderHandler = withApiHandler(
   async (ctx) => {
-    const handler = createGetReminderHandler(getComposedServices().remindersService);
+    const handler = createGetReminderHandler((await getComposedServices()).remindersService);
     return handler(toAuthenticatedContext(ctx));
   },
   {
@@ -27,7 +27,7 @@ const getReminderHandler = withApiHandler(
 
 const updateReminderHandler = withApiHandler(
   async (ctx) => {
-    const handler = createUpdateReminderHandler(getComposedServices().remindersService);
+    const handler = createUpdateReminderHandler((await getComposedServices()).remindersService);
     return handler(toAuthenticatedContext(ctx));
   },
   {
@@ -40,7 +40,7 @@ const updateReminderHandler = withApiHandler(
 
 const deleteReminderHandler = withApiHandler(
   async (ctx) => {
-    const handler = createDeleteReminderHandler(getComposedServices().remindersService);
+    const handler = createDeleteReminderHandler((await getComposedServices()).remindersService);
     return handler(toAuthenticatedContext(ctx));
   },
   {

@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 
 const listTrashRowsHandler = withApiHandler(
   async (ctx) => {
-    const handler = createListTrashRowsHandler(getComposedServices().expensesService);
+    const handler = createListTrashRowsHandler((await getComposedServices()).expensesService);
     return handler(toAuthenticatedContext(ctx));
   },
   {

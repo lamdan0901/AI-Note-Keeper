@@ -28,7 +28,7 @@ import {
   composeServices,
   resetComposedServicesForTests,
   setComposedServicesForTests,
-} from "../../src/server/compose-services";
+} from "../../src/server/compose-services-impl";
 import { getMaintenanceTelemetry } from "../../src/server/maintenance-telemetry";
 import {
   createInMemoryJobKeyDeduper,

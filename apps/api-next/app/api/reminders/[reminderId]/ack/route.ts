@@ -12,7 +12,7 @@ export const runtime = "nodejs";
 
 const ackReminderHandler = withApiHandler(
   async (ctx) => {
-    const handler = createAckReminderHandler(getComposedServices().remindersService);
+    const handler = createAckReminderHandler((await getComposedServices()).remindersService);
     return handler(toAuthenticatedContext(ctx));
   },
   {

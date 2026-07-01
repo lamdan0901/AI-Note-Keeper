@@ -13,7 +13,7 @@ import {
 } from "../src/db/pool";
 import { EMPTY_ROUTE_CONTEXT } from "../src/http/types";
 import { withApiHandler } from "../src/http/with-api-handler";
-import { createReadinessProbe } from "../src/server/compose-services";
+import { createReadinessProbe } from "../src/server/compose-services-impl";
 import { assertHealthyDependencies } from "../src/server/dependency-gate";
 
 const readJson = async (response: Response): Promise<Record<string, unknown>> => {

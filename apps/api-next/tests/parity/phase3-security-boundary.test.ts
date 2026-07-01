@@ -7,7 +7,7 @@ import {
   composeServices,
   resetComposedServicesForTests,
   setComposedServicesForTests,
-} from "../../src/server/compose-services";
+} from "../../src/server/compose-services-impl";
 import { createNotesServiceDouble } from "../support/notes-service-double";
 import { mockResolveWebGuestUser, notesRouteRegistrations } from "../support/notes-test-server";
 import { createSubscriptionsServiceDouble } from "../support/subscriptions-service-double";

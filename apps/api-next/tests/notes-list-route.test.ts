@@ -15,7 +15,7 @@ import {
   composeServices,
   resetComposedServicesForTests,
   setComposedServicesForTests,
-} from "../src/server/compose-services";
+} from "../src/server/compose-services-impl";
 import { GET as listNotesGet } from "../app/api/notes/route";
 import {
   startNextTestServer,

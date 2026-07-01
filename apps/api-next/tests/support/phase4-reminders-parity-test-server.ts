@@ -9,7 +9,7 @@ import {
   composeServices,
   resetComposedServicesForTests,
   setComposedServicesForTests,
-} from "../../src/server/compose-services";
+} from "../../src/server/compose-services-impl";
 import {
   createPhase4RemindersParityHarness,
   type Phase4RemindersParityHarness,

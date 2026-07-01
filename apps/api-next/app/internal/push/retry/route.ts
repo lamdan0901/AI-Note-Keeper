@@ -6,7 +6,7 @@ import { getComposedServices } from "@/server/compose-services";
 export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
-  const services = getComposedServices();
+  const services = (await getComposedServices());
   const pushJobHandler = services.pushJobHandler;
   const verifierConfig = services.pushQstashVerifierConfig;
 

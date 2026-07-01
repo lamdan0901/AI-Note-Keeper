@@ -10,7 +10,7 @@ export const runtime = "nodejs";
 const permanentDeleteSubscriptionHandler = withApiHandler(
   async (ctx) => {
     const handler = createPermanentDeleteSubscriptionHandler(
-      getComposedServices().subscriptionsService,
+      (await getComposedServices()).subscriptionsService,
     );
     return handler(toAuthenticatedContext(ctx));
   },

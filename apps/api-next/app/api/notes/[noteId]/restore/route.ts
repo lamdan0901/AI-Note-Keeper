@@ -8,7 +8,7 @@ export const runtime = "nodejs";
 
 const restoreNoteHandler = withApiHandler(
   async (ctx) => {
-    const handler = createRestoreNoteHandler(getComposedServices().notesService);
+    const handler = createRestoreNoteHandler((await getComposedServices()).notesService);
     return handler(toAuthenticatedContext(ctx));
   },
   {

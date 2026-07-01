@@ -1,0 +1,22 @@
+---
+pid: 28360
+cwd: "C:\Users\AndersonHo\Desktop\mine\AI-Note-Keeper"
+command: "cd \"C:\\Users\\AndersonHo\\Desktop\\mine\\AI-Note-Keeper\\apps\\api-next\" && npm run build 2>&1 | Select-Object -Last 15"
+started_at: 2026-07-01T04:13:35.248Z
+running_for_ms: 110013   
+---
+├ ƒ /api/subscriptions/[subscriptionId]/permanent
+├ ƒ /api/subscriptions/[subscriptionId]/restore
+├ ƒ /api/subscriptions/trash
+├ ƒ /api/subscriptions/trash/empty
+├ ƒ /cron/reminders-repair
+├ ƒ /cron/subscriptions-dispatch
+├ ƒ /health/live
+├ ƒ /health/ready
+├ ƒ /internal/push/retry
+└ ƒ /internal/reminders/scheduled-task
+
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+

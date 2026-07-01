@@ -8,7 +8,7 @@ export const runtime = "nodejs";
 
 const listNotesHandler = withApiHandler(
   async (ctx) => {
-    const handler = createListNotesHandler(getComposedServices().notesService);
+    const handler = createListNotesHandler((await getComposedServices()).notesService);
     return handler(toAuthenticatedContext(ctx));
   },
   {

@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 
 const deleteDeviceTokenHandler = withApiHandler(
   async (ctx) => {
-    const handler = createDeleteDeviceTokenHandler(getComposedServices().deviceTokensService);
+    const handler = createDeleteDeviceTokenHandler((await getComposedServices()).deviceTokensService);
     return handler(toAuthenticatedContext(ctx));
   },
   {

@@ -8,7 +8,7 @@ export const runtime = "nodejs";
 
 const permanentDeleteNoteHandler = withApiHandler(
   async (ctx) => {
-    const handler = createPermanentDeleteNoteHandler(getComposedServices().notesService);
+    const handler = createPermanentDeleteNoteHandler((await getComposedServices()).notesService);
     return handler(toAuthenticatedContext(ctx));
   },
   {

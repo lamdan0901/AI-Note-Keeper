@@ -12,7 +12,7 @@ export const runtime = "nodejs";
 
 const listSubscriptionsHandler = withApiHandler(
   async (ctx) => {
-    const handler = createListSubscriptionsHandler(getComposedServices().subscriptionsService);
+    const handler = createListSubscriptionsHandler((await getComposedServices()).subscriptionsService);
     return handler(toAuthenticatedContext(ctx));
   },
   {
@@ -24,7 +24,7 @@ const listSubscriptionsHandler = withApiHandler(
 
 const createSubscriptionHandler = withApiHandler(
   async (ctx) => {
-    const handler = createCreateSubscriptionHandler(getComposedServices().subscriptionsService);
+    const handler = createCreateSubscriptionHandler((await getComposedServices()).subscriptionsService);
     const result = await handler(toAuthenticatedContext(ctx));
     return NextResponse.json(result, { status: 201 });
   },

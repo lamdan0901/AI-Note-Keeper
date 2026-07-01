@@ -15,7 +15,7 @@ import {
   composeServices,
   resetComposedServicesForTests,
   setComposedServicesForTests,
-} from "../src/server/compose-services";
+} from "../src/server/compose-services-impl";
 import { POST as syncNotesPost } from "../app/api/notes/sync/route";
 import {
   startNextTestServer,

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { composeServices } from "../src/server/compose-services";
+import { composeServices } from "../src/server/compose-services-impl";
 import { getMaintenanceTelemetry } from "../src/server/maintenance-telemetry";
 
 const qstashEnv = {

@@ -12,7 +12,7 @@ export const runtime = "nodejs";
 
 const listPeriodsHandler = withApiHandler(
   async (ctx) => {
-    const handler = createListPeriodsHandler(getComposedServices().expensesService);
+    const handler = createListPeriodsHandler((await getComposedServices()).expensesService);
     return handler(toAuthenticatedContext(ctx));
   },
   {
@@ -24,7 +24,7 @@ const listPeriodsHandler = withApiHandler(
 
 const createPeriodHandler = withApiHandler(
   async (ctx) => {
-    const handler = createCreatePeriodHandler(getComposedServices().expensesService);
+    const handler = createCreatePeriodHandler((await getComposedServices()).expensesService);
     const result = await handler(toAuthenticatedContext(ctx));
     return NextResponse.json(result, { status: 201 });
   },

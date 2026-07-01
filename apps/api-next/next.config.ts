@@ -12,6 +12,7 @@ const nextConfig: NextConfig = {
   serverExternalPackages: [
     "pg",
     "@node-rs/argon2",
+    "@upstash/qstash",
     "dotenv",
     "jose",
     "argon2",

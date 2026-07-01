@@ -8,7 +8,7 @@ export const runtime = "nodejs";
 
 const emptyTrashHandler = withApiHandler(
   async (ctx) => {
-    const handler = createEmptyTrashHandler(getComposedServices().subscriptionsService);
+    const handler = createEmptyTrashHandler((await getComposedServices()).subscriptionsService);
     return handler(toAuthenticatedContext(ctx));
   },
   {

@@ -15,7 +15,7 @@ import {
   composeServices,
   resetComposedServicesForTests,
   setComposedServicesForTests,
-} from "../src/server/compose-services";
+} from "../src/server/compose-services-impl";
 
 const verifierConfig: QstashVerifierConfig = {
   currentSigningKey: "current-signing-key",
@@ -109,7 +109,7 @@ test("createQstashVerifier returns an async verify function", () => {
   assert.equal(typeof verify, "function");
 });
 
-test("getQstashVerifierConfig reads from composed services", () => {
+test("getQstashVerifierConfig reads from composed services", async () => {
   resetComposedServicesForTests();
   const services = composeServices();
   setComposedServicesForTests({
@@ -118,7 +118,7 @@ test("getQstashVerifierConfig reads from composed services", () => {
   });
 
   try {
-    assert.deepEqual(getQstashVerifierConfig(), verifierConfig);
+    assert.deepEqual(await getQstashVerifierConfig(), verifierConfig);
   } finally {
     resetComposedServicesForTests();
   }

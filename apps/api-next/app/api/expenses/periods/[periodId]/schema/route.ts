@@ -12,7 +12,7 @@ export const runtime = "nodejs";
 
 const updatePeriodSchemaHandler = withApiHandler(
   async (ctx) => {
-    const handler = createUpdatePeriodSchemaHandler(getComposedServices().expensesService);
+    const handler = createUpdatePeriodSchemaHandler((await getComposedServices()).expensesService);
     return handler(toAuthenticatedContext(ctx));
   },
   {

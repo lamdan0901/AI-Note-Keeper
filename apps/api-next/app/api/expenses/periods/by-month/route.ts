@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 
 const findPeriodByMonthHandler = withApiHandler(
   async (ctx) => {
-    const handler = createFindPeriodByMonthHandler(getComposedServices().expensesService);
+    const handler = createFindPeriodByMonthHandler((await getComposedServices()).expensesService);
     return handler(toAuthenticatedContext(ctx));
   },
   {

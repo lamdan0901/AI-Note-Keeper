@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 
 const applyHandler = withApiHandler(
   async (ctx) => {
-    const handler = createMergeApplyHandler(getComposedServices().mergeService);
+    const handler = createMergeApplyHandler((await getComposedServices()).mergeService);
     return handler(toAuthenticatedContext(ctx));
   },
   {

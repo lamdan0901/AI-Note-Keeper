@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 
 const upsertDeviceTokenHandler = withApiHandler(
   async (ctx) => {
-    const handler = createUpsertDeviceTokenHandler(getComposedServices().deviceTokensService);
+    const handler = createUpsertDeviceTokenHandler((await getComposedServices()).deviceTokensService);
     return handler(toAuthenticatedContext(ctx));
   },
   {

@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 const listTrashedSubscriptionsHandler = withApiHandler(
   async (ctx) => {
     const handler = createListTrashedSubscriptionsHandler(
-      getComposedServices().subscriptionsService,
+      (await getComposedServices()).subscriptionsService,
     );
     return handler(toAuthenticatedContext(ctx));
   },

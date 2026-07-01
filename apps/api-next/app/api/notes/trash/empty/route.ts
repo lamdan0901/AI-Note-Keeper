@@ -8,7 +8,7 @@ export const runtime = "nodejs";
 
 const emptyTrashHandler = withApiHandler(
   async (ctx) => {
-    const handler = createEmptyTrashHandler(getComposedServices().notesService);
+    const handler = createEmptyTrashHandler((await getComposedServices()).notesService);
     return handler(toAuthenticatedContext(ctx));
   },
   {

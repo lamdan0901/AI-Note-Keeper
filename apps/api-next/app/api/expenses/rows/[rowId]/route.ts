@@ -13,7 +13,7 @@ export const runtime = "nodejs";
 
 const updateRowHandler = withApiHandler(
   async (ctx) => {
-    const handler = createUpdateRowHandler(getComposedServices().expensesService);
+    const handler = createUpdateRowHandler((await getComposedServices()).expensesService);
     return handler(toAuthenticatedContext(ctx));
   },
   {
@@ -29,7 +29,7 @@ const updateRowHandler = withApiHandler(
 
 const deleteRowHandler = withApiHandler(
   async (ctx) => {
-    const handler = createDeleteRowHandler(getComposedServices().expensesService);
+    const handler = createDeleteRowHandler((await getComposedServices()).expensesService);
     return handler(toAuthenticatedContext(ctx));
   },
   {

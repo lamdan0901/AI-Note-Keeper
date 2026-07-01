@@ -8,7 +8,7 @@ export const runtime = "nodejs";
 
 const getCurrentPeriodHandler = withApiHandler(
   async (ctx) => {
-    const handler = createGetCurrentPeriodHandler(getComposedServices().expensesService);
+    const handler = createGetCurrentPeriodHandler((await getComposedServices()).expensesService);
     return handler(toAuthenticatedContext(ctx));
   },
   {

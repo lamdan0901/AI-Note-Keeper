@@ -71,6 +71,7 @@ export async function verifyQstashSignature(
 }
 
 /** Read verifier config from composed services (undefined when scheduler disabled). */
-export function getQstashVerifierConfig(): QstashVerifierConfig | undefined {
-  return getComposedServices().reminderQstashVerifierConfig;
+export async function getQstashVerifierConfig(): Promise<QstashVerifierConfig | undefined> {
+  const services = await getComposedServices();
+  return services.reminderQstashVerifierConfig;
 }
