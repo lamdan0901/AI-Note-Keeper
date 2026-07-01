@@ -1,20 +1,7 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-
 import { z } from 'zod';
 
 import { AppError } from '../middleware/error-middleware.js';
-
-const loadDefaultExpenseSchema = (): unknown => {
-  const here = path.dirname(fileURLToPath(import.meta.url));
-  const schemaPath = path.resolve(
-    here,
-    '../../../../packages/shared/constants/expenseDefaultSchema.json',
-  );
-
-  return JSON.parse(fs.readFileSync(schemaPath, 'utf-8'));
-};
+import expenseDefaultSchemaJson from '../../../../packages/shared/constants/expenseDefaultSchema.json' with { type: 'json' };
 
 export const MAX_EXPENSE_COLUMNS = 10;
 export const MAX_EXPENSE_ROWS_PER_PERIOD = 500;
@@ -171,7 +158,7 @@ export type ExpenseRowPatch = {
   updatedAt?: Date;
 };
 
-export const DEFAULT_EXPENSE_SCHEMA = expenseTableSchema.parse(loadDefaultExpenseSchema());
+export const DEFAULT_EXPENSE_SCHEMA = expenseTableSchema.parse(expenseDefaultSchemaJson);
 
 export const cloneExpenseTableSchema = (schema: ExpenseTableSchema): ExpenseTableSchema => {
   return expenseTableSchema.parse(JSON.parse(JSON.stringify(schema)));
