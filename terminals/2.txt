@@ -3,7 +3,7 @@ pid: 18612
 cwd: "C:\Users\AndersonHo\Desktop\mine\AI-Note-Keeper"
 command: "npm --workspace apps/api-next run build"
 started_at: 2026-07-01T03:25:40.973Z
-running_for_ms: 90014    
+running_for_ms: 3670014  
 ---
 ⚠ Compiled with warnings in 5.1s
 

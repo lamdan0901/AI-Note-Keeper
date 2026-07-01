@@ -7,12 +7,24 @@ const { Pool } = pg;
 
 let poolInstance: pg.Pool | null = null;
 
+const resolveConnectionTimeoutMillis = (): number => {
+  const configured = process.env.DB_CONNECTION_TIMEOUT_MS;
+  if (configured) {
+    const parsed = Number(configured);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+
+  return process.env.VERCEL === '1' ? 10_000 : 2_000;
+};
+
 const createPool = (): pg.Pool => {
   const nextPool = new Pool({
     connectionString: config.DATABASE_URL,
     max: 20,
     idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 2000,
+    connectionTimeoutMillis: resolveConnectionTimeoutMillis(),
   });
 
   nextPool.on('error', (err) => {

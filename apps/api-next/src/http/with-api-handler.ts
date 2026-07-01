@@ -220,6 +220,10 @@ export const withApiHandler = (
 
       return finalizeResponse(response);
     } catch (error) {
+      if (!(error instanceof AppError)) {
+        console.error("[api-next] request handler error", error);
+      }
+
       return finalizeResponse(toErrorResponse(error, request));
     }
   };

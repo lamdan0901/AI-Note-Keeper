@@ -12,20 +12,42 @@ export const createReadinessProbe = (): (() => Promise<ReadinessStatus>) => {
     });
 };
 
+export type RunInitialStartupChecksOptions = Readonly<{
+  maxAttempts?: number;
+  retryDelayMs?: number;
+}>;
+
+const STARTUP_READINESS_FAILURE_MESSAGE =
+  "Initial readiness check failed: database connectivity and schema_migrations are required.";
+
+const sleep = (delayMs: number): Promise<void> =>
+  new Promise((resolve) => {
+    setTimeout(resolve, delayMs);
+  });
+
 export const runInitialStartupChecks = async (
   readinessProbe: () => Promise<ReadinessStatus> = () =>
     evaluateReadiness({
       queryClient: pool,
       dependencyDegraded: false,
     }),
+  options: RunInitialStartupChecksOptions = {},
 ): Promise<void> => {
-  const readiness = await readinessProbe();
+  const maxAttempts = Math.max(1, options.maxAttempts ?? 1);
+  const retryDelayMs = Math.max(0, options.retryDelayMs ?? 0);
 
-  if (!readiness.ok) {
-    throw new Error(
-      "Initial readiness check failed: database connectivity and schema_migrations are required.",
-    );
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const readiness = await readinessProbe();
+    if (readiness.ok) {
+      return;
+    }
+
+    if (attempt < maxAttempts) {
+      await sleep(retryDelayMs);
+    }
   }
+
+  throw new Error(STARTUP_READINESS_FAILURE_MESSAGE);
 };
 
 let startupPromise: Promise<void> | null = null;
@@ -40,7 +62,24 @@ export const ensureApiNextStartup = async (): Promise<void> => {
   }
 
   startupPromise = (async () => {
-    await runInitialStartupChecks();
+    const isVercel = process.env.VERCEL === "1";
+    const startupOptions: RunInitialStartupChecksOptions = isVercel
+      ? { maxAttempts: 3, retryDelayMs: 1_000 }
+      : {};
+
+    try {
+      await runInitialStartupChecks(undefined, startupOptions);
+    } catch (error) {
+      if (!isVercel) {
+        throw error;
+      }
+
+      console.warn(
+        "[api-next] startup readiness check failed on Vercel boot; deferring to request-time checks",
+        error,
+      );
+    }
+
     initializePoolErrorHandling();
   })();
 

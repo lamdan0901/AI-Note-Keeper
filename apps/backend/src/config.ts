@@ -92,10 +92,31 @@ export const readAuthConfig = (env: NodeJS.ProcessEnv = process.env): AuthConfig
   return parsed.data;
 };
 
+const SCHEDULER_OPTIONAL_STRING_KEYS = [
+  'REMINDER_SCHEDULER_CALLBACK_BASE_URL',
+  'QSTASH_TOKEN',
+  'QSTASH_CURRENT_SIGNING_KEY',
+  'QSTASH_NEXT_SIGNING_KEY',
+  'QSTASH_URL',
+] as const;
+
+const normalizeSchedulerEnv = (env: NodeJS.ProcessEnv): NodeJS.ProcessEnv => {
+  const normalized: NodeJS.ProcessEnv = { ...env };
+
+  for (const key of SCHEDULER_OPTIONAL_STRING_KEYS) {
+    const value = normalized[key];
+    if (typeof value === 'string' && value.trim().length === 0) {
+      delete normalized[key];
+    }
+  }
+
+  return normalized;
+};
+
 export const readReminderSchedulerConfig = (
   env: NodeJS.ProcessEnv = process.env,
 ): ReminderSchedulerConfig => {
-  const parsed = schedulerEnvSchema.safeParse(env);
+  const parsed = schedulerEnvSchema.safeParse(normalizeSchedulerEnv(env));
   if (!parsed.success) {
     throw new Error(
       `Invalid reminder scheduler configuration: ${JSON.stringify(parsed.error.format())}`,

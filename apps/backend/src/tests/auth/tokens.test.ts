@@ -91,6 +91,21 @@ test('production scheduler config requires QStash credentials for qstash provide
   );
 });
 
+test('qstash scheduler config ignores blank optional QSTASH_URL', () => {
+  const config = readReminderSchedulerConfig({
+    NODE_ENV: 'production',
+    REMINDER_SCHEDULER_PROVIDER: 'qstash',
+    REMINDER_SCHEDULER_CALLBACK_BASE_URL: 'https://api.example.test',
+    QSTASH_TOKEN: 'qstash-token',
+    QSTASH_CURRENT_SIGNING_KEY: 'current-signing-key',
+    QSTASH_NEXT_SIGNING_KEY: 'next-signing-key',
+    QSTASH_URL: '',
+  } as NodeJS.ProcessEnv);
+
+  assert.equal(config.REMINDER_SCHEDULER_PROVIDER, 'qstash');
+  assert.equal(config.QSTASH_URL, undefined);
+});
+
 test('qstash scheduler config accepts callback base url token and signing keys', () => {
   const config = readReminderSchedulerConfig({
     NODE_ENV: 'production',
