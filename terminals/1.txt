@@ -1,0 +1,26 @@
+---
+pid: 30464
+cwd: "C:\Users\AndersonHo\Desktop\mine\AI-Note-Keeper"
+command: "npm install --workspace apps/api-next && npm --workspace apps/api-next run typecheck"
+started_at: 2026-07-01T03:19:52.636Z
+running_for_ms: 440003   
+---
+
+added 21 packages, and audited 1895 packages in 30s
+
+237 packages are looking for funding
+  run `npm fund` for details
+
+3 vulnerabilities (1 low, 2 moderate)
+
+To address issues that do not require attention, run:
+  npm audit fix
+
+To address all issues (including breaking changes), run:
+  npm audit fix --force
+
+Run `npm audit` for details.
+
+> @ai-note-keeper/api-next@0.0.0 typecheck
+> tsc --noEmit
+
