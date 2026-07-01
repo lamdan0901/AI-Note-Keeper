@@ -32,6 +32,18 @@ test("runInitialStartupChecks retries before failing", async () => {
   assert.equal(attempts, 3);
 });
 
+test("runInitialStartupChecks includes actionable detail when migrations are missing", async () => {
+  await assert.rejects(
+    () =>
+      runInitialStartupChecks(async () => ({
+        ok: false,
+        service: "backend",
+        checks: { database: "up", migrations: "down" },
+      })),
+    /schema_migrations missing/,
+  );
+});
+
 test("runInitialStartupChecks succeeds once readiness becomes healthy", async () => {
   let attempts = 0;
 

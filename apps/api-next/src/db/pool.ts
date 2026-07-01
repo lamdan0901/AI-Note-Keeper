@@ -1,4 +1,4 @@
-import { pool as backendPool } from "@backend/db/pool";
+import { isRemoteDatabaseUrl, pool as backendPool } from "@backend/db/pool";
 
 export type PoolErrorLogger = Readonly<{
   error: (message: string, error?: unknown) => void;
@@ -60,3 +60,5 @@ export const resetPoolErrorStateForTests = (): void => {
 
 /** Re-export backend pool — the only allowed DB import path in api-next. */
 export const pool = backendPool;
+
+export { isRemoteDatabaseUrl };

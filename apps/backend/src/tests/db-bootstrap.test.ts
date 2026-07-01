@@ -80,3 +80,19 @@ test('ensureDatabaseExists skips create when the target database already exists'
   assert.equal(released, true);
   assert.equal(ended, true);
 });
+
+test('ensureDatabaseExists skips bootstrap for remote managed databases', async () => {
+  let connectCalled = false;
+
+  await ensureDatabaseExists('postgresql://user:pass@ep-example.neon.tech/neondb', {
+    createPool: () => ({
+      connect: async () => {
+        connectCalled = true;
+        throw new Error('should not connect to remote bootstrap pool');
+      },
+      end: async () => undefined,
+    }),
+  });
+
+  assert.equal(connectCalled, false);
+});

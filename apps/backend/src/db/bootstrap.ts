@@ -1,5 +1,7 @@
 import pg from 'pg';
 
+import { isRemoteDatabaseUrl, resolveConnectionTimeoutMillis } from './pool.js';
+
 const { Pool } = pg;
 
 type QueryResult = {
@@ -39,6 +41,10 @@ export async function ensureDatabaseExists(
   databaseUrl: string,
   options: BootstrapOptions = {},
 ): Promise<void> {
+  if (isRemoteDatabaseUrl(databaseUrl)) {
+    return;
+  }
+
   const createPool =
     options.createPool ??
     ((connectionString: string) =>
@@ -46,7 +52,7 @@ export async function ensureDatabaseExists(
         connectionString,
         max: 1,
         idleTimeoutMillis: 1000,
-        connectionTimeoutMillis: 2000,
+        connectionTimeoutMillis: resolveConnectionTimeoutMillis(connectionString),
       }));
 
   const databaseName = getDatabaseName(databaseUrl);

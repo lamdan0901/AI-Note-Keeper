@@ -1,7 +1,10 @@
 import { sha256 } from 'js-sha256';
 
 import { AppError } from '../middleware/error-middleware.js';
-import type { NoteChangeEventsRepository } from '../notes/repositories/note-change-events-repository.js';
+import {
+  createNoteChangeEventsRepository,
+  type NoteChangeEventsRepository,
+} from '../notes/repositories/note-change-events-repository.js';
 import {
   assertValidRepeatRule,
   assertValidTimezone,
@@ -18,7 +21,10 @@ import {
   createReminderSchedulerService,
   type ReminderSchedulerService,
 } from './scheduler-service.js';
-import type { RemindersRepository } from './repositories/reminders-repository.js';
+import {
+  createRemindersRepository,
+  type RemindersRepository,
+} from './repositories/reminders-repository.js';
 import { loadSharedModule } from '../shared/load-shared-module.js';
 
 type ComputeNextTrigger = (
@@ -357,22 +363,9 @@ const resolveInitialNextTrigger = (
 };
 
 export const createRemindersService = (deps: RemindersServiceDeps = {}): RemindersService => {
-  const remindersRepository =
-    deps.remindersRepository ??
-    (() => {
-      const mod = require('./repositories/reminders-repository.js') as {
-        createRemindersRepository: () => RemindersRepository;
-      };
-      return mod.createRemindersRepository();
-    })();
+  const remindersRepository = deps.remindersRepository ?? createRemindersRepository();
   const noteChangeEventsRepository =
-    deps.noteChangeEventsRepository ??
-    (() => {
-      const mod = require('../notes/repositories/note-change-events-repository.js') as {
-        createNoteChangeEventsRepository: () => NoteChangeEventsRepository;
-      };
-      return mod.createNoteChangeEventsRepository();
-    })();
+    deps.noteChangeEventsRepository ?? createNoteChangeEventsRepository();
   const schedulerService =
     deps.schedulerService ??
     createReminderSchedulerService({
