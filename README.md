@@ -7,9 +7,9 @@ across web and mobile.
 
 This project includes:
 
-- **Web App** (`frontend/web`): React-based interface for creating, editing, and managing notes in the browser.
-- **Mobile App** (`frontend/mobile`): React Native (Expo) app for Android/iOS with on-the-go note access and reminders.
-- **Backend** (`backend`): Convex-powered backend for realtime data sync, functions, and app logic.
+- **Web App** (`apps/web`): React-based interface for creating, editing, and managing notes in the browser.
+- **Mobile App** (`apps/mobile`): React Native (Expo) app for Android/iOS with on-the-go note access and reminders.
+- **Backend** (`apps/api-next`): Nextjs backend for realtime data sync, functions, and app logic.
 
 ## Progress & Roadmap
 
@@ -61,56 +61,3 @@ The mobile app is built with Expo + React Native for native-like performance and
 ![Screenshot_2026-03-01-10-07-10-561_com andersonho ainotekeeper](https://github.com/user-attachments/assets/aca3eb42-ad22-42e6-80a6-f9517ef3663a)
 ![Screenshot_2026-03-01-10-07-42-963_com andersonho ainotekeeper](https://github.com/user-attachments/assets/f3020c4c-f8c2-457e-b2e6-05d984cb817c)
 ![Screenshot_2026-03-01-10-07-38-739_com andersonho ainotekeeper](https://github.com/user-attachments/assets/237646c2-f457-47b4-88ea-3de5db6149d4)
-
----
-
-## Convex Backend
-
-Convex handles:
-
-- Realtime note synchronization
-- Backend functions and business logic
-- Data persistence and querying
-- Support for reminder/sync workflows
-
----
-
-## Installation & Run
-
-### 1. Clone and install dependencies
-
-```bash
-git clone <your-repo-url>
-cd ai-note-keeper
-npm install
-
-### 2. Run Convex backend
-
-cd backend
-npx convex dev
-
-### 3. Run Web App
-
-cd frontend/web
-npm install
-npm run dev
-
-### 4. Run Mobile App (Expo)
-
-cd frontend/mobile
-npm install
-npx expo start
-
-Then use:
-
-- a for Android emulator
-- i for iOS simulator (macOS)
-- Expo Go app for physical device testing
-
-———
-
-## Useful Commands
-
-npm test
-npm run lint
-```

@@ -58,6 +58,7 @@ test("getMaintenanceTelemetry reports all maintenance paths when qstash schedule
 
     assert.deepEqual(telemetry, {
       remindersRepair: true,
+      notesTrashPurge: true,
       subscriptionsDispatch: true,
       pushRetryCallback: true,
     });
@@ -75,6 +76,7 @@ test("getMaintenanceTelemetry reports disabled maintenance paths when scheduler 
 
     assert.deepEqual(telemetry, {
       remindersRepair: false,
+      notesTrashPurge: true,
       subscriptionsDispatch: false,
       pushRetryCallback: false,
     });

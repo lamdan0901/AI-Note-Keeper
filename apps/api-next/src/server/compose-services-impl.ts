@@ -25,6 +25,10 @@ import {
   type ReminderRepairJob,
 } from "@/server/reminder-repair";
 import {
+  createNotesTrashPurgeJob,
+  type NotesTrashPurgeJob,
+} from "@/server/notes-trash-purge";
+import {
   createApiNextRemindersService,
   createApiNextScheduledTaskExecutor,
 } from "@/server/reminder-scheduling";
@@ -50,6 +54,7 @@ export type ComposedServices = Readonly<{
   reminderScheduledTaskExecutor?: ScheduledTaskExecutor;
   reminderQstashVerifierConfig?: QstashVerifierConfig;
   reminderRepairJob?: ReminderRepairJob;
+  notesTrashPurgeJob: NotesTrashPurgeJob;
   subscriptionReminderDispatchJob?: SubscriptionReminderDispatchJob;
   pushJobHandler?: PushJobHandler;
   pushRetryScheduler?: PushRetryScheduler;
@@ -103,6 +108,9 @@ export const composeServices = (): ComposedServices => {
     reminderRepairJob: reminderRuntime.schedulerCallbacksEnabled
       ? createComposedReminderRepairJob(apiNextReminderRuntime)
       : undefined,
+    notesTrashPurgeJob: createNotesTrashPurgeJob({
+      schedulerService: reminderRuntime.schedulerService,
+    }),
     subscriptionReminderDispatchJob: pushDispatch?.subscriptionReminderDispatchJob,
     pushJobHandler: pushDispatch?.pushJobHandler,
     pushRetryScheduler: pushDispatch?.pushRetryScheduler,

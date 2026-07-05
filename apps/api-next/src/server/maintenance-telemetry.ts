@@ -2,6 +2,7 @@ import type { ComposedServices } from "@/server/compose-services";
 
 export type MaintenanceTelemetry = Readonly<{
   remindersRepair: boolean;
+  notesTrashPurge: boolean;
   subscriptionsDispatch: boolean;
   pushRetryCallback: boolean;
 }>;
@@ -12,6 +13,7 @@ export type MaintenanceTelemetry = Readonly<{
  */
 export const getMaintenanceTelemetry = (services: ComposedServices): MaintenanceTelemetry => ({
   remindersRepair: services.reminderRepairJob !== undefined,
+  notesTrashPurge: services.notesTrashPurgeJob !== undefined,
   subscriptionsDispatch: services.subscriptionReminderDispatchJob !== undefined,
   pushRetryCallback:
     services.pushJobHandler !== undefined &&

@@ -1,0 +1,9 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "crons": [
+    {
+      "path": "/cron/notes-trash-purge",
+      "schedule": "0 0 * * 0"
+    }
+  ]
+}
