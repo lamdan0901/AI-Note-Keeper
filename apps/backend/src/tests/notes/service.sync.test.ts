@@ -63,12 +63,16 @@ const createNote = (
 
 const createInMemoryNotesRepository = (
   initialNotes: ReadonlyArray<NoteRecord>,
+  options: Readonly<{
+    scheduleTargetsByNoteId?: ReadonlyMap<string, string | null>;
+  }> = {},
 ): NotesRepository & Readonly<{ byKey: Map<string, NoteRecord>; patches: NotePatchInput[] }> => {
   const byKey = new Map<string, NoteRecord>();
   initialNotes.forEach((note) => {
     byKey.set(`${note.userId}:${note.id}`, note);
   });
   const patches: NotePatchInput[] = [];
+  const scheduleTargetsByNoteId = options.scheduleTargetsByNoteId ?? new Map();
 
   return {
     byKey,
@@ -126,15 +130,22 @@ const createInMemoryNotesRepository = (
       return byKey.delete(`${userId}:${noteId}`);
     },
     emptyTrash: async ({ userId }) => {
-      const removable = [...byKey.values()]
-        .filter((note) => note.userId === userId && note.active === false)
-        .map((note) => note.id);
+      const removable = [...byKey.values()].filter(
+        (note) => note.userId === userId && note.active === false,
+      );
 
-      removable.forEach((noteId) => {
-        byKey.delete(`${userId}:${noteId}`);
+      removable.forEach((note) => {
+        byKey.delete(`${userId}:${note.id}`);
       });
 
-      return removable.length;
+      return {
+        deleted: removable.length,
+        rows: removable.map((note) => ({
+          id: note.id,
+          userId: note.userId,
+          scheduleTargetId: scheduleTargetsByNoteId.get(note.id) ?? null,
+        })),
+      };
     },
   };
 };
@@ -760,55 +771,45 @@ test('note trash cleanup paths cancel reminder schedules before removal', async 
   }
 
   {
-    const notesRepository = createInMemoryNotesRepository([
+    const notesRepository = createInMemoryNotesRepository(
+      [
+        {
+          ...createNote({
+            id: 'note-empty-trash',
+            userId: 'user-1',
+            title: 'Trash cleanup',
+            updatedAt: 1_700_000_100_000,
+          }),
+          active: false,
+          deletedAt: new Date(1_700_000_150_000),
+        },
+        {
+          ...createNote({
+            id: 'note-empty-trash-no-schedule',
+            userId: 'user-1',
+            title: 'Already cancelled schedule',
+            updatedAt: 1_700_000_100_000,
+          }),
+          active: false,
+          deletedAt: new Date(1_700_000_150_000),
+        },
+      ],
       {
-        ...createNote({
-          id: 'note-empty-trash',
-          userId: 'user-1',
-          title: 'Trash cleanup',
-          updatedAt: 1_700_000_100_000,
-        }),
-        active: false,
-        deletedAt: new Date(1_700_000_150_000),
+        scheduleTargetsByNoteId: new Map([
+          ['note-empty-trash', 'schedule-empty-trash'],
+          ['note-empty-trash-no-schedule', null],
+        ]),
       },
-    ]);
+    );
     const schedulerEvents: string[] = [];
+    let findByIdCalls = 0;
     const service = createNotesService({
       notesRepository,
       noteChangeEventsRepository: createInMemoryChangeEventsRepository(),
       remindersRepository: {
-        findByIdForUser: async ({ reminderId, userId }) => {
-          const note = await notesRepository.findByIdForUser({ noteId: reminderId, userId });
-          if (!note) {
-            return null;
-          }
-
-          return {
-            id: note.id,
-            userId: note.userId,
-            title: note.title,
-            triggerAt: new Date(1_700_000_400_000),
-            done: null,
-            repeatRule: 'none',
-            repeatConfig: null,
-            repeat: null,
-            snoozedUntil: null,
-            active: note.active,
-            scheduleStatus: 'scheduled',
-            timezone: 'UTC',
-            baseAtLocal: null,
-            startAt: null,
-            nextTriggerAt: new Date(1_700_000_400_000),
-            lastFiredAt: null,
-            lastAcknowledgedAt: null,
-            scheduleProvider: 'qstash',
-            scheduleTargetId: 'schedule-empty-trash',
-            scheduleTargetVersion: note.version,
-            scheduleTargetFireAt: new Date(1_700_000_400_000),
-            version: note.version,
-            createdAt: new Date(1_700_000_100_000),
-            updatedAt: note.updatedAt,
-          } satisfies ReminderRecord;
+        findByIdForUser: async () => {
+          findByIdCalls += 1;
+          return null;
         },
       },
       schedulerService: {
@@ -822,8 +823,11 @@ test('note trash cleanup paths cancel reminder schedules before removal', async 
 
     const deleted = await service.emptyTrash({ userId: 'user-1' });
 
-    assert.equal(deleted, 1);
+    assert.equal(deleted, 2);
+    // Only notes that still have an external schedule are cancelled — no N+1
+    // findById lookups for every trashed note.
     assert.deepEqual(schedulerEvents, ['cancel:schedule-empty-trash']);
+    assert.equal(findByIdCalls, 0);
   }
 
   {

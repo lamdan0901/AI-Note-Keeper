@@ -13,14 +13,29 @@ import {
 } from './repositories/note-change-events-repository.js';
 import {
   createNotesRepository,
+  type EmptyTrashDeletedRow,
   type NoteCreateInput,
   type NotePatchInput,
   type NotesRepository,
 } from './repositories/notes-repository.js';
+import type { ReminderRecord } from '../reminders/contracts.js';
 import type { ReminderSchedulerService } from '../reminders/scheduler-service.js';
 import type { RemindersRepository } from '../reminders/repositories/reminders-repository.js';
 
 const TRASH_RETENTION_MS = 14 * 24 * 60 * 60 * 1000;
+
+/**
+ * `cancelCurrentSchedule` only reads `id`, `userId`, and `scheduleTargetId`
+ * (see reminders/scheduler-service). The note row is already hard-deleted by the
+ * time we call it, so we pass a minimal projection rather than rehydrating a
+ * full ReminderRecord.
+ */
+const toScheduleCancelInput = (row: EmptyTrashDeletedRow): ReminderRecord =>
+  ({
+    id: row.id,
+    userId: row.userId,
+    scheduleTargetId: row.scheduleTargetId,
+  }) as unknown as ReminderRecord;
 
 type NotesServiceDeps = Readonly<{
   notesRepository?: NotesRepository;
@@ -431,16 +446,26 @@ export const createNotesService = (deps: NotesServiceDeps = {}): NotesService =>
     },
 
     emptyTrash: async ({ userId }) => {
-      const notes = await notesRepository.listByUser(userId);
-      for (const note of notes) {
-        if (note.active) {
-          continue;
-        }
+      // Bulk-delete first (one query). Only cancel external schedules that are
+      // still attached — trashNote already clears most of them, so the common
+      // path is a single DELETE with zero per-note round-trips.
+      const result = await notesRepository.emptyTrash({ userId });
 
-        await cancelReminderSchedule({ noteId: note.id, userId });
+      if (reminderScheduling) {
+        const pendingCancels = result.rows
+          .filter((row) => row.scheduleTargetId)
+          .map((row) =>
+            reminderScheduling.schedulerService
+              .cancelCurrentSchedule(toScheduleCancelInput(row))
+              .catch(() => undefined),
+          );
+
+        if (pendingCancels.length > 0) {
+          await Promise.all(pendingCancels);
+        }
       }
 
-      return await notesRepository.emptyTrash({ userId });
+      return result.deleted;
     },
 
     purgeExpiredTrash: async ({ userId }) => {

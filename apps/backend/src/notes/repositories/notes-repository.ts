@@ -83,6 +83,17 @@ export type NotePatchInput = {
   version?: number;
 };
 
+export type EmptyTrashDeletedRow = Readonly<{
+  id: string;
+  userId: string;
+  scheduleTargetId: string | null;
+}>;
+
+export type EmptyTrashResult = Readonly<{
+  deleted: number;
+  rows: ReadonlyArray<EmptyTrashDeletedRow>;
+}>;
+
 export type NotesRepository = Readonly<{
   listByUser: (userId: string) => Promise<ReadonlyArray<NoteRecord>>;
   findByIdForUser: (
@@ -93,7 +104,7 @@ export type NotesRepository = Readonly<{
     input: Readonly<{ noteId: string; userId: string; patch: NotePatchInput }>,
   ) => Promise<NoteRecord | null>;
   hardDelete: (input: Readonly<{ noteId: string; userId: string }>) => Promise<boolean>;
-  emptyTrash: (input: Readonly<{ userId: string }>) => Promise<number>;
+  emptyTrash: (input: Readonly<{ userId: string }>) => Promise<EmptyTrashResult>;
 }>;
 
 const toDomain = (row: NoteRow): NoteRecord => {
@@ -318,16 +329,29 @@ export const createNotesRepository = (
     },
 
     emptyTrash: async ({ userId }) => {
-      const result = await db.query<{ id: string }>(
+      const result = await db.query<{
+        id: string;
+        user_id: string;
+        schedule_target_id: string | null;
+      }>(
         `
           DELETE FROM notes
           WHERE user_id = $1 AND active = false
-          RETURNING id
+          RETURNING id, user_id, schedule_target_id
         `,
         [userId],
       );
 
-      return result.rows.length;
+      const rows = result.rows.map((row) => ({
+        id: row.id,
+        userId: row.user_id,
+        scheduleTargetId: row.schedule_target_id,
+      }));
+
+      return {
+        deleted: rows.length,
+        rows,
+      };
     },
   };
 };
