@@ -330,13 +330,28 @@ body {
   }
 }
 .notes-header__status {
-  font-size: 13px;
-  padding: 2px 10px;
-  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  min-height: 20px;
 }
-.notes-header__status--error {
-  background: var(--color-status-error-bg);
-  color: var(--color-status-error-text);
+.notes-header__status--saving {
+  color: var(--color-text-secondary);
+}
+.notes-header__status-spinner {
+  animation: notes-header-spin 0.8s linear infinite;
+}
+@keyframes notes-header-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.notes-header__status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-status-error-text, #dc2626);
 }
 .notes-header__theme-btn {
   display: inline-flex;

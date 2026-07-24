@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import {
   LayoutGrid,
   List,
+  Loader2,
   LogIn,
   LogOut,
   Moon,
@@ -160,7 +161,6 @@ export default function App(): JSX.Element {
         ? 'Search deleted subscriptions'
         : 'Search subscriptions';
   const hasSearch = activeSearchQuery.trim().length > 0;
-  const notesStatusLabel = notesSaveStatus === 'error' ? 'Error saving' : null;
   const authBusy =
     authLoading ||
     transitionState === 'preflight' ||
@@ -273,6 +273,24 @@ export default function App(): JSX.Element {
           )}
         </div>
         <div className="app-nav__right">
+          {notesSaveStatus === 'saving' && (
+            <span
+              className="notes-header__status notes-header__status--saving"
+              aria-label="Saving"
+              title="Saving"
+            >
+              <Loader2 size={16} className="notes-header__status-spinner" aria-hidden="true" />
+            </span>
+          )}
+          {notesSaveStatus === 'error' && (
+            <span
+              className="notes-header__status notes-header__status--error-dot"
+              aria-label="Save failed"
+              title="Save failed"
+            >
+              <span className="notes-header__status-dot" aria-hidden="true" />
+            </span>
+          )}
           <div
             className="app-nav__theme notes-header__view-toggle"
             role="radiogroup"
@@ -300,11 +318,6 @@ export default function App(): JSX.Element {
             className="app-nav__actions"
             style={{ display: activeTab === 'notes' ? undefined : 'none' }}
           >
-            {notesStatusLabel && (
-              <span className={`notes-header__status notes-header__status--${notesSaveStatus}`}>
-                {notesStatusLabel}
-              </span>
-            )}
             <div className="notes-header__view-toggle" role="group" aria-label="View mode">
               <button
                 className={`notes-header__view-btn${notesViewMode === 'grid' ? ' notes-header__view-btn--active' : ''}`}
