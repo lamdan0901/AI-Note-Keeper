@@ -43,6 +43,10 @@ export function applyReminderInDraft(
   return { ...draft, reminder, repeat, done: false };
 }
 
+export function isReminderBlockingSave(reminder: Date | null, now: Date): boolean {
+  return reminder !== null && reminder.getTime() <= now.getTime();
+}
+
 const COLOR_LABELS: Record<NoteColorPreset, string> = {
   default: 'Default',
   red: 'Red',

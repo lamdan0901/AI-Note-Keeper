@@ -3,6 +3,7 @@ import type { NoteEditorDraft } from '../src/services/notesTypes';
 import {
   applyReminderInDraft,
   clearReminderInDraft,
+  isReminderBlockingSave,
   toggleDoneInDraft,
 } from '../src/components/NoteEditorModal';
 
@@ -53,5 +54,25 @@ describe('NoteEditorModal draft transitions', () => {
     expect(next.done).toBe(false);
     expect(next.reminder).toEqual(reminder);
     expect(next.repeat).toEqual(repeat);
+  });
+});
+
+describe('isReminderBlockingSave', () => {
+  const now = new Date('2026-07-24T12:00:00.000Z');
+
+  it('does not block when reminder is null', () => {
+    expect(isReminderBlockingSave(null, now)).toBe(false);
+  });
+
+  it('does not block when reminder is in the future', () => {
+    expect(isReminderBlockingSave(new Date('2026-07-24T13:00:00.000Z'), now)).toBe(false);
+  });
+
+  it('blocks when reminder is equal to now', () => {
+    expect(isReminderBlockingSave(new Date('2026-07-24T12:00:00.000Z'), now)).toBe(true);
+  });
+
+  it('blocks when reminder is in the past', () => {
+    expect(isReminderBlockingSave(new Date('2026-07-24T11:59:00.000Z'), now)).toBe(true);
   });
 });
