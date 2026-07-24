@@ -1,9 +1,8 @@
 import React, { useEffect, useRef, useCallback, useState } from 'react';
-import { Bell, CheckCircle, Circle, List, Pin, Trash2, Type, X } from 'lucide-react';
+import { CheckCircle, Circle, List, Pin, Trash2, Type, X } from 'lucide-react';
 import type { NoteEditorDraft, NoteColorPreset } from '../services/notesTypes';
 import { NOTE_COLOR_PRESET_IDS } from '../services/notesUtils';
-import { formatReminder } from '../services/reminderUtils';
-import { ReminderSetupModal } from './reminders/ReminderSetupModal';
+import { ReminderSetupPanel } from './reminders/ReminderSetupPanel';
 import { ChecklistEditor } from './ChecklistEditor';
 import type { ChecklistItem } from '../../../../packages/shared/types/note';
 import {
@@ -67,7 +66,6 @@ export function NoteEditorModal({
   const dialogRef = useRef<HTMLDivElement>(null);
   const mouseDownInsideDialog = useRef(false);
   const titleRef = useRef<HTMLInputElement>(null);
-  const [reminderOpen, setReminderOpen] = useState(false);
 
   // Checklist state
   const isChecklist = draft.contentType === 'checklist';
@@ -80,6 +78,8 @@ export function NoteEditorModal({
     (isChecklist
       ? checklistItems.every((item) => !item.text.trim())
       : !draft.content.trim());
+
+  const reminderBlocksSave = isReminderBlockingSave(draft.reminder, new Date());
 
   // Sync checklist items back to draft.content
   const handleChecklistChange = (items: ChecklistItem[]) => {
@@ -110,19 +110,15 @@ export function NoteEditorModal({
     (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault();
-        if (reminderOpen) {
-          setReminderOpen(false);
-          return;
-        }
         onClose();
       } else if (e.key === 'Enter' && e.ctrlKey) {
-        if (!reminderOpen && !isBothEmpty) {
+        if (!isBothEmpty && !isReminderBlockingSave(draft.reminder, new Date())) {
           e.preventDefault();
           onSave();
         }
       }
     },
-    [onClose, onSave, reminderOpen, isBothEmpty],
+    [onClose, onSave, isBothEmpty, draft.reminder],
   );
 
   useEffect(() => {
@@ -148,8 +144,6 @@ export function NoteEditorModal({
   const set = <K extends keyof NoteEditorDraft>(key: K, value: NoteEditorDraft[K]) => {
     onChange({ ...draft, [key]: value });
   };
-
-  const reminderLabel = draft.reminder ? formatReminder(draft.reminder, draft.repeat) : null;
 
   return (
     <div
@@ -214,9 +208,20 @@ export function NoteEditorModal({
           )}
         </div>
 
-        {/* Footer: color picker + reminder (same row) | action buttons (bottom right) */}
+        <ReminderSetupPanel
+          reminder={draft.reminder}
+          repeat={draft.repeat}
+          onChange={({ reminder, repeat }) => {
+            if (reminder === null) {
+              onChange(clearReminderInDraft(draft));
+              return;
+            }
+            onChange(applyReminderInDraft(draft, reminder, repeat));
+          }}
+        />
+
+        {/* Footer: color picker | action buttons */}
         <div className="modal-dialog__footer">
-          {/* Row 1: color picker (left) + reminder (right) */}
           <div className="modal-dialog__footer-top">
             <div className="modal-dialog__color-picker" role="group" aria-label="Note colour">
               {NOTE_COLOR_PRESET_IDS.map((preset) => (
@@ -233,44 +238,9 @@ export function NoteEditorModal({
                 />
               ))}
             </div>
-
-            <div className="modal-dialog__reminder-area">
-              {reminderLabel ? (
-                <div className="modal-dialog__reminder-chip-wrap">
-                  <button
-                    className="modal-dialog__reminder-chip"
-                    onClick={() => setReminderOpen(true)}
-                    type="button"
-                    title={reminderLabel}
-                  >
-                    <Bell size={14} /> {reminderLabel}
-                  </button>
-                  <button
-                    className="modal-dialog__reminder-clear"
-                    onClick={() => {
-                      onChange(clearReminderInDraft(draft));
-                    }}
-                    aria-label="Clear reminder"
-                    type="button"
-                  >
-                    <X size={14} />
-                  </button>
-                </div>
-              ) : (
-                <button
-                  className="modal-dialog__reminder-trigger"
-                  onClick={() => setReminderOpen(true)}
-                  type="button"
-                >
-                  <Bell size={14} /> Reminder
-                </button>
-              )}
-            </div>
           </div>
 
-          {/* Row 2: action buttons (right) */}
           <div className="modal-dialog__footer-actions">
-            {/* Content type toggle */}
             <button
               className="modal-dialog__content-type-btn"
               onClick={handleToggleContentType}
@@ -281,7 +251,6 @@ export function NoteEditorModal({
               {isChecklist ? 'Text' : 'Checklist'}
             </button>
 
-            {/* Done toggle — only in edit mode */}
             {!isNew && (
               <button
                 className={`modal-dialog__done-btn${draft.done ? ' modal-dialog__done-btn--active' : ''}`}
@@ -306,7 +275,6 @@ export function NoteEditorModal({
               </button>
             )}
 
-            {/* Delete — only in edit mode */}
             {!isNew && (
               <button
                 className="modal-dialog__delete-btn"
@@ -318,11 +286,10 @@ export function NoteEditorModal({
               </button>
             )}
 
-            {/* Save */}
             <button
               className="modal-dialog__save-btn"
               onClick={() => onSave()}
-              disabled={isBothEmpty}
+              disabled={isBothEmpty || reminderBlocksSave}
               aria-label="Save note"
               type="button"
             >
@@ -331,17 +298,6 @@ export function NoteEditorModal({
           </div>
         </div>
       </div>
-      {reminderOpen && (
-        <ReminderSetupModal
-          initialDate={draft.reminder}
-          initialRepeat={draft.repeat}
-          onClose={() => setReminderOpen(false)}
-          onSave={({ reminder, repeat }) => {
-            onChange(applyReminderInDraft(draft, reminder, repeat));
-            setReminderOpen(false);
-          }}
-        />
-      )}
     </div>
   );
 }
