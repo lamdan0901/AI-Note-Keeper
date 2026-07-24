@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { Bell, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import type { NoteColorPreset, RepeatRule } from '../../services/notesTypes';
 import { formatReminder, getInitialReminderDate } from '../../services/reminderUtils';
 import { ReminderPresetDropdown } from './ReminderPresetDropdown';
@@ -164,11 +164,13 @@ export function ReminderSetupPanel({
       <div className="reminder-setup-panel__header">
         <h3 className="reminder-setup-panel__title">Reminder</h3>
         {reminderLabel ? (
-          <p className="reminder-setup-panel__status">{reminderLabel}</p>
+          <span className="modal-dialog__reminder-chip reminder-setup-panel__status-chip" title={reminderLabel}>
+            <Bell size={14} aria-hidden="true" /> {reminderLabel}
+          </span>
         ) : (
-          <p className="reminder-setup-panel__status reminder-setup-panel__status--empty">
+          <span className="reminder-setup-panel__status reminder-setup-panel__status--empty">
             No reminder
-          </p>
+          </span>
         )}
         {reminder ? (
           <button

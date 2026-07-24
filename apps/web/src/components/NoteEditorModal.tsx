@@ -167,7 +167,7 @@ export function NoteEditorModal({
       onClick={handleBackdropClick}
     >
       <div
-        className={`modal-dialog modal-dialog--${draft.color}`}
+        className={`modal-dialog modal-dialog--note-editor modal-dialog--${draft.color}`}
         ref={dialogRef}
         onClick={(e) => e.stopPropagation()}
       >
@@ -209,94 +209,99 @@ export function NoteEditorModal({
           </button>
         </div>
 
-        {/* Title */}
-        <input
-          ref={titleRef}
-          className="modal-dialog__title-input"
-          type="text"
-          placeholder="Title"
-          value={draft.title}
-          onChange={(e) => set('title', e.target.value)}
-          aria-label="Note title"
-        />
-
-        {/* Content */}
-        <div className="modal-dialog__content-area">
-          {isChecklist ? (
-            <ChecklistEditor items={checklistItems} onChange={handleChecklistChange} />
-          ) : (
-            <textarea
-              ref={contentRef}
-              className="modal-dialog__content-input"
-              placeholder="Take a note…"
-              value={draft.content}
-              onChange={(e) => set('content', e.target.value)}
-              rows={1}
-              aria-label="Note content"
+        <div className="modal-dialog__scroll">
+          {/* Note body section (title + content) */}
+          <div className="modal-dialog__note-section">
+            <input
+              ref={titleRef}
+              className="modal-dialog__title-input"
+              type="text"
+              placeholder="Title"
+              value={draft.title}
+              onChange={(e) => set('title', e.target.value)}
+              aria-label="Note title"
             />
-          )}
+
+            <div className="modal-dialog__content-area">
+              {isChecklist ? (
+                <ChecklistEditor items={checklistItems} onChange={handleChecklistChange} />
+              ) : (
+                <textarea
+                  ref={contentRef}
+                  className="modal-dialog__content-input"
+                  placeholder="Take a note…"
+                  value={draft.content}
+                  onChange={(e) => set('content', e.target.value)}
+                  rows={1}
+                  aria-label="Note content"
+                />
+              )}
+            </div>
+          </div>
+
+          <ReminderSetupPanel
+            reminder={draft.reminder}
+            repeat={draft.repeat}
+            noteColor={draft.color}
+            onChange={({ reminder, repeat }) => {
+              if (reminder === null) {
+                onChange(clearReminderInDraft(draft));
+                return;
+              }
+              onChange(applyReminderInDraft(draft, reminder, repeat));
+            }}
+          />
         </div>
 
-        <ReminderSetupPanel
-          reminder={draft.reminder}
-          repeat={draft.repeat}
-          noteColor={draft.color}
-          onChange={({ reminder, repeat }) => {
-            if (reminder === null) {
-              onChange(clearReminderInDraft(draft));
-              return;
-            }
-            onChange(applyReminderInDraft(draft, reminder, repeat));
-          }}
-        />
-
-        {/* Footer: action buttons */}
+        {/* Sticky footer: secondary actions left-ish, Save primary right */}
         <div className="modal-dialog__footer">
           <div className="modal-dialog__footer-actions">
-            <button
-              className="modal-dialog__content-type-btn"
-              onClick={handleToggleContentType}
-              title={isChecklist ? 'Switch to plain text' : 'Switch to checklist'}
-              type="button"
-            >
-              {isChecklist ? <Type size={16} /> : <List size={16} />}
-              {isChecklist ? 'Text' : 'Checklist'}
-            </button>
-
-            {!isNew && (
+            <div className="modal-dialog__footer-secondary">
               <button
-                className={`modal-dialog__done-btn${draft.done ? ' modal-dialog__done-btn--active' : ''}`}
-                onClick={() => {
-                  const toggled = toggleDoneInDraft(draft);
-                  onChange(toggled);
-                  onSave(toggled);
-                }}
-                aria-pressed={draft.done}
-                title={draft.done ? 'Mark as not done' : 'Mark as done'}
+                className="modal-dialog__content-type-btn"
+                onClick={handleToggleContentType}
+                title={isChecklist ? 'Switch to plain text' : 'Switch to checklist'}
                 type="button"
               >
-                {draft.done ? (
-                  <>
-                    <CheckCircle size={16} /> Done
-                  </>
-                ) : (
-                  <>
-                    <Circle size={16} /> Done
-                  </>
-                )}
+                {isChecklist ? <Type size={16} /> : <List size={16} />}
+                {isChecklist ? 'Text' : 'Checklist'}
               </button>
-            )}
 
-            {!isNew && (
-              <button
-                className="modal-dialog__delete-btn"
-                onClick={handleDeleteClick}
-                aria-label="Delete note"
-                type="button"
-              >
-                <Trash2 size={16} /> Delete
-              </button>
-            )}
+              {!isNew && (
+                <button
+                  className={`modal-dialog__done-btn${draft.done ? ' modal-dialog__done-btn--active' : ''}`}
+                  onClick={() => {
+                    const toggled = toggleDoneInDraft(draft);
+                    onChange(toggled);
+                    onSave(toggled);
+                  }}
+                  aria-pressed={draft.done}
+                  title={draft.done ? 'Mark as not done' : 'Mark as done'}
+                  type="button"
+                >
+                  {draft.done ? (
+                    <>
+                      <CheckCircle size={16} /> Done
+                    </>
+                  ) : (
+                    <>
+                      <Circle size={16} /> Done
+                    </>
+                  )}
+                </button>
+              )}
+
+              {!isNew && (
+                <button
+                  className="modal-dialog__delete-btn"
+                  onClick={handleDeleteClick}
+                  aria-label="Delete note"
+                  type="button"
+                >
+                  <Trash2 size={16} /> Delete
+                </button>
+              )}
+            </div>
 
             <button
               className="modal-dialog__save-btn"
