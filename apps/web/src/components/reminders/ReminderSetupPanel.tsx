@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
-import type { RepeatRule } from '../../services/notesTypes';
+import type { NoteColorPreset, RepeatRule } from '../../services/notesTypes';
 import { formatReminder, getInitialReminderDate } from '../../services/reminderUtils';
 import { ReminderPresetDropdown } from './ReminderPresetDropdown';
 import { RecurrencePicker } from './RecurrencePicker';
@@ -8,6 +8,7 @@ import { RecurrencePicker } from './RecurrencePicker';
 export type ReminderSetupPanelProps = {
   reminder: Date | null;
   repeat: RepeatRule | null;
+  noteColor: NoteColorPreset;
   now?: Date;
   onChange: (payload: { reminder: Date | null; repeat: RepeatRule | null }) => void;
 };
@@ -87,10 +88,10 @@ function repeatKey(value: RepeatRule | null): string {
 export function ReminderSetupPanel({
   reminder,
   repeat,
+  noteColor,
   now,
   onChange,
 }: ReminderSetupPanelProps): JSX.Element {
-  const calendarRef = useRef<HTMLElement>(null);
   const providedNow = useMemo(() => (now ? new Date(now) : null), [now]);
   const [liveNow, setLiveNow] = useState<Date>(() => providedNow ?? new Date());
   const [selectedDate, setSelectedDate] = useState<Date>(() =>
@@ -120,26 +121,6 @@ export function ReminderSetupPanel({
     // reminder/repeat objects are summarized via reminderMs + repeatSerialized
     // eslint-disable-next-line react-hooks/exhaustive-deps -- controlled sync on draft identity
   }, [reminderMs, repeatSerialized, providedNow]);
-
-  useEffect(() => {
-    const calendarElement = calendarRef.current;
-    if (!calendarElement) {
-      return;
-    }
-
-    const handleWheel = (event: WheelEvent) => {
-      if (event.deltaY === 0) {
-        return;
-      }
-
-      event.preventDefault();
-      event.stopPropagation();
-      setViewMonth((prev) => addMonths(prev, event.deltaY > 0 ? 1 : -1));
-    };
-
-    calendarElement.addEventListener('wheel', handleWheel, { passive: false });
-    return () => calendarElement.removeEventListener('wheel', handleWheel);
-  }, []);
 
   const todayStart = useMemo(() => startOfDay(liveNow), [liveNow]);
   const calendarDays = useMemo(() => buildCalendarDays(viewMonth), [viewMonth]);
@@ -182,6 +163,13 @@ export function ReminderSetupPanel({
     <section className="reminder-setup-panel" aria-label="Reminder">
       <div className="reminder-setup-panel__header">
         <h3 className="reminder-setup-panel__title">Reminder</h3>
+        {reminderLabel ? (
+          <p className="reminder-setup-panel__status">{reminderLabel}</p>
+        ) : (
+          <p className="reminder-setup-panel__status reminder-setup-panel__status--empty">
+            No reminder
+          </p>
+        )}
         {reminder ? (
           <button
             type="button"
@@ -194,17 +182,14 @@ export function ReminderSetupPanel({
         ) : null}
       </div>
 
-      {reminderLabel ? (
-        <p className="reminder-setup-panel__status">{reminderLabel}</p>
-      ) : (
-        <p className="reminder-setup-panel__status reminder-setup-panel__status--empty">
-          No reminder
-        </p>
-      )}
+      <ReminderPresetDropdown
+        now={liveNow}
+        noteColor={noteColor}
+        selectedDate={reminder}
+        onSelect={(date) => commit(date, repeatState)}
+      />
 
-      <ReminderPresetDropdown now={liveNow} onSelect={(date) => commit(date, repeatState)} />
-
-      <section ref={calendarRef} className="reminder-calendar" aria-label="Reminder date">
+      <section className="reminder-calendar" aria-label="Reminder date">
         <div className="reminder-calendar__header">
           <button
             className="reminder-calendar__month-btn"

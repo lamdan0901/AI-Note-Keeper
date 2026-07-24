@@ -38,6 +38,20 @@ const parseErrorMessage = async (response: Response): Promise<string> => {
   return `Auth request failed (${response.status})`;
 };
 
+export class MobileAuthApiError extends Error {
+  public readonly status: number;
+
+  public constructor(message: string, status: number) {
+    super(message);
+    this.name = 'MobileAuthApiError';
+    this.status = status;
+  }
+}
+
+export const isAuthRejection = (error: unknown): boolean => {
+  return error instanceof MobileAuthApiError && (error.status === 401 || error.status === 403);
+};
+
 const postJson = async <T>(path: string, body: Record<string, unknown>): Promise<T> => {
   if (!AUTH_API_URL) {
     throw new Error('EXPO_PUBLIC_AUTH_API_URL is required for mobile auth API client');
@@ -53,7 +67,7 @@ const postJson = async <T>(path: string, body: Record<string, unknown>): Promise
   });
 
   if (!response.ok) {
-    throw new Error(await parseErrorMessage(response));
+    throw new MobileAuthApiError(await parseErrorMessage(response), response.status);
   }
 
   if (response.status === 204) {

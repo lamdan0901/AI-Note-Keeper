@@ -20,7 +20,9 @@ import {
   markInstallBootstrapCompleted,
   saveAuthSession,
 } from './session';
-import { createMobileAuthHttpClient } from './httpClient';
+import { Alert } from 'react-native';
+import { createMobileAuthHttpClient, isAuthRejection } from './httpClient';
+import { onSessionExpired } from './sessionExpired';
 import { clearAuthenticatedMobileUserData } from './logoutCleanup';
 import { beginLogoutTransition, endLogoutTransition, isLogoutTransitionActive } from './logoutState';
 import {
@@ -245,7 +247,25 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                 pendingMerge: null,
               });
               return;
-            } catch {
+            } catch (error) {
+              if (isAuthRejection(error)) {
+                // Server permanently rejected the stored session (e.g. it
+                // predates a backend migration). Silently continuing would
+                // leave sync dead while the UI still looks logged in.
+                await clearAuthSession();
+                currentTokensRef.current = null;
+                setState({
+                  isLoading: false,
+                  isAuthenticated: false,
+                  userId: deviceId,
+                  username: null,
+                  deviceId,
+                  transitionState: 'idle',
+                  pendingMerge: null,
+                });
+                Alert.alert('Session expired', 'Please log in again to resume syncing.');
+                return;
+              }
               // Fall through to stored-session continuity when refresh is unavailable.
             }
           }
@@ -328,6 +348,28 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     void init();
   }, [authHttpClient]);
+
+  useEffect(() => {
+    // Fired by the API client after it clears a permanently-rejected session
+    // mid-sync; move the UI to logged-out so the user knows to re-login.
+    return onSessionExpired(() => {
+      if (isLogoutTransitionActive()) return;
+      currentSecretRef.current = null;
+      currentTokensRef.current = null;
+      void getOrCreateDeviceId().then((deviceId) => {
+        setState({
+          isLoading: false,
+          isAuthenticated: false,
+          userId: deviceId,
+          username: null,
+          deviceId,
+          transitionState: 'idle',
+          pendingMerge: null,
+        });
+        Alert.alert('Session expired', 'Please log in again to resume syncing.');
+      });
+    });
+  }, []);
 
   const finalizeAuthenticatedState = useCallback(
     async ({

@@ -772,7 +772,13 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
   margin-bottom: 8px;
+}
+.modal-dialog__header .modal-dialog__color-picker {
+  flex: 1;
+  justify-content: center;
+  min-width: 0;
 }
 .modal-dialog__pin-btn,
 .modal-dialog__close-btn {
@@ -822,10 +828,12 @@ body {
   color: var(--modal-fg-secondary);
   font-family: inherit;
   outline: none;
-  resize: vertical;
+  resize: none;
+  overflow-y: auto;
   padding: 4px 0;
   line-height: 1.6;
-  min-height: 120px;
+  min-height: calc(1.6em + 8px);
+  max-height: calc(1.6em * 3 + 8px); /* ~3 lines, then scroll */
 }
 .modal-dialog__content-input::placeholder {
   color: var(--modal-fg-placeholder);
@@ -843,7 +851,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  min-height: 120px;
+  min-height: 0;
   padding: 4px 0;
 }
 .checklist-editor__item {
@@ -1225,23 +1233,33 @@ body {
 .reminder-setup-panel__header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
+  min-width: 0;
 }
 .reminder-setup-panel__title {
   margin: 0;
+  flex-shrink: 0;
   font-size: 15px;
   font-weight: 700;
   color: var(--modal-fg-primary);
 }
 .reminder-setup-panel__status {
   margin: 0;
+  flex: 1;
+  min-width: 0;
   font-size: 13px;
   color: var(--modal-fg-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: right;
 }
 .reminder-setup-panel__status--empty {
   color: var(--modal-fg-placeholder);
   font-style: italic;
+}
+.reminder-setup-panel__header .modal-dialog__reminder-clear {
+  flex-shrink: 0;
 }
 .reminder-calendar {
   border: 1px solid var(--modal-border-soft);
@@ -1417,12 +1435,12 @@ body {
   flex-direction: column;
   gap: 6px;
 }
-.reminder-preset__label {
-  font-size: 13px;
-  color: var(--modal-fg-secondary);
-}
 .reminder-preset__select {
   width: 100%;
+}
+.reminder-preset__menu-host {
+  position: relative;
+  z-index: 140;
 }
 .recurrence-picker {
   --recurrence-picker-title-width: 46px;

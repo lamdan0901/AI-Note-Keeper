@@ -5,8 +5,10 @@ import type {
   RefreshAccessToken,
   TokenProvider,
 } from './contracts';
-import { createMobileAuthHttpClient } from '../auth/httpClient';
+import { createMobileAuthHttpClient, isAuthRejection } from '../auth/httpClient';
+import { notifySessionExpired } from '../auth/sessionExpired';
 import {
+  clearAuthSession,
   getOrCreateDeviceId,
   loadAuthSession,
   resolveCurrentUserId,
@@ -261,7 +263,11 @@ export const createDefaultMobileApiClient = (): MobileApiClient => {
         });
 
         return refreshed.accessToken;
-      } catch {
+      } catch (error) {
+        if (isAuthRejection(error) && !isLogoutTransitionActive()) {
+          await clearAuthSession();
+          notifySessionExpired();
+        }
         return null;
       }
     },

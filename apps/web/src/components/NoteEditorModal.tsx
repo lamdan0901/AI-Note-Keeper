@@ -66,6 +66,7 @@ export function NoteEditorModal({
   const dialogRef = useRef<HTMLDivElement>(null);
   const mouseDownInsideDialog = useRef(false);
   const titleRef = useRef<HTMLInputElement>(null);
+  const contentRef = useRef<HTMLTextAreaElement>(null);
 
   // Checklist state
   const isChecklist = draft.contentType === 'checklist';
@@ -104,6 +105,17 @@ export function NoteEditorModal({
   useEffect(() => {
     titleRef.current?.focus();
   }, []);
+
+  // Grow description height with content up to ~3 lines, then scroll
+  useEffect(() => {
+    if (isChecklist) return;
+    const el = contentRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    const maxPx = parseFloat(getComputedStyle(el).maxHeight);
+    const next = Number.isFinite(maxPx) ? Math.min(el.scrollHeight, maxPx) : el.scrollHeight;
+    el.style.height = `${next}px`;
+  }, [draft.content, isChecklist]);
 
   // Close on Escape, save on Ctrl+Enter
   const handleKeyDown = useCallback(
@@ -159,7 +171,7 @@ export function NoteEditorModal({
         ref={dialogRef}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header row: pin toggle + close */}
+        {/* Header: pin | color picker | close */}
         <div className="modal-dialog__header">
           <button
             className={`modal-dialog__pin-btn${draft.isPinned ? ' modal-dialog__pin-btn--active' : ''}`}
@@ -170,6 +182,22 @@ export function NoteEditorModal({
           >
             <Pin size={16} />
           </button>
+
+          <div className="modal-dialog__color-picker" role="group" aria-label="Note colour">
+            {NOTE_COLOR_PRESET_IDS.map((preset) => (
+              <button
+                key={preset}
+                className={`modal-dialog__color-swatch modal-dialog__color-swatch--${preset}${
+                  draft.color === preset ? ' modal-dialog__color-swatch--selected' : ''
+                }`}
+                onClick={() => set('color', preset)}
+                aria-pressed={draft.color === preset}
+                aria-label={COLOR_LABELS[preset]}
+                title={COLOR_LABELS[preset]}
+                type="button"
+              />
+            ))}
+          </div>
 
           <button
             className="modal-dialog__close-btn"
@@ -198,11 +226,12 @@ export function NoteEditorModal({
             <ChecklistEditor items={checklistItems} onChange={handleChecklistChange} />
           ) : (
             <textarea
+              ref={contentRef}
               className="modal-dialog__content-input"
               placeholder="Take a note…"
               value={draft.content}
               onChange={(e) => set('content', e.target.value)}
-              rows={6}
+              rows={1}
               aria-label="Note content"
             />
           )}
@@ -211,6 +240,7 @@ export function NoteEditorModal({
         <ReminderSetupPanel
           reminder={draft.reminder}
           repeat={draft.repeat}
+          noteColor={draft.color}
           onChange={({ reminder, repeat }) => {
             if (reminder === null) {
               onChange(clearReminderInDraft(draft));
@@ -220,26 +250,8 @@ export function NoteEditorModal({
           }}
         />
 
-        {/* Footer: color picker | action buttons */}
+        {/* Footer: action buttons */}
         <div className="modal-dialog__footer">
-          <div className="modal-dialog__footer-top">
-            <div className="modal-dialog__color-picker" role="group" aria-label="Note colour">
-              {NOTE_COLOR_PRESET_IDS.map((preset) => (
-                <button
-                  key={preset}
-                  className={`modal-dialog__color-swatch modal-dialog__color-swatch--${preset}${
-                    draft.color === preset ? ' modal-dialog__color-swatch--selected' : ''
-                  }`}
-                  onClick={() => set('color', preset)}
-                  aria-pressed={draft.color === preset}
-                  aria-label={COLOR_LABELS[preset]}
-                  title={COLOR_LABELS[preset]}
-                  type="button"
-                />
-              ))}
-            </div>
-          </div>
-
           <div className="modal-dialog__footer-actions">
             <button
               className="modal-dialog__content-type-btn"

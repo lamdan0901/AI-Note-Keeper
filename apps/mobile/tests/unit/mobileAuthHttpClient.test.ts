@@ -112,4 +112,31 @@ describe('mobile auth http client', () => {
       'invalid_credentials',
     );
   });
+
+  it('attaches the response status to failed auth errors', async () => {
+    process.env.EXPO_PUBLIC_AUTH_API_URL = 'http://localhost:3000';
+
+    jest.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ message: 'expired' }), {
+        status: 401,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+
+    const module = await import('../../src/auth/httpClient');
+    const client = module.createMobileAuthHttpClient();
+    if (!client) {
+      throw new Error('Expected auth client');
+    }
+
+    const error = await client
+      .refresh({ refreshToken: 'refresh-1', deviceId: 'device-1' })
+      .then(() => null)
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(module.MobileAuthApiError);
+    expect((error as { status: number }).status).toBe(401);
+    expect(module.isAuthRejection(error)).toBe(true);
+    expect(module.isAuthRejection(new TypeError('Network request failed'))).toBe(false);
+  });
 });
