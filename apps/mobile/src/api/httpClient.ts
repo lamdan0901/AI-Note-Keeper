@@ -13,6 +13,7 @@ import {
   loadAuthSession,
   resolveCurrentUserId,
   saveAuthSession,
+  type AuthSession,
 } from '../auth/session';
 import { isLogoutTransitionActive } from '../auth/logoutState';
 
@@ -212,18 +213,20 @@ export const createMobileApiClient = (input: ClientInput): MobileApiClient => {
 
 // Module-scoped: every screen/sync flow calls createDefaultMobileApiClient()
 // independently (fetchNotes, syncQueueProcessor, fetchReminder, subscriptions
-// service, voice intent client, ...). The refresh token is single-use on the
-// server (rotated on each refresh, replay rejected) and the access token only
-// lives an hour, so if two of those flows hit a 401 around the same time
-// (e.g. app resumed from background after a long sleep), each firing its own
-// refresh() would have one win and the other get "replay detected" - a false
-// session-expiry. Sharing one in-flight refresh across ALL client instances
-// closes that race.
-let inFlightRefresh: Promise<string | null> | null = null;
+// service, voice intent client, ...), and AuthContext refreshes on every cold
+// start. The refresh token is single-use on the server (rotated on each
+// refresh, replay rejected) and the access token only lives an hour, so if two
+// of those flows hit a 401 around the same time (e.g. app resumed from
+// background after a long sleep), each firing its own refresh() would have one
+// win and the other get "replay detected" - a false session-expiry. Sharing one
+// in-flight refresh across ALL callers closes that race, which is why
+// AuthContext must go through refreshMobileSession() rather than call
+// authClient.refresh() itself.
+let inFlightRefresh: Promise<AuthSession | null> | null = null;
 
 const performRefresh = async (
   authClient: NonNullable<ReturnType<typeof createMobileAuthHttpClient>>,
-): Promise<string | null> => {
+): Promise<AuthSession | null> => {
   if (isLogoutTransitionActive()) {
     return null;
   }
@@ -248,18 +251,26 @@ const performRefresh = async (
       return null;
     }
 
-    await saveAuthSession({
+    const nextSession: AuthSession = {
       userId: refreshed.userId,
       username: refreshed.username,
       accessToken: refreshed.accessToken,
       refreshToken: refreshed.refreshToken,
-    });
+    };
 
-    return refreshed.accessToken;
+    await saveAuthSession(nextSession);
+
+    return nextSession;
   } catch (error) {
     if (isAuthRejection(error) && !isLogoutTransitionActive()) {
-      await clearAuthSession();
-      notifySessionExpired();
+      // Another flow may have rotated the refresh token while this request was
+      // in flight; then the 401 is a stale replay rejection, not a dead
+      // session, and clearing would log the user out for nothing.
+      const latestSession = await loadAuthSession();
+      if (latestSession?.refreshToken === currentSession.refreshToken) {
+        await clearAuthSession();
+        notifySessionExpired();
+      }
     }
     return null;
   }
@@ -267,7 +278,7 @@ const performRefresh = async (
 
 const refreshAccessTokenSingleFlight = (
   authClient: ReturnType<typeof createMobileAuthHttpClient>,
-): Promise<string | null> => {
+): Promise<AuthSession | null> => {
   if (!authClient) {
     return Promise.resolve(null);
   }
@@ -279,6 +290,16 @@ const refreshAccessTokenSingleFlight = (
   }
 
   return inFlightRefresh;
+};
+
+/**
+ * Refresh the stored session through the shared single-flight. Returns the
+ * saved session on success, or null when refresh is unavailable (offline, no
+ * stored refresh token) or the session was permanently rejected - in that last
+ * case the session is already cleared and `onSessionExpired` has fired.
+ */
+export const refreshMobileSession = async (): Promise<AuthSession | null> => {
+  return await refreshAccessTokenSingleFlight(createMobileAuthHttpClient());
 };
 
 export const createDefaultMobileApiClient = (): MobileApiClient => {
@@ -297,6 +318,9 @@ export const createDefaultMobileApiClient = (): MobileApiClient => {
 
       return await resolveCurrentUserId();
     },
-    refreshAccessToken: () => refreshAccessTokenSingleFlight(authClient),
+    refreshAccessToken: async () => {
+      const session = await refreshAccessTokenSingleFlight(authClient);
+      return session?.accessToken ?? null;
+    },
   });
 };

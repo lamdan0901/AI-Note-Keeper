@@ -21,7 +21,8 @@ import {
   saveAuthSession,
 } from './session';
 import { Alert } from 'react-native';
-import { createMobileAuthHttpClient, isAuthRejection } from './httpClient';
+import { createMobileAuthHttpClient } from './httpClient';
+import { refreshMobileSession } from '../api/httpClient';
 import { onSessionExpired } from './sessionExpired';
 import { clearAuthenticatedMobileUserData } from './logoutCleanup';
 import { beginLogoutTransition, endLogoutTransition, isLogoutTransitionActive } from './logoutState';
@@ -202,72 +203,43 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                 }
               : null;
 
-          if (authHttpClient && session.refreshToken && !isLogoutTransitionActive()) {
-            try {
-              const refreshed = await authHttpClient.refresh({
-                refreshToken: session.refreshToken,
-                deviceId,
-              });
+          if (session.refreshToken && !isLogoutTransitionActive()) {
+            // Must share the API client's single-flight: a bootstrap refresh
+            // racing a screen's 401 refresh would replay the same single-use
+            // token and get the session killed as "replay detected".
+            const refreshedSession = await refreshMobileSession();
 
-              if (isLogoutTransitionActive()) {
-                return;
-              }
+            if (isLogoutTransitionActive()) {
+              return;
+            }
 
-              const latestSession = await loadAuthSession();
-              if (
-                !latestSession ||
-                latestSession.userId !== session.userId ||
-                latestSession.username !== session.username ||
-                latestSession.accessToken !== session.accessToken ||
-                latestSession.refreshToken !== session.refreshToken
-              ) {
-                return;
-              }
-
-              const refreshedSession: AuthSession = {
-                userId: refreshed.userId,
-                username: refreshed.username,
-                accessToken: refreshed.accessToken,
-                refreshToken: refreshed.refreshToken,
-              };
-
-              await saveAuthSession(refreshedSession);
-              currentTokensRef.current = {
-                accessToken: refreshed.accessToken,
-                refreshToken: refreshed.refreshToken,
-              };
-              await backfillMissingLocalUserId(refreshed.userId);
+            if (refreshedSession) {
+              currentTokensRef.current = refreshedSession.accessToken
+                ? {
+                    accessToken: refreshedSession.accessToken,
+                    refreshToken: refreshedSession.refreshToken,
+                  }
+                : null;
+              await backfillMissingLocalUserId(refreshedSession.userId);
               setState({
                 isLoading: false,
                 isAuthenticated: true,
-                userId: refreshed.userId,
-                username: refreshed.username,
+                userId: refreshedSession.userId,
+                username: refreshedSession.username,
                 deviceId,
                 transitionState: 'idle',
                 pendingMerge: null,
               });
               return;
-            } catch (error) {
-              if (isAuthRejection(error)) {
-                // Server permanently rejected the stored session (e.g. it
-                // predates a backend migration). Silently continuing would
-                // leave sync dead while the UI still looks logged in.
-                await clearAuthSession();
-                currentTokensRef.current = null;
-                setState({
-                  isLoading: false,
-                  isAuthenticated: false,
-                  userId: deviceId,
-                  username: null,
-                  deviceId,
-                  transitionState: 'idle',
-                  pendingMerge: null,
-                });
-                Alert.alert('Session expired', 'Please log in again to resume syncing.');
-                return;
-              }
-              // Fall through to stored-session continuity when refresh is unavailable.
             }
+
+            // Session permanently rejected: it is already cleared and the
+            // session-expired listener owns the logged-out UI, so don't
+            // overwrite it with stored-session continuity below.
+            if (!(await loadAuthSession())) {
+              return;
+            }
+            // Otherwise refresh was unavailable (offline) - keep the stored session.
           }
 
           await backfillMissingLocalUserId(session.userId);
