@@ -3,6 +3,7 @@ import { Client } from '@upstash/qstash';
 import type { ReminderSchedulerPayload } from './contracts.js';
 
 export const REMINDER_QSTASH_PROVIDER = 'qstash' as const;
+export const REMINDER_DISABLED_PROVIDER = 'disabled' as const;
 
 export type SchedulerScheduleInput = Readonly<{
   reminderId: string;
@@ -90,7 +91,7 @@ export const createQstashSchedulerProvider = (
 };
 
 export const createDisabledSchedulerProvider = (): SchedulerProvider => ({
-  name: 'disabled',
+  name: REMINDER_DISABLED_PROVIDER,
   scheduleOnce: async () => {
     throw new Error('Reminder scheduler provider is disabled');
   },

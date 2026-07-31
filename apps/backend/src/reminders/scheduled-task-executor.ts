@@ -2,10 +2,7 @@ import type { ReminderRecord, ReminderRepeatRule, ReminderSchedulerPayload } fro
 import type { ReminderNotificationSender } from './notification-sender.js';
 import type { ReminderDeliveriesRepository } from './repositories/reminder-deliveries-repository.js';
 import type { RemindersRepository } from './repositories/reminders-repository.js';
-import {
-  createReminderDeliveryKey,
-  type ReminderSchedulerService,
-} from './scheduler-service.js';
+import type { ReminderSchedulerService } from './scheduler-service.js';
 import { loadSharedModule } from '../shared/load-shared-module.js';
 
 type ComputeNextTrigger = (
@@ -103,31 +100,15 @@ export const createScheduledTaskExecutor = (
         return { status: 'canceled' };
       }
 
-      if (reminder.version !== payload.version) {
-        await deps.deliveriesRepository.markStale({
-          ...terminalInput,
-          reason: 'version_mismatch',
-        });
-        return { status: 'stale' };
-      }
-
+      // Staleness is decided by the occurrence, not by `reminder.version`: an
+      // unrelated note edit bumps the version without moving the fire time, and
+      // rejecting on that silently dropped the delivery. A real time change lands
+      // here as an occurrence mismatch, and a re-published schedule for the same
+      // occurrence is absorbed by the delivery uniqueness constraint below.
       if (!isDueOccurrence(reminder, occurrenceAt)) {
         await deps.deliveriesRepository.markStale({
           ...terminalInput,
           reason: 'occurrence_mismatch',
-        });
-        return { status: 'stale' };
-      }
-
-      const expectedKey = createReminderDeliveryKey({
-        reminderId: reminder.id,
-        occurrenceAt,
-        version: reminder.version,
-      });
-      if (payload.deliveryKey !== expectedKey) {
-        await deps.deliveriesRepository.markStale({
-          ...terminalInput,
-          reason: 'delivery_key_mismatch',
         });
         return { status: 'stale' };
       }

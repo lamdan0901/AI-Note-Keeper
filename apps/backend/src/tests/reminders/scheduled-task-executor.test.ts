@@ -72,9 +72,11 @@ const createPayload = (
   };
 };
 
-test('executor rejects version mismatch as stale and sends no push', async () => {
-  const reminder = createReminder({ version: 4 });
-  const payload = createPayload(reminder, { version: 3 });
+test('executor rejects a moved occurrence as stale and sends no push', async () => {
+  const reminder = createReminder({ nextTriggerAt: new Date('2026-06-13T11:05:00.000Z') });
+  const payload = createPayload(reminder, {
+    occurrenceAt: new Date('2026-06-13T10:05:00.000Z').toISOString(),
+  });
   const staleReasons: string[] = [];
   let sendCalls = 0;
 
@@ -112,8 +114,51 @@ test('executor rejects version mismatch as stale and sends no push', async () =>
   const result = await executor.execute(payload);
 
   assert.equal(result.status, 'stale');
-  assert.deepEqual(staleReasons, ['version_mismatch']);
+  assert.deepEqual(staleReasons, ['occurrence_mismatch']);
   assert.equal(sendCalls, 0);
+});
+
+test('executor still delivers when an unrelated note edit bumped the version', async () => {
+  // Title/content edits bump `notes.version` without moving the fire time; the
+  // already-published schedule must still fire.
+  const reminder = createReminder({ version: 4 });
+  const payload = createPayload(reminder, { version: 3 });
+  let sendCalls = 0;
+
+  const executor = createScheduledTaskExecutor({
+    remindersRepository: {
+      findById: async () => reminder,
+      advanceAfterDelivery: async () => null,
+    },
+    deliveriesRepository: {
+      insertPending: async () => ({
+        inserted: true,
+        delivery: { attemptCount: 0 },
+      }),
+      markSent: async () => undefined,
+      markFailed: async () => undefined,
+      markCanceled: async () => undefined,
+      markStale: async (input: Readonly<{ reason: string }>) => {
+        throw new Error(`unexpected stale delivery: ${input.reason}`);
+      },
+    },
+    notificationSender: {
+      sendReminderNotification: async () => {
+        sendCalls += 1;
+        return { status: 'sent', delivered: 1, failed: 0, providerMessageId: 'push-1' };
+      },
+    },
+    schedulerService: {
+      scheduleNextOccurrence: async () => ({ scheduled: false }),
+      cancelCurrentSchedule: async () => undefined,
+      clearScheduleMetadata: async () => undefined,
+    },
+  } as unknown as Parameters<typeof createScheduledTaskExecutor>[0]);
+
+  const result = await executor.execute(payload);
+
+  assert.equal(result.status, 'sent');
+  assert.equal(sendCalls, 1);
 });
 
 test('executor inserts one delivery row and treats duplicate occurrence as no-op', async () => {

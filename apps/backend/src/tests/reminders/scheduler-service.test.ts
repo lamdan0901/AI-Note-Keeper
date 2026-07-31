@@ -4,7 +4,10 @@ import test from 'node:test';
 import type { ReminderPatchInput, ReminderRecord } from '../../reminders/contracts.js';
 import type { RemindersRepository } from '../../reminders/repositories/reminders-repository.js';
 import { createReminderSchedulerService } from '../../reminders/scheduler-service.js';
-import type { SchedulerProvider } from '../../reminders/scheduler-provider.js';
+import {
+  createDisabledSchedulerProvider,
+  type SchedulerProvider,
+} from '../../reminders/scheduler-provider.js';
 
 const createRecord = (input: Partial<ReminderRecord> = {}): ReminderRecord => ({
   id: 'reminder-1',
@@ -62,7 +65,7 @@ test('scheduler service persists metadata only after provider schedule succeeds'
 
   assert.equal(patches.length, 1);
   assert.equal(patches[0].scheduleProvider, 'fake');
-  assert.equal(patches[0].scheduleTargetId, 'schedule-reminder-1:1781345100000:v3');
+  assert.equal(patches[0].scheduleTargetId, 'schedule-reminder-1:1781345100000');
   assert.equal(patches[0].scheduleTargetVersion, 3);
   assert.equal(
     patches[0].scheduleTargetFireAt?.toISOString(),
@@ -70,7 +73,7 @@ test('scheduler service persists metadata only after provider schedule succeeds'
   );
 });
 
-test('scheduler service leaves metadata empty when provider schedule fails', async () => {
+test('scheduler service records an error state when provider schedule fails', async () => {
   const patches: ReminderPatchInput[] = [];
   const provider: SchedulerProvider = {
     name: 'fake',
@@ -91,6 +94,52 @@ test('scheduler service leaves metadata empty when provider schedule fails', asy
 
   assert.equal(result.scheduled, false);
   assert.equal(result.reason, 'provider_failed');
+  // No live target is claimed, and the failure is visible to the repair job and to
+  // the next save instead of being swallowed.
+  assert.equal(patches.length, 1);
+  assert.equal(patches[0].scheduleStatus, 'error');
+  assert.equal(patches[0].scheduleProvider, null);
+  assert.equal(patches[0].scheduleTargetId, null);
+  assert.equal(patches[0].scheduleTargetVersion, null);
+  assert.equal(patches[0].scheduleTargetFireAt, null);
+});
+
+test('scheduler service survives a failure to record the schedule error', async () => {
+  const provider: SchedulerProvider = {
+    name: 'fake',
+    scheduleOnce: async () => {
+      throw new Error('provider down');
+    },
+    cancel: async () => undefined,
+  };
+  const repository: Pick<RemindersRepository, 'patch'> = {
+    patch: async () => {
+      throw new Error('database unreachable');
+    },
+  };
+
+  const service = createReminderSchedulerService({ provider, remindersRepository: repository });
+  const result = await service.scheduleNextOccurrence(createRecord());
+
+  assert.equal(result.scheduled, false);
+  assert.equal(result.reason, 'provider_failed');
+});
+
+test('scheduler service treats a disabled provider as a no-op, not a failure', async () => {
+  const patches: ReminderPatchInput[] = [];
+  const provider = createDisabledSchedulerProvider();
+  const repository: Pick<RemindersRepository, 'patch'> = {
+    patch: async ({ patch }) => {
+      patches.push(patch);
+      return null;
+    },
+  };
+
+  const service = createReminderSchedulerService({ provider, remindersRepository: repository });
+  const result = await service.scheduleNextOccurrence(createRecord());
+
+  assert.equal(result.scheduled, false);
+  assert.equal(result.reason, 'provider_disabled');
   assert.equal(patches.length, 0);
 });
 

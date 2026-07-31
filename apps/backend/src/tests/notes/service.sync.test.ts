@@ -28,6 +28,8 @@ const createNote = (
     repeat?: Record<string, unknown> | null;
     startAt?: Date | null;
     baseAtLocal?: string | null;
+    triggerAt?: Date | null;
+    nextTriggerAt?: Date | null;
   }>,
 ): NoteRecord => {
   const timestamp = new Date(input.updatedAt);
@@ -42,7 +44,7 @@ const createNote = (
     active: true,
     done: null,
     isPinned: null,
-    triggerAt: null,
+    triggerAt: input.triggerAt ?? null,
     repeatRule: null,
     repeatConfig: null,
     repeat: input.repeat ?? null,
@@ -51,7 +53,7 @@ const createNote = (
     timezone: null,
     baseAtLocal: input.baseAtLocal ?? null,
     startAt: input.startAt ?? null,
-    nextTriggerAt: null,
+    nextTriggerAt: input.nextTriggerAt ?? null,
     lastFiredAt: null,
     lastAcknowledgedAt: null,
     version: 1,
@@ -93,6 +95,8 @@ const createInMemoryNotesRepository = (
           repeat: input.repeat,
           startAt: input.startAt,
           baseAtLocal: input.baseAtLocal,
+          triggerAt: input.triggerAt,
+          nextTriggerAt: input.nextTriggerAt,
         }),
         active: input.active,
         deletedAt: input.deletedAt,
@@ -117,6 +121,14 @@ const createInMemoryNotesRepository = (
         ...(Object.hasOwn(patch, 'repeat') ? { repeat: patch.repeat ?? null } : {}),
         ...(Object.hasOwn(patch, 'startAt') ? { startAt: patch.startAt ?? null } : {}),
         ...(Object.hasOwn(patch, 'baseAtLocal') ? { baseAtLocal: patch.baseAtLocal ?? null } : {}),
+        ...(Object.hasOwn(patch, 'done') ? { done: patch.done ?? null } : {}),
+        ...(Object.hasOwn(patch, 'triggerAt') ? { triggerAt: patch.triggerAt ?? null } : {}),
+        ...(Object.hasOwn(patch, 'nextTriggerAt')
+          ? { nextTriggerAt: patch.nextTriggerAt ?? null }
+          : {}),
+        ...(Object.hasOwn(patch, 'snoozedUntil')
+          ? { snoozedUntil: patch.snoozedUntil ?? null }
+          : {}),
         ...(Object.hasOwn(patch, 'updatedAt')
           ? { updatedAt: patch.updatedAt ?? existing.updatedAt }
           : {}),
@@ -502,6 +514,242 @@ test('sync preserves omitted canonical fields and clears explicit null canonical
   assert.equal(cleared.baseAtLocal, null);
 });
 
+test('sync leaves the reminder schedule alone when only note text changes', async () => {
+  const triggerAt = new Date(1_700_000_400_000);
+  const repeat = { kind: 'daily', interval: 1 };
+  const notesRepository = createInMemoryNotesRepository([
+    createNote({
+      id: 'note-repeating',
+      userId: 'user-1',
+      title: 'Old title',
+      updatedAt: 1_700_000_100_000,
+      repeat,
+      startAt: triggerAt,
+      baseAtLocal: '2026-01-10T09:00:00',
+      triggerAt,
+      nextTriggerAt: triggerAt,
+    }),
+  ]);
+  const schedulerEvents: string[] = [];
+
+  const service = createNotesService({
+    notesRepository,
+    noteChangeEventsRepository: createInMemoryChangeEventsRepository(),
+    remindersRepository: {
+      findByIdForUser: async ({
+        reminderId,
+        userId,
+      }: Readonly<{ reminderId: string; userId: string }>) => {
+        const note = await notesRepository.findByIdForUser({ noteId: reminderId, userId });
+        if (!note) {
+          return null;
+        }
+
+        return {
+          ...note,
+          repeatRule: 'daily',
+          repeatConfig: { interval: 1 },
+          scheduleProvider: 'qstash',
+          scheduleTargetId: 'schedule-live',
+          scheduleTargetVersion: 1,
+          scheduleTargetFireAt: triggerAt,
+        } as unknown as ReminderRecord;
+      },
+    },
+    schedulerService: {
+      scheduleNextOccurrence: async (reminder: ReminderRecord) => {
+        schedulerEvents.push(`schedule:${reminder.id}`);
+        return { scheduled: true, deliveryKey: 'delivery-key' };
+      },
+      cancelCurrentSchedule: async (reminder: ReminderRecord) => {
+        schedulerEvents.push(`cancel:${reminder.scheduleTargetId}`);
+      },
+      clearScheduleMetadata: async () => undefined,
+    },
+  } as unknown as Parameters<typeof createNotesService>[0]);
+
+  // Clients resend the whole note on every save, reminder fields included.
+  await service.sync({
+    userId: 'user-1',
+    lastSyncAt: 0,
+    changes: [
+      {
+        id: 'note-repeating',
+        userId: 'user-1',
+        operation: 'update',
+        payloadHash: 'title-only-edit',
+        deviceId: 'device-1',
+        title: 'New title',
+        content: 'New description',
+        triggerAt: triggerAt.getTime(),
+        nextTriggerAt: triggerAt.getTime(),
+        repeat,
+        startAt: triggerAt.getTime(),
+        baseAtLocal: '2026-01-10T09:00:00',
+        repeatRule: 'daily',
+        repeatConfig: { interval: 1 },
+        scheduleStatus: 'scheduled',
+        timezone: 'UTC',
+        updatedAt: 1_700_000_200_000,
+      },
+    ],
+  });
+
+  const updated = notesRepository.byKey.get('user-1:note-repeating');
+  assert.equal(updated?.title, 'New title');
+  assert.equal(updated?.version, 2);
+  assert.deepEqual(schedulerEvents, []);
+});
+
+test('sync republishes a missing schedule even when nothing about the reminder changed', async () => {
+  const triggerAt = new Date(1_700_000_400_000);
+  const notesRepository = createInMemoryNotesRepository([
+    createNote({
+      id: 'note-unscheduled',
+      userId: 'user-1',
+      title: 'Old title',
+      updatedAt: 1_700_000_100_000,
+      repeat: { kind: 'daily', interval: 1 },
+      startAt: triggerAt,
+      triggerAt,
+      nextTriggerAt: triggerAt,
+    }),
+  ]);
+  const schedulerEvents: string[] = [];
+
+  const service = createNotesService({
+    notesRepository,
+    noteChangeEventsRepository: createInMemoryChangeEventsRepository(),
+    remindersRepository: {
+      findByIdForUser: async ({
+        reminderId,
+        userId,
+      }: Readonly<{ reminderId: string; userId: string }>) => {
+        const note = await notesRepository.findByIdForUser({ noteId: reminderId, userId });
+        if (!note) {
+          return null;
+        }
+
+        // An earlier provider publish failed: flagged, and no live target.
+        return {
+          ...note,
+          scheduleStatus: 'error',
+          scheduleProvider: null,
+          scheduleTargetId: null,
+          scheduleTargetVersion: null,
+          scheduleTargetFireAt: null,
+        } as unknown as ReminderRecord;
+      },
+    },
+    schedulerService: {
+      scheduleNextOccurrence: async (reminder: ReminderRecord) => {
+        schedulerEvents.push(`schedule:${reminder.id}`);
+        return { scheduled: true, deliveryKey: 'delivery-key' };
+      },
+      cancelCurrentSchedule: async (reminder: ReminderRecord) => {
+        schedulerEvents.push(`cancel:${reminder.scheduleTargetId}`);
+      },
+      clearScheduleMetadata: async () => undefined,
+    },
+  } as unknown as Parameters<typeof createNotesService>[0]);
+
+  await service.sync({
+    userId: 'user-1',
+    lastSyncAt: 0,
+    changes: [
+      {
+        id: 'note-unscheduled',
+        userId: 'user-1',
+        operation: 'update',
+        payloadHash: 'title-only-edit',
+        deviceId: 'device-1',
+        title: 'New title',
+        triggerAt: triggerAt.getTime(),
+        nextTriggerAt: triggerAt.getTime(),
+        repeat: { kind: 'daily', interval: 1 },
+        startAt: triggerAt.getTime(),
+        updatedAt: 1_700_000_200_000,
+      },
+    ],
+  });
+
+  // Republished without a pointless cancel — there was no live target to cancel.
+  assert.deepEqual(schedulerEvents, ['schedule:note-unscheduled']);
+});
+
+test('sync reschedules note reminder when only the repeat rule changes', async () => {
+  const triggerAt = new Date(1_700_000_400_000);
+  const notesRepository = createInMemoryNotesRepository([
+    createNote({
+      id: 'note-repeating',
+      userId: 'user-1',
+      title: 'Standup',
+      updatedAt: 1_700_000_100_000,
+      repeat: { kind: 'daily', interval: 1 },
+      startAt: triggerAt,
+      triggerAt,
+      nextTriggerAt: triggerAt,
+    }),
+  ]);
+  const schedulerEvents: string[] = [];
+
+  const service = createNotesService({
+    notesRepository,
+    noteChangeEventsRepository: createInMemoryChangeEventsRepository(),
+    remindersRepository: {
+      findByIdForUser: async ({
+        reminderId,
+        userId,
+      }: Readonly<{ reminderId: string; userId: string }>) => {
+        const note = await notesRepository.findByIdForUser({ noteId: reminderId, userId });
+        if (!note) {
+          return null;
+        }
+
+        return {
+          ...note,
+          scheduleProvider: 'qstash',
+          scheduleTargetId: 'schedule-live',
+          scheduleTargetVersion: 1,
+          scheduleTargetFireAt: triggerAt,
+        } as unknown as ReminderRecord;
+      },
+    },
+    schedulerService: {
+      scheduleNextOccurrence: async (reminder: ReminderRecord) => {
+        schedulerEvents.push(`schedule:${reminder.id}`);
+        return { scheduled: true, deliveryKey: 'delivery-key' };
+      },
+      cancelCurrentSchedule: async (reminder: ReminderRecord) => {
+        schedulerEvents.push(`cancel:${reminder.scheduleTargetId}`);
+      },
+      clearScheduleMetadata: async () => undefined,
+    },
+  } as unknown as Parameters<typeof createNotesService>[0]);
+
+  await service.sync({
+    userId: 'user-1',
+    lastSyncAt: 0,
+    changes: [
+      {
+        id: 'note-repeating',
+        userId: 'user-1',
+        operation: 'update',
+        payloadHash: 'repeat-change',
+        deviceId: 'device-1',
+        title: 'Standup',
+        triggerAt: triggerAt.getTime(),
+        nextTriggerAt: triggerAt.getTime(),
+        repeat: { kind: 'weekly', interval: 1, weekdays: [1] },
+        startAt: triggerAt.getTime(),
+        updatedAt: 1_700_000_200_000,
+      },
+    ],
+  });
+
+  assert.deepEqual(schedulerEvents, ['cancel:schedule-live', 'schedule:note-repeating']);
+});
+
 test('sync reschedules note reminder when reminder timing changes', async () => {
   const baseRepository = createInMemoryNotesRepository([
     createNote({
@@ -551,13 +799,12 @@ test('sync reschedules note reminder when reminder timing changes', async () => 
     createdAt: new Date(1_700_000_100_000),
     updatedAt: new Date(1_700_000_100_000),
   };
+  // A note patch never touches the schedule_* columns, so the old QStash target is
+  // still on the row when the reschedule decision is made.
   const updatedReminder: ReminderRecord = {
     ...existingReminder,
     triggerAt: new Date(1_700_000_900_000),
     nextTriggerAt: new Date(1_700_000_900_000),
-    scheduleTargetId: null,
-    scheduleTargetVersion: null,
-    scheduleTargetFireAt: null,
     version: 2,
     updatedAt: new Date(1_700_000_200_000),
   };

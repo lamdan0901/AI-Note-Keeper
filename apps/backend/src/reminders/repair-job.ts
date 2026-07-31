@@ -69,14 +69,17 @@ export const createReminderRepairJob = (
           }
         }
 
-        if (
-          reminder.nextTriggerAt !== null &&
-          reminder.nextTriggerAt.getTime() > runAt.getTime() &&
+        // Drift = no live schedule, or one aimed at a fire time we no longer expect.
+        // Deliberately not `scheduleTargetVersion !== version`: the note version
+        // bumps on unrelated edits, which would mark every edited note as drifted.
+        const pendingFuture =
+          reminder.nextTriggerAt !== null && reminder.nextTriggerAt.getTime() > runAt.getTime();
+        const targetDrifted =
           reminder.scheduleTargetId === null ||
-          (reminder.nextTriggerAt !== null &&
-            reminder.nextTriggerAt.getTime() > runAt.getTime() &&
-            reminder.scheduleTargetVersion !== reminder.version)
-        ) {
+          reminder.scheduleTargetFireAt === null ||
+          reminder.scheduleTargetFireAt.getTime() !== reminder.nextTriggerAt?.getTime();
+
+        if (pendingFuture && targetDrifted) {
           const result = await deps.schedulerService.scheduleNextOccurrence(reminder);
           if (result.scheduled) {
             scheduled += 1;

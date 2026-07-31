@@ -210,6 +210,77 @@ export const createMobileApiClient = (input: ClientInput): MobileApiClient => {
   };
 };
 
+// Module-scoped: every screen/sync flow calls createDefaultMobileApiClient()
+// independently (fetchNotes, syncQueueProcessor, fetchReminder, subscriptions
+// service, voice intent client, ...). The refresh token is single-use on the
+// server (rotated on each refresh, replay rejected) and the access token only
+// lives an hour, so if two of those flows hit a 401 around the same time
+// (e.g. app resumed from background after a long sleep), each firing its own
+// refresh() would have one win and the other get "replay detected" - a false
+// session-expiry. Sharing one in-flight refresh across ALL client instances
+// closes that race.
+let inFlightRefresh: Promise<string | null> | null = null;
+
+const performRefresh = async (
+  authClient: NonNullable<ReturnType<typeof createMobileAuthHttpClient>>,
+): Promise<string | null> => {
+  if (isLogoutTransitionActive()) {
+    return null;
+  }
+
+  const currentSession = await loadAuthSession();
+  if (!currentSession?.refreshToken) {
+    return null;
+  }
+
+  try {
+    const refreshed = await authClient.refresh({
+      refreshToken: currentSession.refreshToken,
+      deviceId: await getOrCreateDeviceId(),
+    });
+
+    if (isLogoutTransitionActive()) {
+      return null;
+    }
+
+    const latestSession = await loadAuthSession();
+    if (!matchesAuthSessionSnapshot(latestSession, currentSession)) {
+      return null;
+    }
+
+    await saveAuthSession({
+      userId: refreshed.userId,
+      username: refreshed.username,
+      accessToken: refreshed.accessToken,
+      refreshToken: refreshed.refreshToken,
+    });
+
+    return refreshed.accessToken;
+  } catch (error) {
+    if (isAuthRejection(error) && !isLogoutTransitionActive()) {
+      await clearAuthSession();
+      notifySessionExpired();
+    }
+    return null;
+  }
+};
+
+const refreshAccessTokenSingleFlight = (
+  authClient: ReturnType<typeof createMobileAuthHttpClient>,
+): Promise<string | null> => {
+  if (!authClient) {
+    return Promise.resolve(null);
+  }
+
+  if (!inFlightRefresh) {
+    inFlightRefresh = performRefresh(authClient).finally(() => {
+      inFlightRefresh = null;
+    });
+  }
+
+  return inFlightRefresh;
+};
+
 export const createDefaultMobileApiClient = (): MobileApiClient => {
   const authClient = createMobileAuthHttpClient();
 
@@ -226,50 +297,6 @@ export const createDefaultMobileApiClient = (): MobileApiClient => {
 
       return await resolveCurrentUserId();
     },
-    refreshAccessToken: async () => {
-      if (!authClient) {
-        return null;
-      }
-
-      if (isLogoutTransitionActive()) {
-        return null;
-      }
-
-      const currentSession = await loadAuthSession();
-      if (!currentSession?.refreshToken) {
-        return null;
-      }
-
-      try {
-        const refreshed = await authClient.refresh({
-          refreshToken: currentSession.refreshToken,
-          deviceId: await getOrCreateDeviceId(),
-        });
-
-        if (isLogoutTransitionActive()) {
-          return null;
-        }
-
-        const latestSession = await loadAuthSession();
-        if (!matchesAuthSessionSnapshot(latestSession, currentSession)) {
-          return null;
-        }
-
-        await saveAuthSession({
-          userId: refreshed.userId,
-          username: refreshed.username,
-          accessToken: refreshed.accessToken,
-          refreshToken: refreshed.refreshToken,
-        });
-
-        return refreshed.accessToken;
-      } catch (error) {
-        if (isAuthRejection(error) && !isLogoutTransitionActive()) {
-          await clearAuthSession();
-          notifySessionExpired();
-        }
-        return null;
-      }
-    },
+    refreshAccessToken: () => refreshAccessTokenSingleFlight(authClient),
   });
 };

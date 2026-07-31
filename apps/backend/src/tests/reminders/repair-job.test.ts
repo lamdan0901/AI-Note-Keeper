@@ -82,5 +82,6 @@ test('repair job executes overdue candidates through scheduled task executor', a
 
   assert.equal(result.candidates, 1);
   assert.equal(result.executed, 1);
-  assert.deepEqual(executed, ['reminder-1:2:reminder-1:1781345100000:v2']);
+  // Delivery key is (reminder, occurrence) — note version is deliberately absent.
+  assert.deepEqual(executed, ['reminder-1:2:reminder-1:1781345100000']);
 });

@@ -7,7 +7,7 @@ Auto-generated from all feature plans.
 - TypeScript monorepo with React, React Native / Expo, Convex, and shared packages
 - Mobile client: Expo React Native app
 - Web client: Vite + React app
-- Backend: `apps/backend` with Convex API and worker support
+- Backend: `apps/api-next` (Next.js, HTTP layer) over `apps/backend/src` (domain layer, imported via `@backend/*`)
 - Shared code: `packages/*`
 
 ## Project Structure
@@ -15,8 +15,12 @@ Auto-generated from all feature plans.
 ```text
 android/                 # native Android wrapper for mobile app
 apps/
-  api-next/             # api-next main backend services
-  backend/              # legacy backend services (not running anymore)
+  api-next/             # main backend: HTTP layer only (Next route handlers, auth middleware, cron/internal endpoints, service composition)
+  backend/              # legacy Express server + pg-boss worker are retired, BUT src/** is still the live domain layer
+                        #   api-next compiles it via `@backend/* -> ../backend/src/*` (apps/api-next/tsconfig.json)
+                        #   ~149 imports across ~74 api-next files: notes/reminders services, scheduler,
+                        #   scheduled-task-executor, repair-job, repositories/SQL, auth, expenses, subscriptions, db pool
+                        #   => editing apps/backend/src changes production behavior. Do not skip it when tracing logic.
   mobile/               # Expo React Native mobile app
   web/                  # frontend web app
 packages/                # shared packages, constants, hooks, auth, tokens, types, utils

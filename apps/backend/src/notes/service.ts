@@ -70,28 +70,22 @@ const toForbiddenError = (): AppError => {
   });
 };
 
-const REMINDER_SCHEDULING_FIELDS = [
-  'triggerAt',
-  'repeatRule',
-  'repeatConfig',
-  'repeat',
-  'snoozedUntil',
-  'scheduleStatus',
-  'timezone',
-  'active',
-  'startAt',
-  'baseAtLocal',
-  'nextTriggerAt',
-  'deletedAt',
-] as const;
+/**
+ * Everything that decides *when* (or whether) a reminder fires. Two notes with the
+ * same signature must keep the same external schedule.
+ *
+ * Compared before/after a patch so an edit that only touches presentation fields
+ * (title, content, colour, pin, …) leaves the live QStash schedule alone instead of
+ * tearing it down and republishing it.
+ */
+const scheduleSignature = (note: NoteRecord): string => {
+  const effectiveTriggerAt = note.snoozedUntil ?? note.nextTriggerAt ?? note.triggerAt;
 
-const shouldManageReminderSchedule = (change: NoteSyncChange): boolean => {
-  if (change.operation === 'delete') {
-    return true;
-  }
-
-  const source = change as Record<string, unknown>;
-  return REMINDER_SCHEDULING_FIELDS.some((field) => hasOwnField(source, field));
+  return JSON.stringify({
+    schedulable: note.active === true && note.done !== true && note.deletedAt === null,
+    effectiveTriggerAt: effectiveTriggerAt?.getTime() ?? null,
+    repeat: note.repeat ?? null,
+  });
 };
 
 const makeNoteCreateInput = (change: NoteSyncChange, userId: string): NoteCreateInput => {
@@ -241,8 +235,15 @@ export const createNotesService = (deps: NotesServiceDeps = {}): NotesService =>
     await reminderScheduling.schedulerService.cancelCurrentSchedule(reminder);
   };
 
+  /**
+   * `skipIfLive` turns this into a repair: publish only when the reminder should
+   * have a schedule but has none — e.g. an earlier provider publish failed. Used on
+   * saves that did not change the schedule, so a broken reminder heals on the next
+   * touch instead of waiting for the repair job.
+   */
   const scheduleReminderIfActive = async (
     input: Readonly<{ noteId: string; userId: string }>,
+    options: Readonly<{ skipIfLive?: boolean }> = {},
   ): Promise<void> => {
     if (!reminderScheduling) {
       return;
@@ -250,6 +251,10 @@ export const createNotesService = (deps: NotesServiceDeps = {}): NotesService =>
 
     const reminder = await readReminder(input);
     if (!reminder?.active || !reminder.nextTriggerAt) {
+      return;
+    }
+
+    if (options.skipIfLive && reminder.scheduleTargetId !== null) {
       return;
     }
 
@@ -289,8 +294,6 @@ export const createNotesService = (deps: NotesServiceDeps = {}): NotesService =>
       noteId: change.id,
       userId,
     });
-    const manageReminderSchedule = reminderScheduling && shouldManageReminderSchedule(change);
-
     if (change.operation === 'delete') {
       if (existing) {
         const incomingUpdatedAt = new Date(change.updatedAt);
@@ -298,9 +301,7 @@ export const createNotesService = (deps: NotesServiceDeps = {}): NotesService =>
 
         // D-02 strict greater-than LWW gate.
         if (shouldApplyIncoming) {
-          if (manageReminderSchedule) {
-            await cancelReminderSchedule({ noteId: change.id, userId });
-          }
+          await cancelReminderSchedule({ noteId: change.id, userId });
 
           await notesRepository.patch({
             noteId: change.id,
@@ -328,9 +329,7 @@ export const createNotesService = (deps: NotesServiceDeps = {}): NotesService =>
     if (!existing) {
       await notesRepository.create(makeNoteCreateInput(change, userId));
 
-      if (manageReminderSchedule) {
-        await scheduleReminderIfActive({ noteId: change.id, userId });
-      }
+      await scheduleReminderIfActive({ noteId: change.id, userId });
 
       await noteChangeEventsRepository.appendEvent({
         noteId: change.id,
@@ -347,18 +346,20 @@ export const createNotesService = (deps: NotesServiceDeps = {}): NotesService =>
 
     // D-02 strict greater-than LWW gate.
     if (shouldApplyIncoming) {
-      if (manageReminderSchedule) {
-        await cancelReminderSchedule({ noteId: change.id, userId });
-      }
-
-      await notesRepository.patch({
+      const updated = await notesRepository.patch({
         noteId: change.id,
         userId,
         patch: makePatchInput(change, existing.version),
       });
 
-      if (manageReminderSchedule) {
+      // Only rebuild the external schedule when the patch actually moved the fire
+      // time, the recurrence, or whether the note is schedulable at all. A
+      // title/content-only edit must leave the existing schedule untouched.
+      if (updated !== null && scheduleSignature(updated) !== scheduleSignature(existing)) {
+        await cancelReminderSchedule({ noteId: change.id, userId });
         await scheduleReminderIfActive({ noteId: change.id, userId });
+      } else {
+        await scheduleReminderIfActive({ noteId: change.id, userId }, { skipIfLive: true });
       }
     }
 

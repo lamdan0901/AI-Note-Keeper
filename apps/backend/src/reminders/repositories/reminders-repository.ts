@@ -231,8 +231,8 @@ export const createRemindersRepository = (
                 AND schedule_target_id IS NULL
               )
               OR (
-                schedule_target_version IS NOT NULL
-                AND schedule_target_version <> version
+                schedule_target_id IS NOT NULL
+                AND schedule_target_fire_at IS DISTINCT FROM next_trigger_at
               )
             )
           ORDER BY next_trigger_at ASC NULLS LAST, updated_at ASC

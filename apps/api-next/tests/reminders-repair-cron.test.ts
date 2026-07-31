@@ -105,7 +105,8 @@ test("repair cron executes overdue candidates through scheduled task executor", 
       executed: 1,
       scheduled: 0,
     });
-    assert.deepEqual(executed, ["reminder-1:2:reminder-1:1781345100000:v2"]);
+    // Delivery key is (reminder, occurrence) — note version is deliberately absent.
+    assert.deepEqual(executed, ["reminder-1:2:reminder-1:1781345100000"]);
   } finally {
     await server.close();
   }
