@@ -10,7 +10,7 @@
     "lint": "eslint . --ext .ts,.tsx,.js,.jsx",
     "format": "prettier --write .",
     "test": "jest",
-    "dev": "concurrently -k -n backend,web,mobile -c magenta,green,cyan \"npm run dev:backend:all\" \"npm run dev:web\" \"npm run dev:mobile\"",
+    "dev": "node api.js && concurrently -k -n backend,web,mobile -c magenta,green,cyan \"npm run dev:backend:all\" \"npm run dev:web\" \"npm run dev:mobile\"",
     "dev:backend": "npm run dev:backend:api",
     "dev:backend:api": "npm --workspace apps/backend run dev:api",
     "dev:backend:worker": "npm --workspace apps/backend run dev:worker",
