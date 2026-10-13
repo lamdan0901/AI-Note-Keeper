@@ -1,0 +1,39 @@
+{
+  "default_branch": "master",
+  "branches": [
+    "fix/web-syncnotes-payload-compat",
+    "master",
+    "migrate-appwrite-claude",
+    "migrate-to-express",
+    "nextjs-migration",
+    "note-expense-1",
+    "noti-fix",
+    "noti-fix_codex",
+    "noti_opus",
+    "web"
+  ],
+  "parent": {
+    "fix/web-syncnotes-payload-compat": "master",
+    "master": null,
+    "migrate-appwrite-claude": "master",
+    "migrate-to-express": "master",
+    "nextjs-migration": "master",
+    "note-expense-1": "master",
+    "noti-fix": "master",
+    "noti-fix_codex": "master",
+    "noti_opus": "master",
+    "web": "master"
+  },
+  "order": [
+    "master",
+    "fix/web-syncnotes-payload-compat",
+    "migrate-appwrite-claude",
+    "migrate-to-express",
+    "nextjs-migration",
+    "note-expense-1",
+    "noti-fix",
+    "noti-fix_codex",
+    "noti_opus",
+    "web"
+  ]
+}
